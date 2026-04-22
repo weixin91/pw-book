@@ -62,20 +62,61 @@ Bitwarden 浏览器扩展在四个隔离上下文中运行：
 - 使用 `MutationObserver` 监听动态添加的字段
 - 支持 Shadow DOM 遍历
 
-**密码保存提示**：
-- `notificationBar.js` 拦截表单提交事件
-- 检测 successful navigation pattern 判断登录成功
-- 通过消息传递将凭据发送到后台脚本
+**登录成功判定（密码保存提示触发逻辑）**：
+
+登录成功判定是自动填充系统中最复杂的环节，需要覆盖多种登录模式：
+
+| 登录模式 | 检测策略 | 说明 |
+|---------|---------|------|
+| **传统表单提交** | 拦截 `form.submit()` 和 `submit` 事件，捕获提交的 username/password | 最基础的检测方式 |
+| **AJAX/Fetch 登录** | 拦截 `XMLHttpRequest` / `fetch`，检测请求体中包含密码字段的 POST 请求，结合响应状态码（200）判断 | 需要重写原生 API 进行拦截 |
+| **多步骤登录** | 第一步仅捕获 username；第二步检测到密码输入后，合并两步数据判断 | 如 Google、Microsoft 的分步登录 |
+| **OAuth/SSO 重定向** | 不可检测。此类场景**不在 FR-001 覆盖范围内**，接受不提示保存 | 用户在第三方完成认证后返回，扩展无法获知登录凭据 |
+| **页面刷新/重定向后** | 表单提交后若发生 302 重定向，content script 会重新加载。需要在 background script 中**暂存表单提交数据**（最长 10 秒），等待 `chrome.webNavigation.onCompleted` 事件后，在新页面判断 URL 是否变化，再决定是否弹出保存提示 | **关键防断点** |
+
+**登录成功判定的综合策略**：
+1. Content script 在检测到表单提交时，立即将表单数据（username, password, action URL）发送到 background script 暂存
+2. Background script 记录提交时间戳，启动 10 秒计时器
+3. 同时监听 `chrome.webNavigation.onCompleted` 事件
+4. 如果在 10 秒内发生导航完成，且新页面与登录页面不同（URL 变化），则判定登录成功，弹出保存提示
+5. 如果 10 秒内未发生导航，但检测到 AJAX 响应成功（通过拦截的 XHR/fetch 回调），也判定成功
+6. 如果页面刷新后表单数据丢失（content script 重建），从 background 的暂存区恢复数据
+
+**覆盖预估**：传统表单提交 + AJAX 登录可覆盖约 80-85% 的网站；OAuth/SSO 登录（约占 15-20%）因技术限制无法覆盖，属于已知限制，spec 已接受（FR-022 允许降级）。
 
 **自动填充逻辑**：
 - `InsertAutofillContentService` 向匹配字段填充数据
 - 内容脚本与后台脚本通过 `chrome.runtime.sendMessage` 通信
 - 内联菜单使用自定义 Web Component + Shadow DOM 防止页面窃取
+- 填充后记录 `lastUsedAt` 时间戳，用于 FR-019 默认填充最近使用的账号
 
 **域名匹配**：
 - 基础域名提取（如 `tieba.baidu.com` → `baidu.com`）
 - 用户配置的域名关联规则表
 - URI 匹配算法支持通配符和正则
+
+**性能优化与防护**：
+
+| 措施 | 实现 | 目的 |
+|------|------|------|
+| **MutationObserver 节流** | Debounce 100ms，最多每 500ms 执行一次完整扫描 | 防止 DOM 频繁变化导致 CPU 飙升 |
+| **元素数量上限** | 单页最多扫描 500 个 `<input>` 元素，超出则停止扫描并标记"页面过于复杂" | 防止极端页面（如大型表格、无限滚动）导致卡顿 |
+| **requestIdleCallback** | 非关键扫描（如内联菜单定位）使用 `requestIdleCallback` 延迟到浏览器空闲时执行 | 优先保证页面交互响应性 |
+| **iframe 选择性注入** | 仅向同域 iframe 注入 content script；跨域 iframe 跳过（安全限制） | 减少不必要的脚本注入和内存占用 |
+| **SPA 路由变化监听** | 监听 `history.pushState` / `popstate`，仅在路由变化后触发重新扫描 | 避免在 SPA 内部状态变化时重复全量扫描 |
+| **content script 最小化** | 基础 content script（`content-message-handler.js`）仅 3KB，负责消息转发；自动填充功能按需注入（`trigger-autofill-script-injection.ts`） | 减少所有页面的基础负担 |
+
+**非标准登录表单降级策略（FR-022）**：
+
+| 非标准场景 | 检测方式 | 降级行为 |
+|-----------|---------|---------|
+| **非标准字段名** | 解析失败：无法通过语义分析匹配到 username/password 字段 | 静默跳过，不填充也不提示 |
+| **iframe 嵌套（同域）** | 同域 iframe 中检测到登录表单，但字段名非标准 | 尝试填充；若失败则静默跳过 |
+| **iframe 嵌套（跨域）** | 跨域 iframe 无法注入 content script | 静默跳过（无法访问） |
+| **Shadow DOM 内表单** | 遍历 Shadow Root，但若 Shadow DOM  closed 且无法穿透 | 静默跳过 |
+| **Web Component 封装** | 自定义元素内部包含标准 input，但无法从外部识别语义 | 尝试通过事件委托和焦点追踪间接识别；失败则跳过 |
+| **Canvas/WebGL 渲染的输入** | 非 DOM 输入框 | 静默跳过（无法检测） |
+| **单页应用动态路由** | URL 不变但页面内容完全替换 | 依赖路由变化监听重新扫描；若检测不到路由变化则 5 秒后超时跳过 |
 
 ### 2.4 Cookie 同步
 

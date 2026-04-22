@@ -31,7 +31,9 @@
 - 支持完全离线编辑和自动同步
 - MV3 Service Worker 生命周期限制
 - 剪贴板密码 10 秒后自动清空
-- 自托管部署需单 Docker Compose 文件完成  
+- 自托管部署需单 Docker Compose 文件完成
+- Edge 插件自动填充不得造成页面卡顿（MutationObserver 节流、元素扫描上限 500、requestIdleCallback 延迟非关键任务）
+- 登录成功后页面刷新/重定向不得中断保存提示流程（background script 表单数据暂存 + webNavigation 监听）  
 **Scale/Scope**: 个人使用，SQLite 单文件存储，零配置部署
 
 ## Constitution Check

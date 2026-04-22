@@ -403,9 +403,74 @@ Authorization: Bearer <token>
 
 ---
 
-## 6. 设备管理接口
+## 6. 拒绝保存记录接口（本地存储，可选同步）
 
-### 6.1 获取已注册设备
+### 6.1 记录拒绝保存
+
+```http
+POST /api/rejected-sites
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+**Request Body**:
+```json
+{
+  "domain": "example.com"
+}
+```
+
+**Response 201**:
+```json
+{
+  "id": "990e8400-e29b-41d4-a716-446655440004",
+  "domain": "example.com",
+  "rejectedAt": "2026-04-22T12:00:00Z",
+  "expireAt": "2026-05-22T12:00:00Z"
+}
+```
+
+**注意**: 该接口主要用于多端同步拒绝记录，确保用户在 Edge 拒绝后，Android 也不提示。如不需要跨端同步，可完全本地实现。
+
+---
+
+### 6.2 获取拒绝记录列表
+
+```http
+GET /api/rejected-sites
+Authorization: Bearer <token>
+```
+
+**Response 200**:
+```json
+{
+  "data": [
+    {
+      "id": "990e8400-e29b-41d4-a716-446655440004",
+      "domain": "example.com",
+      "rejectedAt": "2026-04-22T12:00:00Z",
+      "expireAt": "2026-05-22T12:00:00Z"
+    }
+  ]
+}
+```
+
+---
+
+### 6.3 删除拒绝记录
+
+```http
+DELETE /api/rejected-sites/:id
+Authorization: Bearer <token>
+```
+
+**Response 204**
+
+---
+
+## 7. 设备管理接口
+
+### 7.1 获取已注册设备
 
 ```http
 GET /api/devices
@@ -430,7 +495,7 @@ Authorization: Bearer <token>
 
 ---
 
-### 6.2 注销设备
+### 7.2 注销设备
 
 ```http
 DELETE /api/devices/:id
@@ -441,15 +506,15 @@ Authorization: Bearer <token>
 
 ---
 
-## 7. 实时同步（WebSocket）
+## 8. 实时同步（WebSocket）
 
-### 7.1 连接
+### 8.1 连接
 
 ```javascript
 const ws = new WebSocket('wss://api.pwbook.example.com/ws?token=<jwt>');
 ```
 
-### 7.2 服务端推送消息
+### 8.2 服务端推送消息
 
 ```json
 {
@@ -462,7 +527,7 @@ const ws = new WebSocket('wss://api.pwbook.example.com/ws?token=<jwt>');
 
 ---
 
-## 8. 错误响应格式
+## 9. 错误响应格式
 
 所有错误响应统一格式：
 
