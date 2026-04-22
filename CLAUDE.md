@@ -1,3 +1,6 @@
+# 使用中文
+文档/注释使用中文
+
 # pw-book Development Guidelines
 
 Auto-generated from all feature plans. Last updated: 2026-04-22
