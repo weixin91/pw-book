@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bash *)",
+      "WebFetch(domain:github.com)",
+      "WebSearch",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:contributing.bitwarden.com)",
+      "WebFetch(domain:bitwarden-clients.mintlify.app)",
+      "WebFetch(domain:bitwarden.com)"
+    ]
+  }
+}

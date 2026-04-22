@@ -1,50 +1,91 @@
-# [PROJECT_NAME] Constitution
-<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
+<!--
+Sync Impact Report
+- Version change: 0.0.0 → 1.0.0
+- Modified principles: 全部新增（首次定稿）
+- Added sections: Core Principles（5项）、技术约束、开发工作流、Governance
+- Removed sections: 无
+- Templates requiring updates:
+  - .specify/templates/constitution-template.md ⚠ 保持模板原样，不修改
+  - .specify/templates/plan-template.md ✅ 已核查，无直接硬编码原则引用
+  - .specify/templates/spec-template.md ✅ 已核查，无直接硬编码原则引用
+  - .specify/templates/tasks-template.md ✅ 已核查，无直接硬编码原则引用
+- Follow-up TODOs: 无
+-->
 
-## Core Principles
+# pw-book 章程
 
-### [PRINCIPLE_1_NAME]
-<!-- Example: I. Library-First -->
-[PRINCIPLE_1_DESCRIPTION]
-<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
+## 核心原则
 
-### [PRINCIPLE_2_NAME]
-<!-- Example: II. CLI Interface -->
-[PRINCIPLE_2_DESCRIPTION]
-<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
+### 一、中文优先
 
-### [PRINCIPLE_3_NAME]
-<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
-[PRINCIPLE_3_DESCRIPTION]
-<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
+本项目的所有产出物必须使用中文。包括但不限于：代码注释、文档、提交信息（commit message）、分支名称、规范文件、任务列表、测试用例名称。
 
-### [PRINCIPLE_4_NAME]
-<!-- Example: IV. Integration Testing -->
-[PRINCIPLE_4_DESCRIPTION]
-<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
+**理由**：项目团队以中文为工作语言，使用中文可降低沟通成本，确保所有成员对等理解需求与设计决策。
 
-### [PRINCIPLE_5_NAME]
-<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
-[PRINCIPLE_5_DESCRIPTION]
-<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
+### 二、安全至上
 
-## [SECTION_2_NAME]
-<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
+pw-book 是密码管理工具，安全是不可协商的底线。
 
-[SECTION_2_CONTENT]
-<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
+- 所有敏感数据在传输与存储时必须加密。
+- 禁止以明文形式记录密码或密钥。
+- 必须对输入进行严格的验证与消毒（sanitization）。
+- 安全漏洞的修复优先级高于功能开发。
 
-## [SECTION_3_NAME]
-<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
+**理由**：密码管理器的核心价值是信任；任何安全疏忽都可能导致用户数据泄露，直接摧毁产品信誉。
 
-[SECTION_3_CONTENT]
-<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
+### 三、测试先行
 
-## Governance
-<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
+采用测试驱动开发（TDD）。
 
-[GOVERNANCE_RULES]
-<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
+- 在编写实现代码之前，必须先编写失败的测试。
+- 每个用户故事必须可独立测试。
+- 核心模块（加密、存储、认证）必须达到高测试覆盖率。
 
-**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
-<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->
+**理由**：pw-book 处理高价值敏感数据，测试是防止回归缺陷、保障重构安全的唯一有效手段。
+
+### 四、隐私保护
+
+用户数据属于用户本人。
+
+- 最小权限原则：仅收集功能所必需的数据。
+- 默认隐私：新功能开启时不得泄露用户隐私设置。
+- 提供明确的数据导出与删除机制。
+
+**理由**：密码管理场景下，用户对隐私极度敏感；任何越权收集或模糊处理都会直接违反用户信任。
+
+### 五、简洁设计
+
+拒绝过早优化与过度工程。
+
+- 没有明确需求的功能不做（YAGNI）。
+- 优先使用简单、可维护的方案。
+- 复杂度必须被证明合理，而非被假设合理。
+
+**理由**：代码越简单，审计与安全审查越彻底；不必要的抽象是安全漏洞的温床。
+
+## 技术约束
+
+- **后端/边缘端**：TypeScript 5.8，Node.js 20+
+- **移动端**：Kotlin 2.1（Android）
+- **依赖管理**：优先使用经过安全审计的主流库；引入新依赖须说明理由
+- **编码规范**：遵循各语言的标准社区规范
+
+## 开发工作流
+
+- 功能开发基于特性分支（`[编号]-feature-name`）。
+- 每个功能须先有规范（spec）与实现计划（plan），再进入编码。
+- 代码合并前必须通过自动化测试与静态检查（`npm test && npm run lint`）。
+- 提交信息应清晰描述变更原因，使用中文撰写。
+
+## 治理
+
+本章程高于一切其他实践。任何冲突以本章程为准。
+
+- **修订程序**：修订须以书面形式提出，说明影响范围，并经利益相关方审阅。
+- **版本策略**：采用语义化版本（MAJOR.MINOR.PATCH）。
+  - MAJOR：原则移除或重新定义，产生不兼容的治理变更。
+  - MINOR：新增原则或章节，实质性扩充指导范围。
+  - PATCH：措辞澄清、错别字修正、非语义性优化。
+- **合规审查**：每次功能实现完成后，须对照本章程核查是否符合核心原则。
+
+**Version**: 1.0.0 | **Ratified**: 2026-04-22 | **Last Amended**: 2026-04-22
