@@ -1,0 +1,25 @@
+{
+  "name": "pw-book",
+  "version": "0.1.0",
+  "private": true,
+  "description": "自托管端到端加密密码管理器",
+  "scripts": {
+    "dev:backend": "pnpm --filter backend dev",
+    "dev:edge": "pnpm --filter edge-extension dev",
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "lint": "eslint . --ext .ts,.tsx",
+    "format": "prettier --write \"**/*.{ts,tsx,json,md}\""
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "eslint": "^9.0.0",
+    "prettier": "^3.0.0",
+    "typescript": "^5.8.0"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  }
+}

@@ -22,11 +22,11 @@ description: "密码管理应用功能实现的任务列表"
 
 **目的**：项目初始化和基本结构
 
-- [ ] T001 创建 monorepo 根结构，包含 `pnpm-workspace.yaml` 和根目录 `package.json`
-- [ ] T002 初始化后端项目于 `apps/backend/`（package.json, tsconfig.json，按 plan.md 的目录结构）
-- [ ] T003 初始化 Edge 插件项目于 `apps/edge-extension/`（package.json, tsconfig.json, vite.config.ts，按 plan.md 的目录结构）
-- [ ] T005 [P] 创建共享类型包于 `packages/shared-types/`（package.json, tsconfig.json，导出入口）
-- [ ] T006 [P] 配置代码质量工具（ESLint, Prettier, .editorconfig）于仓库根目录
+- [X] T001 创建 monorepo 根结构，包含 `pnpm-workspace.yaml` 和根目录 `package.json`
+- [X] T002 初始化后端项目于 `apps/backend/`（package.json, tsconfig.json，按 plan.md 的目录结构）
+- [X] T003 初始化 Edge 插件项目于 `apps/edge-extension/`（package.json, tsconfig.json, vite.config.ts，按 plan.md 的目录结构）
+- [X] T005 [P] 创建共享类型包于 `packages/shared-types/`（package.json, tsconfig.json，导出入口）
+- [X] T006 [P] 配置代码质量工具（ESLint, Prettier, .editorconfig）于仓库根目录
 
 ---
 
@@ -36,19 +36,19 @@ description: "密码管理应用功能实现的任务列表"
 
 **⚠️ 关键**：在完成此阶段之前，不能开始任何用户故事的工作
 
-- [ ] T007 定义 Prisma 数据模型于 `apps/backend/prisma/schema.prisma`（User, Cipher, DomainAssociation, SyncRecord, Device, CookieData, RejectedSite）
-- [ ] T008 [P] 实现 Fastify 应用入口和插件系统于 `apps/backend/src/index.ts`
-- [ ] T009 [P] 使用 `jose` 实现 JWT 认证中间件于 `apps/backend/src/auth/jwt.ts`
-- [ ] T010 [P] 实现统一错误处理和响应格式于 `apps/backend/src/errors/handler.ts`
-- [ ] T011 [P] 实现注册/登录/刷新 Token API 于 `apps/backend/src/auth/routes.ts`
-- [ ] T012 [P] 实现恢复密钥重置 API 于 `apps/backend/src/auth/recover.ts`
-- [ ] T013 运行 Prisma 迁移并生成客户端（`prisma/migrations/` 和 `@prisma/client`）
-- [ ] T014 [P] 配置 Edge Manifest V3 于 `apps/edge-extension/src/manifest.json`
-- [ ] T015 [P] 配置 Vite 多入口构建于 `apps/edge-extension/vite.config.ts`（background, content, popup, options）
-- [ ] T016 [P] 实现浏览器 API 抽象层于 `apps/edge-extension/src/platform/browser-api.ts`
-- [ ] T017 [P] 实现 Web Crypto 加密核心于 `apps/edge-extension/src/crypto/crypto-service.ts`（KDF, AES-256-GCM, RSA，遵循 `contracts/crypto.md`）
-- [ ] T018 [P] 实现保险库本地存储于 `apps/edge-extension/src/platform/storage.ts`（`chrome.storage.local`, IndexedDB）
-- [ ] T019 [P] 定义共享 TypeScript 类型于 `packages/shared-types/src/`（cipher.ts, sync.ts, api.ts）
+- [X] T007 定义 Prisma 数据模型于 `apps/backend/prisma/schema.prisma`（User, Cipher, DomainAssociation, SyncRecord, Device, CookieData, RejectedSite）
+- [X] T008 [P] 实现 Fastify 应用入口和插件系统于 `apps/backend/src/index.ts`
+- [X] T009 [P] 使用 `jose` 实现 JWT 认证中间件于 `apps/backend/src/auth/jwt.ts`
+- [X] T010 [P] 实现统一错误处理和响应格式于 `apps/backend/src/errors/handler.ts`
+- [X] T011 [P] 实现注册/登录/刷新 Token API 于 `apps/backend/src/auth/routes.ts`
+- [X] T012 [P] 实现恢复密钥重置 API 于 `apps/backend/src/auth/recover.ts`
+- [X] T013 运行 Prisma 迁移并生成客户端（`prisma/migrations/` 和 `@prisma/client`）
+- [X] T014 [P] 配置 Edge Manifest V3 于 `apps/edge-extension/src/manifest.json`
+- [X] T015 [P] 配置 Vite 多入口构建于 `apps/edge-extension/vite.config.ts`（background, content, popup, options）
+- [X] T016 [P] 实现浏览器 API 抽象层于 `apps/edge-extension/src/platform/browser-api.ts`
+- [X] T017 [P] 实现 Web Crypto 加密核心于 `apps/edge-extension/src/crypto/crypto-service.ts`（KDF, AES-256-GCM, RSA，遵循 `contracts/crypto.md`）
+- [X] T018 [P] 实现保险库本地存储于 `apps/edge-extension/src/platform/storage.ts`（`chrome.storage.local`, IndexedDB）
+- [X] T019 [P] 定义共享 TypeScript 类型于 `packages/shared-types/src/`（cipher.ts, sync.ts, api.ts）
 
 **检查点**：基础就绪 — 用户故事实现现在可以并行开始
 
@@ -62,16 +62,16 @@ description: "密码管理应用功能实现的任务列表"
 
 ### 用户故事 1 的实现
 
-- [ ] T020 [P] [US1] 实现内容脚本入口和消息桥接于 `apps/edge-extension/src/content/content-script.ts`
-- [ ] T021 [P] [US1] 实现表单检测服务 `apps/edge-extension/src/autofill/collect-autofill-content.ts`（DOM 遍历、语义分析、MutationObserver）
-- [ ] T022 [US1] 实现登录成功检测引擎于 `apps/edge-extension/src/autofill/login-detection.ts`（表单提交拦截、AJAX/fetch 拦截、webNavigation 监听、后台暂存）
-- [ ] T023 [US1] 实现保存密码提示 UI 于 `apps/edge-extension/src/autofill/save-prompt.ts`（行内浮层，5 秒触发）
-- [ ] T024 [P] [US1] 实现自动填充引擎于 `apps/edge-extension/src/autofill/insert-autofill-content.ts`（字段匹配、数据注入）
-- [ ] T025 [US1] 实现行内菜单 / 账号选择器于 `apps/edge-extension/src/autofill/inline-menu.ts`（多账号下拉菜单，默认填充最近使用的，遵循 FR-019）
-- [ ] T026 [P] [US1] 实现域名匹配算法于 `apps/edge-extension/src/autofill/domain-matcher.ts`（基础域名提取、URI 匹配，遵循 `contracts/sync-protocol.md`）
-- [ ] T027 [P] [US1] 实现拒绝保存站点存储于 `apps/edge-extension/src/autofill/rejected-sites.ts`（30 天内不再提示，遵循 FR-020）
-- [ ] T028 [US1] 实现 Popup 基础框架于 `apps/edge-extension/src/popup/`（解锁界面、保险库外壳、导航）
-- [ ] T029 [P] [US1] 实现剪贴板安全管理器于 `apps/edge-extension/src/platform/clipboard.ts`（10 秒自动清空、计时器重置，遵循 FR-017/FR-023）
+- [X] T020 [P] [US1] 实现内容脚本入口和消息桥接于 `apps/edge-extension/src/content/content-script.ts`
+- [X] T021 [P] [US1] 实现表单检测服务 `apps/edge-extension/src/autofill/collect-autofill-content.ts`（DOM 遍历、语义分析、MutationObserver）
+- [X] T022 [US1] 实现登录成功检测引擎于 `apps/edge-extension/src/autofill/login-detection.ts`（表单提交拦截、AJAX/fetch 拦截、webNavigation 监听、后台暂存）
+- [X] T023 [US1] 实现保存密码提示 UI 于 `apps/edge-extension/src/autofill/save-prompt.ts`（行内浮层，5 秒触发）
+- [X] T024 [P] [US1] 实现自动填充引擎于 `apps/edge-extension/src/autofill/insert-autofill-content.ts`（字段匹配、数据注入）
+- [X] T025 [US1] 实现行内菜单 / 账号选择器于 `apps/edge-extension/src/autofill/inline-menu.ts`（多账号下拉菜单，默认填充最近使用的，遵循 FR-019）
+- [X] T026 [P] [US1] 实现域名匹配算法于 `apps/edge-extension/src/autofill/domain-matcher.ts`（基础域名提取、URI 匹配，遵循 `contracts/sync-protocol.md`）
+- [X] T027 [P] [US1] 实现拒绝保存站点存储于 `apps/edge-extension/src/autofill/rejected-sites.ts`（30 天内不再提示，遵循 FR-020）
+- [X] T028 [US1] 实现 Popup 基础框架于 `apps/edge-extension/src/popup/`（解锁界面、保险库外壳、导航）
+- [X] T029 [P] [US1] 实现剪贴板安全管理器于 `apps/edge-extension/src/platform/clipboard.ts`（10 秒自动清空、计时器重置，遵循 FR-017/FR-023）
 
 **检查点**：此时，用户故事 1 应在 Edge 中完全可用并可独立测试
 
@@ -85,19 +85,19 @@ description: "密码管理应用功能实现的任务列表"
 
 ### 后端任务
 
-- [ ] T030 [P] [US2] 实现全量/增量同步 API（`GET /api/sync`）于 `apps/backend/src/sync/routes.ts`
-- [ ] T031 [P] [US2] 实现推送变更 API（`POST /api/sync/push`）于 `apps/backend/src/sync/push.ts`
-- [ ] T032 [P] [US2] 实现凭据 CRUD API 于 `apps/backend/src/ciphers/routes.ts`（POST/PUT/DELETE/GET，遵循 `contracts/api.md`）
-- [ ] T033 [P] [US2] 实现 WebSocket 实时同步服务端于 `apps/backend/src/websocket/server.ts`（推送 SYNC_REQUIRED）
-- [ ] T034 [P] [US2] 实现设备管理 API 于 `apps/backend/src/devices/routes.ts`（GET/DELETE，遵循 `contracts/api.md`）
+- [X] T030 [P] [US2] 实现全量/增量同步 API（`GET /api/sync`）于 `apps/backend/src/sync/routes.ts`
+- [X] T031 [P] [US2] 实现推送变更 API（`POST /api/sync/push`）于 `apps/backend/src/sync/routes.ts`
+- [X] T032 [P] [US2] 实现凭据 CRUD API 于 `apps/backend/src/ciphers/routes.ts`（POST/PUT/DELETE/GET，遵循 `contracts/api.md`）
+- [X] T033 [P] [US2] 实现 WebSocket 实时同步服务端于 `apps/backend/src/websocket/server.ts`（推送 SYNC_REQUIRED）
+- [X] T034 [P] [US2] 实现设备管理 API 于 `apps/backend/src/devices/routes.ts`（GET/DELETE，遵循 `contracts/api.md`）
 - [ ] T035 [P] [US2] 实现同步载荷校验和验证于 `apps/backend/src/sync/checksum.ts`
 
 ### Edge 插件任务
 
-- [ ] T036 [US2] 实现同步客户端于 `apps/edge-extension/src/sync/sync-client.ts`（全量同步、基于时间戳的增量同步）
-- [ ] T037 [US2] 实现离线待处理变更队列于 `apps/edge-extension/src/sync/pending-changes.ts`（`chrome.storage.local`、FIFO 处理，遵循 `contracts/sync-protocol.md`）
-- [ ] T038 [US2] 实现重连后自动同步于 `apps/edge-extension/src/sync/sync-scheduler.ts`（网络恢复检测、队列刷新）
-- [ ] T039 [P] [US2] 实现 WebSocket 客户端及轮询降级于 `apps/edge-extension/src/sync/websocket-client.ts`（指数退避、30 秒轮询）
+- [X] T036 [US2] 实现同步客户端于 `apps/edge-extension/src/sync/sync-client.ts`（全量同步、基于时间戳的增量同步）
+- [X] T037 [US2] 实现离线待处理变更队列于 `apps/edge-extension/src/sync/pending-changes.ts`（`chrome.storage.local`、FIFO 处理，遵循 `contracts/sync-protocol.md`）
+- [X] T038 [US2] 实现重连后自动同步于 `apps/edge-extension/src/sync/sync-scheduler.ts`（网络恢复检测、队列刷新）
+- [X] T039 [P] [US2] 实现 WebSocket 客户端及轮询降级于 `apps/edge-extension/src/sync/websocket-client.ts`（指数退避、30 秒轮询）
 
 **检查点**：用户故事 1 和 2 应均可独立运行；Edge 和后端同步协议稳定，为 Android 接入做好准备
 

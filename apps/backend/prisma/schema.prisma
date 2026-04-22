@@ -1,0 +1,119 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                  String   @id @default(uuid())
+  email               String   @unique
+  kdfType             String   // PBKDF2_SHA256 | ARGON2ID
+  kdfIterations       Int
+  kdfMemory           Int?
+  kdfParallelism      Int?
+  masterPasswordHash  String
+  protectedKey        String
+  publicKey           String
+  encryptedPrivateKey String
+  securityStamp       String   @default(uuid())
+  recoveryKeyHash     String?
+  encryptedRecoveryKey String?
+  createdAt           DateTime @default(now())
+  modifiedAt          DateTime @updatedAt
+
+  ciphers           Cipher[]
+  domainAssociations DomainAssociation[]
+  syncRecords       SyncRecord[]
+  devices           Device[]
+  cookies           CookieData[]
+  rejectedSites     RejectedSite[]
+
+  @@map("users")
+}
+
+model Cipher {
+  id         String   @id @default(uuid())
+  userId     String
+  type       Int      // 1=LOGIN, 2=CARD, 3=IDENTITY, 4=SECURE_NOTE, 5=PASSKEY
+  data       String   // 加密后的 JSON Base64
+  favorite   Boolean  @default(false)
+  reprompt   Int      @default(0) // 0=NONE, 1=PASSWORD
+  createdAt  DateTime @default(now())
+  modifiedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, modifiedAt])
+  @@map("ciphers")
+}
+
+model DomainAssociation {
+  id           String   @id @default(uuid())
+  userId       String
+  domains      String   // JSON 数组序列化
+  packageNames String   // JSON 数组序列化
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("domain_associations")
+}
+
+model SyncRecord {
+  id         String   @id @default(uuid())
+  userId     String
+  deviceId   String
+  deviceType String   // BROWSER | ANDROID
+  deviceName String
+  lastSyncAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, deviceId])
+  @@map("sync_records")
+}
+
+model Device {
+  id         String   @id @default(uuid())
+  userId     String
+  deviceId   String
+  deviceType String
+  deviceName String
+  lastSyncAt DateTime?
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, deviceId])
+  @@map("devices")
+}
+
+model CookieData {
+  id         String   @id @default(uuid())
+  userId     String
+  domain     String
+  encryptedData String
+  modifiedAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, domain])
+  @@map("cookies")
+}
+
+model RejectedSite {
+  id        String   @id @default(uuid())
+  userId    String
+  domain    String
+  rejectedAt DateTime @default(now())
+  expireAt  DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, domain])
+  @@map("rejected_sites")
+}

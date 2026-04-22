@@ -7,7 +7,15 @@
       "WebFetch(domain:raw.githubusercontent.com)",
       "WebFetch(domain:contributing.bitwarden.com)",
       "WebFetch(domain:bitwarden-clients.mintlify.app)",
-      "WebFetch(domain:bitwarden.com)"
+      "WebFetch(domain:bitwarden.com)",
+      "Bash(pnpm install *)",
+      "Bash(npm install *)",
+      "Bash(npm --version)",
+      "Bash(npx pnpm@latest *)",
+      "Bash(node *)",
+      "Bash(curl -s http://localhost:3000/health)",
+      "Bash(npx tsc *)",
+      "Bash(npx vite *)"
     ]
   }
 }
