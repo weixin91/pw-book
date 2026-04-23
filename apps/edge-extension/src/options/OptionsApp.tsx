@@ -27,6 +27,7 @@ const DEFAULT_KDF = {
 
 export function OptionsApp(): React.ReactElement {
   const [serverUrl, setServerUrl] = useState("http://localhost:3000");
+  const [autofillMode, setAutofillMode] = useState<"auto" | "manual">("auto");
   const [tab, setTab] = useState<Tab>("register");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -38,10 +39,18 @@ export function OptionsApp(): React.ReactElement {
 
   useEffect(() => {
     StorageService.getServerUrl().then((url) => setServerUrl(url));
+    StorageService.getAutofillMode().then((mode) => setAutofillMode(mode));
   }, []);
 
   async function handleSaveServerUrl() {
     await StorageService.setServerUrl(serverUrl);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  }
+
+  async function handleSaveAutofillMode(mode: "auto" | "manual") {
+    await StorageService.setAutofillMode(mode);
+    setAutofillMode(mode);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   }
@@ -225,6 +234,30 @@ export function OptionsApp(): React.ReactElement {
             保存
           </button>
           {saved && <span style={{ marginLeft: 12, color: "#2e7d32", fontSize: 14 }}>已保存</span>}
+        </div>
+      </div>
+
+      <div style={{ marginBottom: 24, padding: 16, borderRadius: 8, border: "1px solid #eee", background: "#fafafa" }}>
+        <label style={{ display: "block", fontSize: 14, marginBottom: 6, fontWeight: 500 }}>自动填充模式</label>
+        <div style={{ display: "flex", gap: 12, marginTop: 8 }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 14, cursor: "pointer" }}>
+            <input
+              type="radio"
+              name="autofillMode"
+              checked={autofillMode === "auto"}
+              onChange={() => handleSaveAutofillMode("auto")}
+            />
+            自动填充（单个凭据时自动填入）
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 14, cursor: "pointer" }}>
+            <input
+              type="radio"
+              name="autofillMode"
+              checked={autofillMode === "manual"}
+              onChange={() => handleSaveAutofillMode("manual")}
+            />
+            手动填充（始终弹出列表选择）
+          </label>
         </div>
       </div>
 

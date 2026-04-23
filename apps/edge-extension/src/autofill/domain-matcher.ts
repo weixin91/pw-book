@@ -1,25 +1,28 @@
 // 域名匹配算法
 
-import { getBaseDomain, matchDomain } from "./domain-utils.js";
+import { getBaseDomain } from "./domain-utils.js";
+import { decryptCipherData } from "../crypto/crypto-service.js";
 
 export interface CipherItem {
   id: string;
   data: string;
 }
 
-export function findMatchingCiphers(
+export async function findMatchingCiphers(
   url: string,
-  ciphers: CipherItem[]
-): CipherItem[] {
+  ciphers: CipherItem[],
+  userKey: Uint8Array
+): Promise<Array<{ cipher: CipherItem; data: Record<string, unknown> }>> {
   const hostname = new URL(url).hostname.toLowerCase();
   const baseDomain = getBaseDomain(hostname);
 
-  const matched: CipherItem[] = [];
+  const matched: Array<{ cipher: CipherItem; data: Record<string, unknown> }> = [];
 
   for (const cipher of ciphers) {
     try {
-      const data = JSON.parse(cipher.data);
-      const uris = data.login?.uris ?? [];
+      const plainText = await decryptCipherData(cipher.data, userKey);
+      const data = JSON.parse(plainText) as Record<string, unknown>;
+      const uris = (data.login as Record<string, unknown> | undefined)?.uris as Array<{ uri?: string }> | undefined ?? [];
       const matches = uris.some((u: { uri?: string }) => {
         if (!u.uri) return false;
         try {
@@ -34,9 +37,9 @@ export function findMatchingCiphers(
           return u.uri.includes(hostname);
         }
       });
-      if (matches) matched.push(cipher);
+      if (matches) matched.push({ cipher, data });
     } catch {
-      // 跳过解析失败的条目
+      // 跳过解密/解析失败的条目
     }
   }
 

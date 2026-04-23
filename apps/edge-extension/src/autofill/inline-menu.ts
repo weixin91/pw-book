@@ -76,14 +76,17 @@ export class InlineMenu {
     this.document.body.appendChild(container);
     this.container = container;
 
-    // 点击外部关闭
+    // 点击外部关闭（带保护期，避免显示瞬间的 click 事件误关闭）
+    const shownAt = Date.now();
     const closeHandler = (e: MouseEvent) => {
+      if (Date.now() - shownAt < 200) return; // 显示后 200ms 内忽略外部点击
       if (container && !container.contains(e.target as Node)) {
         this.remove();
         this.document.removeEventListener("click", closeHandler);
       }
     };
-    setTimeout(() => this.document.addEventListener("click", closeHandler), 0);
+    // 延迟 50ms 绑定，确保触发菜单显示的那次 click 事件已完成
+    setTimeout(() => this.document.addEventListener("click", closeHandler), 50);
   }
 
   remove(): void {

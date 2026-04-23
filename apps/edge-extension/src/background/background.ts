@@ -2,6 +2,7 @@
 
 import { BrowserApi } from "../platform/browser-api.js";
 import { StorageService } from "../platform/storage.js";
+import { decryptCipherData } from "../crypto/crypto-service.js";
 
 interface StoredFormData {
   tabId: number;
@@ -106,17 +107,25 @@ async function handleGetVaultItems(urlStr: string): Promise<Array<Record<string,
   console.log("[PWBook BG] handleGetVaultItems, url:", urlStr);
   const ciphers = await StorageService.getCiphers();
   console.log("[PWBook BG] 本地凭据总数:", ciphers.length);
+  const userKey = await StorageService.getUserKey();
+  if (!userKey) {
+    console.log("[PWBook BG] 保险库未解锁，无 userKey");
+    return [];
+  }
+
   const url = new URL(urlStr);
   const hostname = url.hostname.toLowerCase();
   console.log("[PWBook BG] 目标 hostname:", hostname);
 
   // 简单域名匹配：基础域名或完整主机名匹配
-  const matched = ciphers.filter((cipher) => {
+  const matched = [];
+  for (const cipher of ciphers) {
     try {
-      const data = JSON.parse(cipher.data);
+      const plainText = await decryptCipherData(cipher.data, userKey);
+      const data = JSON.parse(plainText);
       const uris = data.login?.uris ?? [];
       console.log("[PWBook BG] 检查凭据:", data.name, "URIs:", uris.map((u: { uri?: string }) => u.uri));
-      return uris.some((u: { uri?: string }) => {
+      const isMatch = uris.some((u: { uri?: string }) => {
         if (!u.uri) return false;
         try {
           const uHost = new URL(u.uri).hostname.toLowerCase();
@@ -129,41 +138,28 @@ async function handleGetVaultItems(urlStr: string): Promise<Array<Record<string,
           return match;
         }
       });
+      if (isMatch) matched.push({ cipher, data });
     } catch (e) {
-      console.log("[PWBook BG] 解析凭据失败:", e);
-      return false;
+      console.log("[PWBook BG] 解密/解析凭据失败:", e);
     }
-  });
+  }
 
   console.log("[PWBook BG] 匹配凭据数:", matched.length);
 
   // 按 lastUsedAt 降序排列
   matched.sort((a, b) => {
-    try {
-      const da = JSON.parse(a.data);
-      const db = JSON.parse(b.data);
-      const ta = da.lastUsedAt ? new Date(da.lastUsedAt).getTime() : 0;
-      const tb = db.lastUsedAt ? new Date(db.lastUsedAt).getTime() : 0;
-      return tb - ta;
-    } catch {
-      return 0;
-    }
+    const ta = a.data.lastUsedAt ? new Date(a.data.lastUsedAt).getTime() : 0;
+    const tb = b.data.lastUsedAt ? new Date(b.data.lastUsedAt).getTime() : 0;
+    return tb - ta;
   });
 
-  const result = matched.map((c) => {
-    try {
-      const data = JSON.parse(c.data);
-      return {
-        id: c.id,
-        name: data.name,
-        username: data.login?.username ?? "",
-        password: data.login?.password ?? "",
-        uri: data.login?.uris?.[0]?.uri ?? "",
-      };
-    } catch {
-      return { id: c.id, name: "", username: "", password: "", uri: "" };
-    }
-  });
+  const result = matched.map(({ cipher, data }) => ({
+    id: cipher.id,
+    name: data.name,
+    username: data.login?.username ?? "",
+    password: data.login?.password ?? "",
+    uri: data.login?.uris?.[0]?.uri ?? "",
+  }));
   console.log("[PWBook BG] 返回结果:", result.map((r) => ({ id: r.id, username: r.username, uri: r.uri })));
   return result;
 }

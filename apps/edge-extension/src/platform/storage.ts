@@ -15,6 +15,7 @@ const LOCAL_KEYS = {
   LAST_SYNC_TOKEN: "lastSyncToken",
   REJECTED_SITES: "rejectedSites",
   SERVER_URL: "serverUrl",
+  AUTOFILL_MODE: "autofillMode",
 } as const;
 
 export interface StoredProfile {
@@ -126,6 +127,15 @@ export const StorageService = {
 
   async setServerUrl(url: string): Promise<void> {
     await chrome.storage.local.set({ [LOCAL_KEYS.SERVER_URL]: url });
+  },
+
+  async getAutofillMode(): Promise<"auto" | "manual"> {
+    const result = await chrome.storage.local.get(LOCAL_KEYS.AUTOFILL_MODE);
+    return result[LOCAL_KEYS.AUTOFILL_MODE] ?? "auto";
+  },
+
+  async setAutofillMode(mode: "auto" | "manual"): Promise<void> {
+    await chrome.storage.local.set({ [LOCAL_KEYS.AUTOFILL_MODE]: mode });
   },
 
   // --- chrome.storage.session (MV3, Service Worker 存活期间) ---
