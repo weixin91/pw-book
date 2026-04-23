@@ -26,11 +26,12 @@ export class InlineMenu {
       overflow: hidden;
     `;
 
-    const passwordField = this.document.querySelector('input[type="password"]') as HTMLInputElement | null;
-    if (passwordField) {
-      const rect = passwordField.getBoundingClientRect();
-      container.style.top = `${rect.bottom + window.scrollY + 4}px`;
-      container.style.left = `${rect.left + window.scrollX}px`;
+    const anchorField = this.findAnchorField();
+    if (anchorField) {
+      const rect = anchorField.getBoundingClientRect();
+      // position: fixed 使用视口坐标，无需加 scrollX/scrollY
+      container.style.top = `${rect.bottom + 4}px`;
+      container.style.left = `${rect.left}px`;
     } else {
       container.style.top = "50%";
       container.style.left = "50%";
@@ -94,5 +95,32 @@ export class InlineMenu {
       this.container.parentNode.removeChild(this.container);
       this.container = null;
     }
+  }
+
+  private findAnchorField(): HTMLInputElement | null {
+    const inputs = Array.from(this.document.querySelectorAll("input"));
+    // 优先找可见的 type="password"
+    for (const input of inputs) {
+      if (input.type === "password" && this.isVisible(input)) return input;
+    }
+    // 回退：显示密码模式下 type="text" 但属性含密码关键词
+    for (const input of inputs) {
+      if (this.isPasswordLike(input) && this.isVisible(input)) return input;
+    }
+    // 最后回退到当前焦点元素
+    const active = this.document.activeElement as HTMLInputElement | null;
+    if (active && active.tagName === "INPUT" && this.isVisible(active)) return active;
+    return null;
+  }
+
+  private isVisible(el: HTMLInputElement): boolean {
+    if (el.type === "hidden") return false;
+    const style = window.getComputedStyle(el);
+    return style.display !== "none" && style.visibility !== "hidden";
+  }
+
+  private isPasswordLike(input: HTMLInputElement): boolean {
+    const attrText = `${input.name} ${input.id} ${input.placeholder} ${input.autocomplete}`.toLowerCase();
+    return /password|pass|pwd|密碼|密码/.test(attrText);
   }
 }

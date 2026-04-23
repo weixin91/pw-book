@@ -233,7 +233,12 @@ function setupManualDetection(
 
   document.addEventListener("focusin", (e) => {
     const target = e.target as HTMLInputElement;
-    if (target.tagName === "INPUT" && target.type === "password") {
+    if (target.tagName !== "INPUT") return;
+    // 兼容显示密码后 type 被切换为 text 的情况
+    const isPasswordLike = /password|pwd|pass|密码|密碼/i.test(
+      `${target.name} ${target.id} ${target.placeholder} ${target.autocomplete}`
+    );
+    if (target.type === "password" || isPasswordLike) {
       console.log("[PWBook] 密码框获得焦点，触发扫描");
       const fd = collector.scanPage();
       if (fd) requestVaultItems(fd.url);
