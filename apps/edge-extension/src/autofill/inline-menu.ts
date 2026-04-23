@@ -54,7 +54,8 @@ export class InlineMenu {
       row.addEventListener("mouseleave", () => {
         row.style.background = "transparent";
       });
-      row.addEventListener("click", () => {
+      row.addEventListener("click", (e) => {
+        e.stopPropagation();
         this.onSelect(item);
         this.remove();
       });

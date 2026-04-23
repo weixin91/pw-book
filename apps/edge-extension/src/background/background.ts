@@ -22,6 +22,17 @@ function getPendingKey(tabId: number): string {
   return `_pwbook_pending_${tabId}`;
 }
 
+function getBaseDomain(url: string): string {
+  try {
+    const hostname = new URL(url).hostname;
+    const parts = hostname.split(".");
+    if (parts.length <= 2) return hostname;
+    return parts.slice(-2).join(".");
+  } catch {
+    return url;
+  }
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (typeof message !== "object" || message === null) return false;
 
@@ -45,22 +56,31 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (oldTimer) clearTimeout(oldTimer);
 
     // 启动兜底定时器：5 秒后若未触发导航，也弹出保存提示（兼容 SPA/AJAX 登录）
+    const tabId = sender.tab.id;
     const timer = setTimeout(() => {
-      const d = pendingFormData.get(sender.tab!.id!);
-      if (d) {
+      const d = pendingFormData.get(tabId);
+      if (!d) return;
+
+      isCredentialAlreadySaved(d.url, d.username, d.password).then((exists) => {
+        pendingFormData.delete(tabId);
+        pendingTimers.delete(tabId);
+        chrome.storage.local.remove(getPendingKey(tabId));
+
+        if (exists) {
+          console.log("[PWBook BG] 兜底定时器：凭据未变化，跳过保存提示");
+          return;
+        }
+
         console.log("[PWBook BG] 兜底定时器触发，发送保存提示（SPA/AJAX）");
-        pendingFormData.delete(sender.tab!.id!);
-        pendingTimers.delete(sender.tab!.id!);
-        chrome.storage.local.remove(getPendingKey(sender.tab!.id!));
-        chrome.tabs.sendMessage(sender.tab!.id!, {
+        chrome.tabs.sendMessage(tabId, {
           type: "SHOW_SAVE_PROMPT",
           username: d.username,
           password: d.password,
           url: d.url,
         });
-      }
+      });
     }, FALLBACK_DELAY);
-    pendingTimers.set(sender.tab.id, timer);
+    pendingTimers.set(tabId, timer);
 
     // 10 秒后清理
     setTimeout(() => {
@@ -74,19 +94,28 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (msg.type === "AJAX_LOGIN_SUCCESS" && sender.tab?.id && sender.tab.url) {
-    // SPA/AJAX 登录成功：直接弹出保存提示，无需等待导航
-    console.log("[PWBook BG] AJAX 登录成功，直接发送保存提示");
-    chrome.tabs.sendMessage(sender.tab.id, {
-      type: "SHOW_SAVE_PROMPT",
-      username: String(msg.username ?? ""),
-      password: String(msg.password ?? ""),
-      url: sender.tab.url,
-    });
+    const tabId = sender.tab.id;
+    const username = String(msg.username ?? "");
+    const password = String(msg.password ?? "");
+    const url = sender.tab.url;
 
-    // 清理该 tab 的 pending 状态（防止兜底定时器重复触发）
-    pendingFormData.delete(sender.tab.id);
-    pendingTimers.delete(sender.tab.id);
-    chrome.storage.local.remove(getPendingKey(sender.tab.id));
+    isCredentialAlreadySaved(url, username, password).then((exists) => {
+      if (exists) {
+        console.log("[PWBook BG] AJAX 登录凭据未变化，跳过保存提示");
+      } else {
+        console.log("[PWBook BG] AJAX 登录成功，直接发送保存提示");
+        chrome.tabs.sendMessage(tabId, {
+          type: "SHOW_SAVE_PROMPT",
+          username,
+          password,
+          url,
+        });
+      }
+      // 清理该 tab 的 pending 状态（防止兜底定时器重复触发）
+      pendingFormData.delete(tabId);
+      pendingTimers.delete(tabId);
+      chrome.storage.local.remove(getPendingKey(tabId));
+    });
 
     sendResponse({ success: true });
     return false;
@@ -96,16 +125,30 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const tabId = sender.tab.id;
     const data = pendingFormData.get(tabId);
     if (data && Date.now() - data.timestamp < FORM_DATA_TTL) {
-      sendResponse({ data });
-      pendingFormData.delete(tabId);
-      chrome.storage.local.remove(getPendingKey(tabId));
-      return false;
+      // 检查凭据是否已存在，避免重复提示
+      isCredentialAlreadySaved(data.url, data.username, data.password).then((exists) => {
+        if (exists) {
+          console.log("[PWBook BG] GET_PENDING_FORM_DATA: 凭据未变化，跳过");
+          sendResponse({ data: null });
+        } else {
+          sendResponse({ data });
+        }
+        pendingFormData.delete(tabId);
+        chrome.storage.local.remove(getPendingKey(tabId));
+      });
+      return true;
     }
     // 内存中没有，尝试从 local storage 恢复（Service Worker 终止后的兜底）
-    chrome.storage.local.get(getPendingKey(tabId)).then((result) => {
+    chrome.storage.local.get(getPendingKey(tabId)).then(async (result) => {
       const localData = result[getPendingKey(tabId)] as StoredFormData | undefined;
       if (localData && Date.now() - localData.timestamp < FORM_DATA_TTL) {
-        sendResponse({ data: localData });
+        const exists = await isCredentialAlreadySaved(localData.url, localData.username, localData.password);
+        if (exists) {
+          console.log("[PWBook BG] GET_PENDING_FORM_DATA(local): 凭据未变化，跳过");
+          sendResponse({ data: null });
+        } else {
+          sendResponse({ data: localData });
+        }
       } else {
         sendResponse({ data: null });
       }
@@ -153,62 +196,51 @@ BrowserApi.onWebNavigationCompleted((details) => {
     beforeUrl.origin !== afterUrl.origin ||
     beforeUrl.pathname !== afterUrl.pathname
   ) {
-    pendingFormData.delete(details.tabId);
-    pendingTimers.delete(details.tabId);
-    chrome.storage.local.remove(getPendingKey(details.tabId));
+    isCredentialAlreadySaved(data.url, data.username, data.password).then((exists) => {
+      pendingFormData.delete(details.tabId);
+      pendingTimers.delete(details.tabId);
+      chrome.storage.local.remove(getPendingKey(details.tabId));
 
-    // 向 content script 发送保存密码提示
-    chrome.tabs.sendMessage(details.tabId, {
-      type: "SHOW_SAVE_PROMPT",
-      username: data.username,
-      password: data.password,
-      url: data.url,
+      if (exists) {
+        console.log("[PWBook BG] 凭据未变化，跳过保存提示");
+        return;
+      }
+
+      // 向 content script 发送保存密码提示
+      chrome.tabs.sendMessage(details.tabId, {
+        type: "SHOW_SAVE_PROMPT",
+        username: data.username,
+        password: data.password,
+        url: data.url,
+      });
     });
   }
 });
 
 async function handleGetVaultItems(urlStr: string): Promise<Array<Record<string, unknown>>> {
-  console.log("[PWBook BG] handleGetVaultItems, url:", urlStr);
   const ciphers = await StorageService.getCiphers();
-  console.log("[PWBook BG] 本地凭据总数:", ciphers.length);
   const userKey = await StorageService.getUserKey();
   if (!userKey) {
-    console.log("[PWBook BG] 保险库未解锁，无 userKey");
     return [];
   }
 
-  const url = new URL(urlStr);
-  const hostname = url.hostname.toLowerCase();
-  console.log("[PWBook BG] 目标 hostname:", hostname);
+  const baseDomain = getBaseDomain(urlStr);
 
-  // 简单域名匹配：基础域名或完整主机名匹配
   const matched = [];
   for (const cipher of ciphers) {
     try {
       const plainText = await decryptCipherData(cipher.data, userKey);
       const data = JSON.parse(plainText);
       const uris = data.login?.uris ?? [];
-      console.log("[PWBook BG] 检查凭据:", data.name, "URIs:", uris.map((u: { uri?: string }) => u.uri));
       const isMatch = uris.some((u: { uri?: string }) => {
         if (!u.uri) return false;
-        try {
-          const uHost = new URL(u.uri).hostname.toLowerCase();
-          const match = hostname === uHost || hostname.endsWith(`.${uHost}`) || uHost.endsWith(`.${hostname}`);
-          if (match) console.log("[PWBook BG] 匹配成功:", uHost, "===", hostname);
-          return match;
-        } catch {
-          const match = u.uri.includes(hostname);
-          if (match) console.log("[PWBook BG] 匹配成功(回退):", u.uri, "includes", hostname);
-          return match;
-        }
+        return getBaseDomain(u.uri) === baseDomain;
       });
       if (isMatch) matched.push({ cipher, data });
-    } catch (e) {
-      console.log("[PWBook BG] 解密/解析凭据失败:", e);
+    } catch {
+      // 跳过无法解密的凭据
     }
   }
-
-  console.log("[PWBook BG] 匹配凭据数:", matched.length);
 
   // 按 lastUsedAt 降序排列
   matched.sort((a, b) => {
@@ -224,7 +256,6 @@ async function handleGetVaultItems(urlStr: string): Promise<Array<Record<string,
     password: data.login?.password ?? "",
     uri: data.login?.uris?.[0]?.uri ?? "",
   }));
-  console.log("[PWBook BG] 返回结果:", result.map((r) => ({ id: r.id, username: r.username, uri: r.uri })));
   return result;
 }
 
@@ -234,10 +265,7 @@ async function handleSaveCipher(data: Record<string, unknown>): Promise<{ succes
     if (!userKey) {
       return { success: false, error: "未解锁保险库" };
     }
-    console.log("[PWBook BG] 保存凭据，userKey 长度:", userKey.length, "摘要:", userKey.slice(0, 4).join(","));
-
     const encryptedData = await encryptCipherData(JSON.stringify(data), userKey);
-    console.log("[PWBook BG] 加密完成，密文长度:", encryptedData.length);
 
     const cipher = {
       id: crypto.randomUUID(),
@@ -269,7 +297,6 @@ async function handleSaveCipher(data: Record<string, unknown>): Promise<{ succes
             modifiedAt: new Date().toISOString(),
           };
           updated = true;
-          console.log("[PWBook BG] 更新已有凭据:", name, username);
           break;
         }
       } catch {
@@ -279,7 +306,6 @@ async function handleSaveCipher(data: Record<string, unknown>): Promise<{ succes
 
     if (!updated) {
       ciphers.push(cipher);
-      console.log("[PWBook BG] 新增凭据:", name, username);
     }
 
     await StorageService.setCiphers(ciphers);
@@ -287,4 +313,31 @@ async function handleSaveCipher(data: Record<string, unknown>): Promise<{ succes
   } catch (err) {
     return { success: false, error: String(err) };
   }
+}
+
+async function isCredentialAlreadySaved(url: string, username: string, password: string): Promise<boolean> {
+  if (!username && !password) return false;
+  const userKey = await StorageService.getUserKey();
+  if (!userKey) return false;
+
+  const ciphers = await StorageService.getCiphers();
+  const baseDomain = getBaseDomain(url);
+
+  for (const cipher of ciphers) {
+    try {
+      const plainText = await decryptCipherData(cipher.data, userKey);
+      const data = JSON.parse(plainText);
+      const uris = data.login?.uris ?? [];
+      const isDomainMatch = uris.some((u: { uri?: string }) => {
+        if (!u.uri) return false;
+        return getBaseDomain(u.uri) === baseDomain;
+      });
+      if (isDomainMatch && data.login?.username === username && data.login?.password === password) {
+        return true;
+      }
+    } catch {
+      // 跳过无法解密的凭据
+    }
+  }
+  return false;
 }

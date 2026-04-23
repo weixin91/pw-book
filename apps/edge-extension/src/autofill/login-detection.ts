@@ -61,6 +61,10 @@ export class LoginDetectionEngine {
     const self = this;
     this.document.addEventListener("click", (e) => {
       const target = e.target as HTMLElement;
+      // 忽略来自扩展 UI 的点击，防止菜单项点击穿透触发登录
+      if (target.closest("#pwbook-inline-menu") || target.closest("#pwbook-save-prompt")) {
+        return;
+      }
       const text = (target.textContent ?? "").toLowerCase();
       const aria = (target.getAttribute("aria-label") ?? "").toLowerCase();
       const title = (target.getAttribute("title") ?? "").toLowerCase();

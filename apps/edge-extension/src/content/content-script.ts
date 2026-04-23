@@ -78,31 +78,45 @@ async function initContentScript(): Promise<void> {
   // 页面加载后检查是否有待处理的登录数据（导航导致消息丢失时的兜底）
   // 只在主页面（非 iframe）中执行，防止 iframe 被移除导致提示消失
   if (window.top === window.self) {
-    chrome.runtime.sendMessage({ type: "GET_PENDING_FORM_DATA" }, (response) => {
-      if (chrome.runtime.lastError) {
-        console.log("[PWBook] GET_PENDING_FORM_DATA 错误:", chrome.runtime.lastError.message);
-        return;
-      }
-      const data = response?.data as Record<string, unknown> | undefined;
-      if (data) {
-        console.log("[PWBook] 从 background 恢复 pending 登录数据, username:", data.username, "password:", data.password ? "有" : "无");
-        savePrompt.show({
-          username: String(data.username ?? ""),
-          password: String(data.password ?? ""),
-          url: String(data.url ?? location.href),
-        });
-      } else {
-        console.log("[PWBook] 无 pending 登录数据");
-      }
-    });
+    try {
+      chrome.runtime.sendMessage({ type: "GET_PENDING_FORM_DATA" }, (response) => {
+        if (chrome.runtime.lastError) {
+          console.log("[PWBook] GET_PENDING_FORM_DATA 错误:", chrome.runtime.lastError.message);
+          return;
+        }
+        const data = response?.data as Record<string, unknown> | undefined;
+        if (data) {
+          console.log("[PWBook] 从 background 恢复 pending 登录数据, username:", data.username, "password:", data.password ? "有" : "无");
+          savePrompt.show({
+            username: String(data.username ?? ""),
+            password: String(data.password ?? ""),
+            url: String(data.url ?? location.href),
+          });
+        } else {
+          console.log("[PWBook] 无 pending 登录数据");
+        }
+      });
+    } catch (err) {
+      console.error("[PWBook] 扩展上下文已失效，请刷新页面:", err);
+    }
   }
 
   function handleFormSubmit(username: string, password: string): void {
     console.log("[PWBook] 检测到表单提交");
     const msg = { type: "FORM_SUBMITTED", username, password, url: location.href };
-    chrome.runtime.sendMessage(msg);
+    try {
+      chrome.runtime.sendMessage(msg);
+    } catch (err) {
+      console.error("[PWBook] 扩展上下文已失效:", err);
+    }
     // 导航前再次发送，防止页面跳转导致消息丢失
-    const sendBeforeUnload = () => chrome.runtime.sendMessage(msg);
+    const sendBeforeUnload = () => {
+      try {
+        chrome.runtime.sendMessage(msg);
+      } catch {
+        // 忽略
+      }
+    };
     window.addEventListener("beforeunload", sendBeforeUnload, { once: true });
     setTimeout(() => window.removeEventListener("beforeunload", sendBeforeUnload), 3000);
   }
@@ -110,8 +124,19 @@ async function initContentScript(): Promise<void> {
   function handleAjaxLoginSuccess(username: string, password: string): void {
     console.log("[PWBook] 检测到 AJAX 登录成功");
     const msg = { type: "AJAX_LOGIN_SUCCESS", username, password, url: location.href };
-    chrome.runtime.sendMessage(msg);
-    window.addEventListener("beforeunload", () => chrome.runtime.sendMessage(msg), { once: true });
+    try {
+      chrome.runtime.sendMessage(msg);
+    } catch (err) {
+      console.error("[PWBook] 扩展上下文已失效:", err);
+    }
+    const sendBeforeUnload = () => {
+      try {
+        chrome.runtime.sendMessage(msg);
+      } catch {
+        // 忽略
+      }
+    };
+    window.addEventListener("beforeunload", sendBeforeUnload, { once: true });
   }
 
   function handleAutofillSelected(item: Record<string, unknown>): void {
@@ -119,42 +144,50 @@ async function initContentScript(): Promise<void> {
     inserter.fill(item);
     hasAutoFilled = true;
     // 更新 lastUsedAt
-    chrome.runtime.sendMessage({
-      type: "UPDATE_LAST_USED",
-      id: String(item.id ?? ""),
-    });
+    try {
+      chrome.runtime.sendMessage({
+        type: "UPDATE_LAST_USED",
+        id: String(item.id ?? ""),
+      });
+    } catch (err) {
+      console.error("[PWBook] 扩展上下文已失效:", err);
+    }
   }
 
   function requestVaultItems(url: string): void {
     console.log("[PWBook] 请求凭据，URL:", url);
-    chrome.runtime.sendMessage(
-      { type: "GET_VAULT_ITEMS_FOR_URL", url },
-      (response) => {
-        if (chrome.runtime.lastError) {
-          console.error("[PWBook] 请求凭据失败:", chrome.runtime.lastError.message);
-          return;
-        }
-        const items = (response?.items as Array<Record<string, unknown>>) ?? [];
-        console.log("[PWBook] 收到凭据数:", items.length, "items:", items.map((i) => ({ id: i.id, username: i.username, uri: i.uri })));
-        if (items.length === 0) return;
-
-        if (autofillMode === "manual") {
-          // 手动模式：始终弹出列表供用户选择
-          inlineMenu.show(items);
-          return;
-        }
-
-        // 自动模式
-        if (items.length === 1) {
-          if (!hasAutoFilled) {
-            inserter.fill(items[0]);
-            hasAutoFilled = true;
+    try {
+      chrome.runtime.sendMessage(
+        { type: "GET_VAULT_ITEMS_FOR_URL", url },
+        (response) => {
+          if (chrome.runtime.lastError) {
+            console.error("[PWBook] 请求凭据失败:", chrome.runtime.lastError.message);
+            return;
           }
-        } else if (items.length > 1) {
-          inlineMenu.show(items);
+          const items = (response?.items as Array<Record<string, unknown>>) ?? [];
+          console.log("[PWBook] 收到凭据数:", items.length, "items:", items.map((i) => ({ id: i.id, username: i.username, uri: i.uri })));
+          if (items.length === 0) return;
+
+          if (autofillMode === "manual") {
+            // 手动模式：始终弹出列表供用户选择
+            inlineMenu.show(items);
+            return;
+          }
+
+          // 自动模式
+          if (items.length === 1) {
+            if (!hasAutoFilled) {
+              inserter.fill(items[0]);
+              hasAutoFilled = true;
+            }
+          } else if (items.length > 1) {
+            inlineMenu.show(items);
+          }
         }
-      }
-    );
+      );
+    } catch (err) {
+      console.error("[PWBook] 扩展上下文已失效，请刷新页面:", err);
+    }
   }
 }
 
