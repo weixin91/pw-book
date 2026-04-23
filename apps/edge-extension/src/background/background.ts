@@ -2,7 +2,7 @@
 
 import { BrowserApi } from "../platform/browser-api.js";
 import { StorageService } from "../platform/storage.js";
-import { decryptCipherData } from "../crypto/crypto-service.js";
+import { decryptCipherData, encryptCipherData } from "../crypto/crypto-service.js";
 
 interface StoredFormData {
   tabId: number;
@@ -14,7 +14,13 @@ interface StoredFormData {
 
 // 后台暂存表单提交数据（用于处理登录后重定向）
 const pendingFormData = new Map<number, StoredFormData>();
+const pendingTimers = new Map<number, ReturnType<typeof setTimeout>>();
 const FORM_DATA_TTL = 10_000; // 10 秒
+const FALLBACK_DELAY = 5_000;  // 5 秒兜底：无导航也触发保存提示
+
+function getPendingKey(tabId: number): string {
+  return `_pwbook_pending_${tabId}`;
+}
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (typeof message !== "object" || message === null) return false;
@@ -31,25 +37,81 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       timestamp: Date.now(),
     };
     pendingFormData.set(sender.tab.id, data);
+    // 持久化到 local storage，防止 Service Worker 终止后丢失
+    chrome.storage.local.set({ [getPendingKey(sender.tab.id)]: data });
+
+    // 取消旧定时器
+    const oldTimer = pendingTimers.get(sender.tab.id);
+    if (oldTimer) clearTimeout(oldTimer);
+
+    // 启动兜底定时器：5 秒后若未触发导航，也弹出保存提示（兼容 SPA/AJAX 登录）
+    const timer = setTimeout(() => {
+      const d = pendingFormData.get(sender.tab!.id!);
+      if (d) {
+        console.log("[PWBook BG] 兜底定时器触发，发送保存提示（SPA/AJAX）");
+        pendingFormData.delete(sender.tab!.id!);
+        pendingTimers.delete(sender.tab!.id!);
+        chrome.storage.local.remove(getPendingKey(sender.tab!.id!));
+        chrome.tabs.sendMessage(sender.tab!.id!, {
+          type: "SHOW_SAVE_PROMPT",
+          username: d.username,
+          password: d.password,
+          url: d.url,
+        });
+      }
+    }, FALLBACK_DELAY);
+    pendingTimers.set(sender.tab.id, timer);
 
     // 10 秒后清理
     setTimeout(() => {
       pendingFormData.delete(sender.tab?.id ?? data.tabId);
+      pendingTimers.delete(sender.tab?.id ?? data.tabId);
+      chrome.storage.local.remove(getPendingKey(sender.tab?.id ?? data.tabId));
     }, FORM_DATA_TTL);
 
     sendResponse({ success: true });
     return false;
   }
 
+  if (msg.type === "AJAX_LOGIN_SUCCESS" && sender.tab?.id && sender.tab.url) {
+    // SPA/AJAX 登录成功：直接弹出保存提示，无需等待导航
+    console.log("[PWBook BG] AJAX 登录成功，直接发送保存提示");
+    chrome.tabs.sendMessage(sender.tab.id, {
+      type: "SHOW_SAVE_PROMPT",
+      username: String(msg.username ?? ""),
+      password: String(msg.password ?? ""),
+      url: sender.tab.url,
+    });
+
+    // 清理该 tab 的 pending 状态（防止兜底定时器重复触发）
+    pendingFormData.delete(sender.tab.id);
+    pendingTimers.delete(sender.tab.id);
+    chrome.storage.local.remove(getPendingKey(sender.tab.id));
+
+    sendResponse({ success: true });
+    return false;
+  }
+
   if (msg.type === "GET_PENDING_FORM_DATA" && sender.tab?.id) {
-    const data = pendingFormData.get(sender.tab.id);
+    const tabId = sender.tab.id;
+    const data = pendingFormData.get(tabId);
     if (data && Date.now() - data.timestamp < FORM_DATA_TTL) {
       sendResponse({ data });
-    } else {
-      sendResponse({ data: null });
+      pendingFormData.delete(tabId);
+      chrome.storage.local.remove(getPendingKey(tabId));
+      return false;
     }
-    pendingFormData.delete(sender.tab.id);
-    return false;
+    // 内存中没有，尝试从 local storage 恢复（Service Worker 终止后的兜底）
+    chrome.storage.local.get(getPendingKey(tabId)).then((result) => {
+      const localData = result[getPendingKey(tabId)] as StoredFormData | undefined;
+      if (localData && Date.now() - localData.timestamp < FORM_DATA_TTL) {
+        sendResponse({ data: localData });
+      } else {
+        sendResponse({ data: null });
+      }
+      chrome.storage.local.remove(getPendingKey(tabId));
+    });
+    return true;
   }
 
   if (msg.type === "CHECK_LOGIN_STATUS") {
@@ -92,6 +154,8 @@ BrowserApi.onWebNavigationCompleted((details) => {
     beforeUrl.pathname !== afterUrl.pathname
   ) {
     pendingFormData.delete(details.tabId);
+    pendingTimers.delete(details.tabId);
+    chrome.storage.local.remove(getPendingKey(details.tabId));
 
     // 向 content script 发送保存密码提示
     chrome.tabs.sendMessage(details.tabId, {
@@ -170,9 +234,10 @@ async function handleSaveCipher(data: Record<string, unknown>): Promise<{ succes
     if (!userKey) {
       return { success: false, error: "未解锁保险库" };
     }
+    console.log("[PWBook BG] 保存凭据，userKey 长度:", userKey.length, "摘要:", userKey.slice(0, 4).join(","));
 
-    const { encryptCipherData } = await import("../crypto/crypto-service.js");
-    const encryptedData = await encryptCipherData(JSON.stringify(data.data), userKey);
+    const encryptedData = await encryptCipherData(JSON.stringify(data), userKey);
+    console.log("[PWBook BG] 加密完成，密文长度:", encryptedData.length);
 
     const cipher = {
       id: crypto.randomUUID(),
@@ -186,10 +251,39 @@ async function handleSaveCipher(data: Record<string, unknown>): Promise<{ succes
     };
 
     const ciphers = await StorageService.getCiphers();
-    ciphers.push(cipher);
-    await StorageService.setCiphers(ciphers);
+    const name = String(data.name ?? "");
+    const username = String((data.login as Record<string, unknown>)?.username ?? "");
 
-    return { success: true, id: cipher.id };
+    // 检查是否已有相同域名+用户名的凭据，有则更新
+    let updated = false;
+    for (let i = 0; i < ciphers.length; i++) {
+      try {
+        const plainText = await decryptCipherData(ciphers[i].data, userKey);
+        const existing = JSON.parse(plainText) as Record<string, unknown>;
+        const existingName = String(existing.name ?? "");
+        const existingUsername = String((existing.login as Record<string, unknown>)?.username ?? "");
+        if (existingName === name && existingUsername === username) {
+          ciphers[i] = {
+            ...ciphers[i],
+            data: encryptedData,
+            modifiedAt: new Date().toISOString(),
+          };
+          updated = true;
+          console.log("[PWBook BG] 更新已有凭据:", name, username);
+          break;
+        }
+      } catch {
+        // 跳过无法解密的凭据
+      }
+    }
+
+    if (!updated) {
+      ciphers.push(cipher);
+      console.log("[PWBook BG] 新增凭据:", name, username);
+    }
+
+    await StorageService.setCiphers(ciphers);
+    return { success: true };
   } catch (err) {
     return { success: false, error: String(err) };
   }

@@ -15,9 +15,11 @@ export class SavePrompt {
   constructor(private document: Document) {}
 
   async show(data: SavePromptData): Promise<void> {
+    console.log("[PWBook SavePrompt] show() 被调用, domain:", getBaseDomain(data.url), "username:", data.username, "password:", data.password ? "有" : "无");
     // 5 秒内检查拒绝记录
     const domain = getBaseDomain(data.url);
     if (!shouldPromptSave(domain, await StorageService.getRejectedSites())) {
+      console.log("[PWBook SavePrompt] 域名在拒绝列表中，不显示提示:", domain);
       return;
     }
 
@@ -69,8 +71,24 @@ export class SavePrompt {
     `;
 
     btnSave.addEventListener("click", async () => {
-      await this.saveCipher(data);
-      this.remove();
+      btnSave.disabled = true;
+      btnSave.textContent = "保存中...";
+      const result = await this.saveCipher(data);
+      if (result.success) {
+        btnSave.textContent = "已保存";
+        btnSave.style.background = "#34a853";
+        setTimeout(() => this.remove(), 800);
+      } else {
+        btnSave.disabled = false;
+        btnSave.textContent = "保存";
+        const errorText = this.document.createElement("div");
+        errorText.textContent = result.error ?? "保存失败";
+        errorText.style.cssText = "color: #d93025; font-size: 12px; margin-top: 8px;";
+        if (!container.querySelector("[data-save-error]")) {
+          errorText.setAttribute("data-save-error", "true");
+          container.appendChild(errorText);
+        }
+      }
     });
 
     btnReject.addEventListener("click", async () => {
@@ -98,7 +116,7 @@ export class SavePrompt {
     }
   }
 
-  private async saveCipher(data: SavePromptData): Promise<void> {
+  private async saveCipher(data: SavePromptData): Promise<{ success: boolean; error?: string }> {
     const cipherData = {
       name: getBaseDomain(data.url),
       notes: null,
@@ -112,10 +130,18 @@ export class SavePrompt {
       },
     };
 
-    await chrome.runtime.sendMessage({
-      type: "SAVE_CIPHER",
-      data: cipherData,
-    });
+    try {
+      const response = (await chrome.runtime.sendMessage({
+        type: "SAVE_CIPHER",
+        data: cipherData,
+      })) as { success: boolean; error?: string } | undefined;
+      if (response?.success) {
+        return { success: true };
+      }
+      return { success: false, error: response?.error ?? "保存失败" };
+    } catch (err) {
+      return { success: false, error: String(err) };
+    }
   }
 
   private async rejectSite(domain: string): Promise<void> {

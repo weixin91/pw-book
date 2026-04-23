@@ -2,34 +2,118 @@
 // 拦截表单提交、AJAX/fetch，配合 background 的 webNavigation 监听
 
 export class LoginDetectionEngine {
-  private capturedUsername = "";
-  private capturedPassword = "";
-  private hasSubmitted = false;
+  // 追踪输入框的最新值（防止提交时被框架清空）
+  private inputValues = new WeakMap<HTMLInputElement, string>();
+  // 点击登录按钮时暂存的凭据（submit 时若密码框已被清空则使用此值）
+  private lastClickCredentials: { username: string; password: string; timestamp: number } = { username: "", password: "", timestamp: 0 };
 
   constructor(
     private document: Document,
-    private onLoginDetected: (username: string, password: string) => void
+    private onFormSubmit: (username: string, password: string) => void,
+    private onAjaxSuccess: (username: string, password: string) => void
   ) {
+    this.trackInputValues();
+    this.captureOnLoginClick();
     this.interceptFormSubmit();
     this.interceptFetch();
     this.interceptXHR();
   }
 
+  private trackInputValues(): void {
+    const self = this;
+    // 1. 原生 input 事件兜底
+    this.document.addEventListener("input", (e) => {
+      const target = e.target as HTMLInputElement;
+      if (target.tagName !== "INPUT") return;
+      if (target.type === "password" || target.type === "text" || target.type === "email") {
+        self.inputValues.set(target, target.value);
+      }
+    }, true);
+
+    // 2. 拦截 value setter（React/Vue 等框架直接赋值也能捕获）
+    try {
+      const proto = HTMLInputElement.prototype;
+      const descriptor = Object.getOwnPropertyDescriptor(proto, "value");
+      if (descriptor && descriptor.set) {
+        const originalSet = descriptor.set;
+        Object.defineProperty(proto, "value", {
+          get() { return descriptor.get!.call(this); },
+          set(newValue) {
+            originalSet.call(this, newValue);
+            const el = this as HTMLInputElement;
+            if (el.type === "password" || el.type === "text" || el.type === "email") {
+              self.inputValues.set(el, String(newValue));
+            }
+          },
+        });
+      }
+    } catch {
+      // 拦截失败则依赖 input 事件兜底
+    }
+  }
+
+  private getTrackedValue(input: HTMLInputElement | null): string {
+    if (!input) return "";
+    return this.inputValues.get(input) ?? input.value ?? "";
+  }
+
+  private captureOnLoginClick(): void {
+    const self = this;
+    this.document.addEventListener("click", (e) => {
+      const target = e.target as HTMLElement;
+      const text = (target.textContent ?? "").toLowerCase();
+      const aria = (target.getAttribute("aria-label") ?? "").toLowerCase();
+      const title = (target.getAttribute("title") ?? "").toLowerCase();
+      const cls = (target.className ?? "").toLowerCase();
+      const isLoginTrigger =
+        text.includes("登录") || text.includes("login") || text.includes("sign in") || text.includes("signin") ||
+        aria.includes("登录") || aria.includes("login") ||
+        title.includes("登录") || title.includes("login") ||
+        cls.includes("login") || cls.includes("signin") || cls.includes("auth") ||
+        target.closest("button[type='submit']") !== null ||
+        (target.tagName === "INPUT" && (target as HTMLInputElement).type === "submit");
+      if (!isLoginTrigger) return;
+
+      const form = target.closest("form") as HTMLFormElement | null;
+      if (!form) return;
+
+      const passwordInputs = Array.from(form.querySelectorAll('input[type="password"]'));
+      const passwordInput = passwordInputs.find((p) => (p as HTMLInputElement).value) as HTMLInputElement | null ?? (passwordInputs[0] as HTMLInputElement | null);
+      if (!passwordInput) return;
+
+      const usernameInput = this.findUsernameInput(form, passwordInput);
+      const username = self.getTrackedValue(usernameInput);
+      const password = self.getTrackedValue(passwordInput);
+      self.lastClickCredentials = { username, password, timestamp: Date.now() };
+      console.log("[PWBook] 点击登录按钮，暂存凭据, username:", username, "password:", password ? "有" : "无");
+    }, true);
+  }
+
   private interceptFormSubmit(): void {
+    const self = this;
     this.document.addEventListener(
       "submit",
       (event) => {
         const form = event.target as HTMLFormElement;
-        const passwordInput = form.querySelector('input[type="password"]') as HTMLInputElement | null;
+        const passwordInputs = Array.from(form.querySelectorAll('input[type="password"]'));
+        const passwordInput = passwordInputs.find((p) => (p as HTMLInputElement).value) as HTMLInputElement | null ?? (passwordInputs[0] as HTMLInputElement | null);
         if (!passwordInput) return;
 
         const usernameInput = this.findUsernameInput(form, passwordInput);
-        this.capturedUsername = usernameInput?.value ?? "";
-        this.capturedPassword = passwordInput.value;
-        this.hasSubmitted = true;
+        let username = self.getTrackedValue(usernameInput);
+        let password = self.getTrackedValue(passwordInput);
 
-        // 发送给 background script 暂存
-        this.onLoginDetected(this.capturedUsername, this.capturedPassword);
+        // 若 submit 时密码框已被清空，且 2 秒内有点击登录按钮的记录，使用点击时捕获的值
+        const clickAge = Date.now() - self.lastClickCredentials.timestamp;
+        if (!password && self.lastClickCredentials.password && clickAge < 2000) {
+          username = self.lastClickCredentials.username;
+          password = self.lastClickCredentials.password;
+          console.log("[PWBook] submit 时使用 click 暂存的凭据");
+        }
+
+        console.log("[PWBook] 检测到表单提交, username:", username, "password:", password ? "有" : "无");
+        // 发送给 background script 暂存，等待页面导航判定登录成功
+        this.onFormSubmit(username, password);
       },
       true
     );
@@ -44,7 +128,7 @@ export class LoginDetectionEngine {
     ): Promise<Response> {
       const response = await originalFetch.call(this, input, init);
       if (response.ok && init?.method?.toUpperCase() === "POST") {
-        self.analyzeRequestBody(init.body);
+        self.analyzeRequestBody(init.body, self.onAjaxSuccess);
       }
       return response;
     };
@@ -67,7 +151,7 @@ export class LoginDetectionEngine {
       send(body?: Document | XMLHttpRequestBodyInit | null): void {
         super.addEventListener("load", () => {
           if (this.status >= 200 && this.status < 300 && this._method.toUpperCase() === "POST") {
-            self.analyzeRequestBody(body);
+            self.analyzeRequestBody(body, self.onAjaxSuccess);
           }
         });
         super.send(body);
@@ -77,7 +161,7 @@ export class LoginDetectionEngine {
     window.XMLHttpRequest = InterceptedXHR as unknown as typeof XMLHttpRequest;
   }
 
-  private analyzeRequestBody(body: unknown): void {
+  private analyzeRequestBody(body: unknown, callback: (username: string, password: string) => void): void {
     if (!body) return;
     let text = "";
     if (typeof body === "string") {
@@ -102,7 +186,7 @@ export class LoginDetectionEngine {
       const password =
         params.get("password") || params.get("passwd") || "";
       if (password) {
-        this.onLoginDetected(username, password);
+        callback(username, password);
       }
     }
   }

@@ -21,7 +21,7 @@ if (typeof __PWBOOK_INITIALIZED__ === "undefined") {
 async function initContentScript(): Promise<void> {
   const collector = new CollectAutofillContentService(document);
   const inserter = new InsertAutofillContentService(document);
-  const detector = new LoginDetectionEngine(document, handleLoginDetected);
+  new LoginDetectionEngine(document, handleFormSubmit, handleAjaxLoginSuccess);
   const savePrompt = new SavePrompt(document);
   const inlineMenu = new InlineMenu(document, handleAutofillSelected);
 
@@ -75,13 +75,43 @@ async function initContentScript(): Promise<void> {
     return false;
   });
 
-  function handleLoginDetected(username: string, password: string): void {
-    console.log("[PWBook] 检测到登录提交");
-    chrome.runtime.sendMessage({
-      type: "FORM_SUBMITTED",
-      username,
-      password,
+  // 页面加载后检查是否有待处理的登录数据（导航导致消息丢失时的兜底）
+  // 只在主页面（非 iframe）中执行，防止 iframe 被移除导致提示消失
+  if (window.top === window.self) {
+    chrome.runtime.sendMessage({ type: "GET_PENDING_FORM_DATA" }, (response) => {
+      if (chrome.runtime.lastError) {
+        console.log("[PWBook] GET_PENDING_FORM_DATA 错误:", chrome.runtime.lastError.message);
+        return;
+      }
+      const data = response?.data as Record<string, unknown> | undefined;
+      if (data) {
+        console.log("[PWBook] 从 background 恢复 pending 登录数据, username:", data.username, "password:", data.password ? "有" : "无");
+        savePrompt.show({
+          username: String(data.username ?? ""),
+          password: String(data.password ?? ""),
+          url: String(data.url ?? location.href),
+        });
+      } else {
+        console.log("[PWBook] 无 pending 登录数据");
+      }
     });
+  }
+
+  function handleFormSubmit(username: string, password: string): void {
+    console.log("[PWBook] 检测到表单提交");
+    const msg = { type: "FORM_SUBMITTED", username, password, url: location.href };
+    chrome.runtime.sendMessage(msg);
+    // 导航前再次发送，防止页面跳转导致消息丢失
+    const sendBeforeUnload = () => chrome.runtime.sendMessage(msg);
+    window.addEventListener("beforeunload", sendBeforeUnload, { once: true });
+    setTimeout(() => window.removeEventListener("beforeunload", sendBeforeUnload), 3000);
+  }
+
+  function handleAjaxLoginSuccess(username: string, password: string): void {
+    console.log("[PWBook] 检测到 AJAX 登录成功");
+    const msg = { type: "AJAX_LOGIN_SUCCESS", username, password, url: location.href };
+    chrome.runtime.sendMessage(msg);
+    window.addEventListener("beforeunload", () => chrome.runtime.sendMessage(msg), { once: true });
   }
 
   function handleAutofillSelected(item: Record<string, unknown>): void {

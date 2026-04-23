@@ -33,7 +33,8 @@ export function VaultList({ onAdd, onEdit, onOpenGenerator }: Props): React.Reac
             name: data.name || "未命名",
             username: data.login?.username || "",
           };
-        } catch {
+        } catch (err) {
+          console.error("[VaultList] 解密失败:", cipher.id, err);
           return { cipher, name: "解密失败", username: "" };
         }
       })
