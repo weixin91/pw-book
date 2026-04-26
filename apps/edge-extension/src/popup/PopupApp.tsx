@@ -57,6 +57,7 @@ export function PopupApp(): React.ReactElement {
           editId={editId}
           onBack={handleBackToVault}
           onSaved={handleBackToVault}
+          onDeleted={handleBackToVault}
         />
       )}
       {view === "generator" && (

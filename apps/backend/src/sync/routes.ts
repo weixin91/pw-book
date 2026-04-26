@@ -3,6 +3,7 @@ import { PrismaClient } from "@prisma/client";
 import { z } from "zod";
 import { authenticate } from "../auth/jwt.js";
 import { ApiError } from "../errors/handler.js";
+import { calculateSyncChecksum } from "./checksum.js";
 
 const prisma = new PrismaClient();
 
@@ -79,6 +80,7 @@ export async function syncRoutes(app: FastifyInstance): Promise<void> {
     });
 
     const syncToken = new Date().toISOString();
+    const checksum = calculateSyncChecksum(ciphers);
 
     return reply.send({
       profile: user,
@@ -89,6 +91,7 @@ export async function syncRoutes(app: FastifyInstance): Promise<void> {
         packageNames: JSON.parse(da.packageNames),
       })),
       syncToken,
+      checksum,
     });
   });
 
@@ -147,6 +150,9 @@ export async function syncRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const newSyncToken = new Date().toISOString();
-    return reply.send({ accepted, rejected, conflicts, newSyncToken });
+    const newChecksum = calculateSyncChecksum(
+      await prisma.cipher.findMany({ where: { userId } })
+    );
+    return reply.send({ accepted, rejected, conflicts, newSyncToken, checksum: newChecksum });
   });
 }

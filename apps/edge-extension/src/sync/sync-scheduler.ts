@@ -32,11 +32,12 @@ export class SyncScheduler {
   }
 
   private setupNetworkListeners(): void {
-    window.addEventListener("online", () => {
+    const target = typeof window !== "undefined" ? window : self;
+    target.addEventListener("online", () => {
       this.isOnline = true;
       this.performSync();
     });
-    window.addEventListener("offline", () => {
+    target.addEventListener("offline", () => {
       this.isOnline = false;
     });
   }
@@ -111,15 +112,18 @@ export class SyncScheduler {
     });
 
     for (const acceptedId of result.accepted) {
-      await this.queue.dequeue(acceptedId);
+      const change = changes.find((c) => c.cipherId === acceptedId);
+      if (change) {
+        await this.queue.dequeue(change.id);
+      }
     }
 
     for (const conflictId of result.conflicts) {
       const change = changes.find((c) => c.cipherId === conflictId);
       if (change && change.retryCount < 5) {
         await this.queue.incrementRetry(change.id);
-      } else {
-        await this.queue.dequeue(conflictId);
+      } else if (change) {
+        await this.queue.dequeue(change.id);
       }
     }
   }

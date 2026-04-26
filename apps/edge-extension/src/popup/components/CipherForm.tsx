@@ -1,18 +1,21 @@
 import React, { useEffect, useState } from "react";
 import { StorageService } from "../../platform/storage";
+import { PendingChangesQueue } from "../../sync/pending-changes";
 
 interface Props {
   editId: string | null;
   onBack: () => void;
   onSaved: () => void;
+  onDeleted?: () => void;
 }
 
-export function CipherForm({ editId, onBack, onSaved }: Props): React.ReactElement {
+export function CipherForm({ editId, onBack, onSaved, onDeleted }: Props): React.ReactElement {
   const [name, setName] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [uri, setUri] = useState("");
   const [notes, setNotes] = useState("");
+  const [favorite, setFavorite] = useState(false);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -35,6 +38,7 @@ export function CipherForm({ editId, onBack, onSaved }: Props): React.ReactEleme
       setPassword(data.login?.password || "");
       setUri(data.login?.uris?.[0]?.uri || "");
       setNotes(data.notes || "");
+      setFavorite(cipher.favorite);
     } catch {
       // ignore
     }
@@ -69,6 +73,7 @@ export function CipherForm({ editId, onBack, onSaved }: Props): React.ReactEleme
           ciphers[idx] = {
             ...ciphers[idx],
             data: encryptedData,
+            favorite,
             modifiedAt: new Date().toISOString(),
           };
         }
@@ -78,7 +83,7 @@ export function CipherForm({ editId, onBack, onSaved }: Props): React.ReactEleme
           userId: "",
           type: 1,
           data: encryptedData,
-          favorite: false,
+          favorite,
           reprompt: 0,
           createdAt: new Date().toISOString(),
           modifiedAt: new Date().toISOString(),
@@ -86,10 +91,39 @@ export function CipherForm({ editId, onBack, onSaved }: Props): React.ReactEleme
       }
 
       await StorageService.setCiphers(ciphers);
+
+      const queue = new PendingChangesQueue();
+      const targetId = editId || ciphers[ciphers.length - 1].id;
+      await queue.enqueue({
+        cipherId: targetId,
+        operation: editId ? "UPDATE" : "CREATE",
+        encryptedData,
+        clientTimestamp: new Date().toISOString(),
+      });
+
       onSaved();
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleDelete() {
+    if (!editId) return;
+    if (!window.confirm("确定删除此凭据吗？此操作不可恢复。")) return;
+
+    const ciphers = await StorageService.getCiphers();
+    const filtered = ciphers.filter((c) => c.id !== editId);
+    await StorageService.setCiphers(filtered);
+
+    const queue = new PendingChangesQueue();
+    await queue.enqueue({
+      cipherId: editId,
+      operation: "DELETE",
+      encryptedData: "",
+      clientTimestamp: new Date().toISOString(),
+    });
+
+    onDeleted?.();
   }
 
   return (
@@ -116,6 +150,23 @@ export function CipherForm({ editId, onBack, onSaved }: Props): React.ReactEleme
       {renderInput("密码", password, setPassword, "password")}
       {renderInput("网站", uri, setUri)}
       {renderInput("备注", notes, setNotes)}
+      <label
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          fontSize: 13,
+          marginBottom: 12,
+          cursor: "pointer",
+        }}
+      >
+        <input
+          type="checkbox"
+          checked={favorite}
+          onChange={(e) => setFavorite(e.target.checked)}
+        />
+        收藏此凭据
+      </label>
       <button
         onClick={handleSave}
         disabled={loading}
@@ -133,6 +184,25 @@ export function CipherForm({ editId, onBack, onSaved }: Props): React.ReactEleme
       >
         {loading ? "保存中..." : "保存"}
       </button>
+      {editId && (
+        <button
+          onClick={handleDelete}
+          disabled={loading}
+          style={{
+            width: "100%",
+            padding: "10px",
+            borderRadius: 8,
+            border: "1px solid #d32f2f",
+            background: "#fff",
+            color: "#d32f2f",
+            fontSize: 14,
+            cursor: loading ? "not-allowed" : "pointer",
+            marginTop: 12,
+          }}
+        >
+          删除凭据
+        </button>
+      )}
     </div>
   );
 }

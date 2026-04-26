@@ -3,6 +3,9 @@
 import { BrowserApi } from "../platform/browser-api.js";
 import { StorageService } from "../platform/storage.js";
 import { decryptCipherData, encryptCipherData } from "../crypto/crypto-service.js";
+import { startLockTimer, initIdleListener } from "./lock-timer.js";
+import { PendingChangesQueue } from "../sync/pending-changes.js";
+import { SyncScheduler } from "../sync/sync-scheduler.js";
 
 interface StoredFormData {
   tabId: number;
@@ -283,7 +286,7 @@ async function handleSaveCipher(data: Record<string, unknown>): Promise<{ succes
     const username = String((data.login as Record<string, unknown>)?.username ?? "");
 
     // 检查是否已有相同域名+用户名的凭据，有则更新
-    let updated = false;
+    let updatedCipherId: string | null = null;
     for (let i = 0; i < ciphers.length; i++) {
       try {
         const plainText = await decryptCipherData(ciphers[i].data, userKey);
@@ -296,7 +299,7 @@ async function handleSaveCipher(data: Record<string, unknown>): Promise<{ succes
             data: encryptedData,
             modifiedAt: new Date().toISOString(),
           };
-          updated = true;
+          updatedCipherId = ciphers[i].id;
           break;
         }
       } catch {
@@ -304,12 +307,21 @@ async function handleSaveCipher(data: Record<string, unknown>): Promise<{ succes
       }
     }
 
-    if (!updated) {
+    if (!updatedCipherId) {
       ciphers.push(cipher);
     }
 
     await StorageService.setCiphers(ciphers);
-    return { success: true };
+
+    const queue = new PendingChangesQueue();
+    await queue.enqueue({
+      cipherId: updatedCipherId || cipher.id,
+      operation: updatedCipherId ? "UPDATE" : "CREATE",
+      encryptedData,
+      clientTimestamp: cipher.modifiedAt,
+    });
+
+    return { success: true, id: updatedCipherId || cipher.id };
   } catch (err) {
     return { success: false, error: String(err) };
   }
@@ -341,3 +353,22 @@ async function isCredentialAlreadySaved(url: string, username: string, password:
   }
   return false;
 }
+
+// 初始化后台锁定监听
+initIdleListener();
+
+// 初始化同步调度器
+const syncScheduler = new SyncScheduler();
+syncScheduler.start();
+
+// 监听保险库解锁消息，启动锁定计时器
+chrome.runtime.onMessage.addListener((message) => {
+  if (typeof message !== "object" || message === null) return false;
+  const msg = message as Record<string, unknown>;
+  if (msg.type === "VAULT_UNLOCKED") {
+    startLockTimer().catch(() => {});
+    // 解锁后立即尝试同步
+    syncScheduler.performSync().catch(() => {});
+  }
+  return false;
+});

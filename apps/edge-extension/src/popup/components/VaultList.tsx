@@ -1,7 +1,14 @@
 import React, { useEffect, useState } from "react";
 import { StorageService } from "../../platform/storage";
 import { ClipboardManager } from "../../platform/clipboard";
+import { PendingChangesQueue } from "../../sync/pending-changes";
 import type { Cipher } from "@pwbook/shared-types";
+
+interface VaultItem {
+  cipher: Cipher;
+  name: string;
+  username: string;
+}
 
 interface Props {
   onAdd: () => void;
@@ -10,9 +17,8 @@ interface Props {
 }
 
 export function VaultList({ onAdd, onEdit, onOpenGenerator }: Props): React.ReactElement {
-  const [items, setItems] = useState<Array<{ cipher: Cipher; name: string; username: string }>>([]);
+  const [items, setItems] = useState<VaultItem[]>([]);
   const [search, setSearch] = useState("");
-  const [decrypting, setDecrypting] = useState(false);
 
   useEffect(() => {
     loadItems();
@@ -42,11 +48,44 @@ export function VaultList({ onAdd, onEdit, onOpenGenerator }: Props): React.Reac
     setItems(decrypted);
   }
 
-  const filtered = items.filter(
-    (i) =>
-      i.name.toLowerCase().includes(search.toLowerCase()) ||
-      i.username.toLowerCase().includes(search.toLowerCase())
-  );
+  async function toggleFavorite(cipherId: string) {
+    const ciphers = await StorageService.getCiphers();
+    const idx = ciphers.findIndex((c) => c.id === cipherId);
+    if (idx < 0) return;
+    ciphers[idx] = { ...ciphers[idx], favorite: !ciphers[idx].favorite };
+    await StorageService.setCiphers(ciphers);
+    await loadItems();
+
+    const userKey = await StorageService.getUserKey();
+    if (!userKey) return;
+    try {
+      const { decryptCipherData, encryptCipherData } = await import("../../crypto/crypto-service");
+      const plainText = await decryptCipherData(ciphers[idx].data, userKey);
+      const encryptedData = await encryptCipherData(plainText, userKey);
+      const queue = new PendingChangesQueue();
+      await queue.enqueue({
+        cipherId,
+        operation: "UPDATE",
+        encryptedData,
+        clientTimestamp: new Date().toISOString(),
+      });
+    } catch {
+      // ignore
+    }
+  }
+
+  const filtered = items
+    .filter(
+      (i) =>
+        i.name.toLowerCase().includes(search.toLowerCase()) ||
+        i.username.toLowerCase().includes(search.toLowerCase())
+    )
+    .sort((a, b) => {
+      // 收藏项排在前面
+      if (a.cipher.favorite && !b.cipher.favorite) return -1;
+      if (!a.cipher.favorite && b.cipher.favorite) return 1;
+      return a.name.localeCompare(b.name);
+    });
 
   async function handleCopyPassword(cipher: Cipher) {
     const userKey = await StorageService.getUserKey();
@@ -122,8 +161,23 @@ export function VaultList({ onAdd, onEdit, onOpenGenerator }: Props): React.Reac
               display: "flex",
               justifyContent: "space-between",
               alignItems: "center",
+              gap: 8,
             }}
           >
+            <button
+              onClick={() => toggleFavorite(item.cipher.id)}
+              style={{
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                fontSize: 16,
+                padding: 0,
+                color: item.cipher.favorite ? "#f9a825" : "#ccc",
+              }}
+              title={item.cipher.favorite ? "取消收藏" : "收藏"}
+            >
+              {item.cipher.favorite ? "★" : "☆"}
+            </button>
             <div
               style={{ cursor: "pointer", flex: 1 }}
               onClick={() => onEdit(item.cipher.id)}

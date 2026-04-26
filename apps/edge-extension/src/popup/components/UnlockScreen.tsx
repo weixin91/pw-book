@@ -41,6 +41,7 @@ export function UnlockScreen({ onUnlocked }: Props): React.ReactElement {
       }
       const userKey = await decryptUserKey(protectedKey, stretched);
       await StorageService.setUserKey(userKey);
+      chrome.runtime.sendMessage({ type: "VAULT_UNLOCKED" });
       onUnlocked();
     } catch {
       setError("主密码错误");

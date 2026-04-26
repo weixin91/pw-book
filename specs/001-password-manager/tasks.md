@@ -90,7 +90,7 @@ description: "密码管理应用功能实现的任务列表"
 - [X] T032 [P] [US2] 实现凭据 CRUD API 于 `apps/backend/src/ciphers/routes.ts`（POST/PUT/DELETE/GET，遵循 `contracts/api.md`）
 - [X] T033 [P] [US2] 实现 WebSocket 实时同步服务端于 `apps/backend/src/websocket/server.ts`（推送 SYNC_REQUIRED）
 - [X] T034 [P] [US2] 实现设备管理 API 于 `apps/backend/src/devices/routes.ts`（GET/DELETE，遵循 `contracts/api.md`）
-- [ ] T035 [P] [US2] 实现同步载荷校验和验证于 `apps/backend/src/sync/checksum.ts`
+- [X] T035 [P] [US2] 实现同步载荷校验和验证于 `apps/backend/src/sync/checksum.ts`
 
 ### Edge 插件任务
 
@@ -111,11 +111,11 @@ description: "密码管理应用功能实现的任务列表"
 
 ### Edge 插件任务
 
-- [ ] T046 [P] [US3] 实现 Popup 保险库列表 UI 于 `apps/edge-extension/src/popup/components/VaultList.tsx`（解密后的凭据列表、搜索、收藏）
-- [ ] T047 [P] [US3] 实现添加/编辑凭据表单于 `apps/edge-extension/src/popup/components/CipherForm.tsx`（用户名、密码、URI、备注）
-- [ ] T048 [P] [US3] 实现密码生成器于 `apps/edge-extension/src/popup/components/PasswordGenerator.tsx`（长度、字符类型、排除易混淆字符，遵循 FR-021）
-- [ ] T049 [US3] 实现密码生成器设置持久化于 `apps/edge-extension/src/popup/settings.ts`
-- [ ] T050 [US3] 实现保险库自动锁定逻辑于 `apps/edge-extension/src/background/lock-timer.ts`（可配置超时、后台锁定，遵循 FR-014）
+- [X] T046 [P] [US3] 实现 Popup 保险库列表 UI 于 `apps/edge-extension/src/popup/components/VaultList.tsx`（解密后的凭据列表、搜索、收藏）
+- [X] T047 [P] [US3] 实现添加/编辑凭据表单于 `apps/edge-extension/src/popup/components/CipherForm.tsx`（用户名、密码、URI、备注）
+- [X] T048 [P] [US3] 实现密码生成器于 `apps/edge-extension/src/popup/components/PasswordGenerator.tsx`（长度、字符类型、排除易混淆字符，遵循 FR-021）
+- [X] T049 [US3] 实现密码生成器设置持久化于 `apps/edge-extension/src/popup/settings.ts`
+- [X] T050 [US3] 实现保险库自动锁定逻辑于 `apps/edge-extension/src/background/lock-timer.ts`（可配置超时、后台锁定，遵循 FR-014）
 
 **检查点**：Edge 端密码管理功能可用
 
