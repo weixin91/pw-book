@@ -2,12 +2,14 @@ import React, { useEffect, useState } from "react";
 import { StorageService } from "../../platform/storage";
 import { ClipboardManager } from "../../platform/clipboard";
 import { PendingChangesQueue } from "../../sync/pending-changes";
+import { parseOtpauthUri, generateTotpCode } from "../../crypto/totp";
 import type { Cipher } from "@pwbook/shared-types";
 
 interface VaultItem {
   cipher: Cipher;
   name: string;
   username: string;
+  hasTotp: boolean;
 }
 
 interface Props {
@@ -56,14 +58,16 @@ export function VaultList({ onAdd, onEdit, onOpenGenerator }: Props): React.Reac
       ciphers.map(async (cipher) => {
         try {
           const data = JSON.parse(await decryptCipherData(cipher.data, userKey));
+          const totpRaw = String(data.login?.totp ?? "").trim();
           return {
             cipher,
             name: data.name || "未命名",
             username: data.login?.username || "",
+            hasTotp: totpRaw.length > 0 && parseOtpauthUri(totpRaw) !== null,
           };
         } catch (err) {
           console.error("[VaultList] 解密失败:", cipher.id, err);
-          return { cipher, name: "解密失败", username: "" };
+          return { cipher, name: "解密失败", username: "", hasTotp: false };
         }
       })
     );
@@ -129,6 +133,35 @@ export function VaultList({ onAdd, onEdit, onOpenGenerator }: Props): React.Reac
       setToast(field === "username" ? "用户名已复制" : "密码已复制");
     } catch {
       setToast("复制失败");
+    }
+  }
+
+  async function handleCopyTotp(cipher: Cipher) {
+    setOpenMenuId(null);
+    setMenuPos(null);
+    const userKey = await StorageService.getUserKey();
+    if (!userKey) {
+      setToast("保险库未解锁");
+      return;
+    }
+    const { decryptCipherData } = await import("../../crypto/crypto-service");
+    try {
+      const data = JSON.parse(await decryptCipherData(cipher.data, userKey));
+      const totpRaw = String(data.login?.totp ?? "").trim();
+      if (!totpRaw) {
+        setToast("未设置验证码");
+        return;
+      }
+      const config = parseOtpauthUri(totpRaw);
+      if (!config) {
+        setToast("验证码配置无效");
+        return;
+      }
+      const { code } = await generateTotpCode(config);
+      await ClipboardManager.copy(code);
+      setToast("验证码已复制");
+    } catch {
+      setToast("生成验证码失败");
     }
   }
 
@@ -291,6 +324,25 @@ export function VaultList({ onAdd, onEdit, onOpenGenerator }: Props): React.Reac
                   >
                     复制密码
                   </button>
+                  {item.hasTotp && (
+                    <button
+                      onClick={() => handleCopyTotp(item.cipher)}
+                      style={{
+                        display: "block",
+                        width: "100%",
+                        padding: "8px 12px",
+                        border: "none",
+                        background: "none",
+                        textAlign: "left",
+                        fontSize: 12,
+                        cursor: "pointer",
+                        color: "#333",
+                        borderTop: "1px solid #f0f0f0",
+                      }}
+                    >
+                      复制验证码
+                    </button>
+                  )}
                 </div>
               )}
             </div>

@@ -6,6 +6,7 @@ import { LoginDetectionEngine } from "../autofill/login-detection.js";
 import { SavePrompt } from "../autofill/save-prompt.js";
 import { InlineMenu } from "../autofill/inline-menu.js";
 import { StorageService } from "../platform/storage.js";
+import { parseOtpauthUri, generateTotpCode } from "../crypto/totp.js";
 import { installWebAuthnBridge } from "./webauthn-handler.js";
 
 declare const __PWBOOK_INITIALIZED__: boolean | undefined;
@@ -52,6 +53,9 @@ async function initContentScript(): Promise<void> {
   } else {
     setupManualDetection(collector, requestVaultItems);
   }
+
+  // TOTP 自动填充始终启用（与密码自动填充模式独立）
+  setupTotpFieldDetection(collector, inserter, inlineMenu);
 
   // 监听 background script 消息
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -317,4 +321,82 @@ function setupManualDetection(
       if (fd) requestVaultItems(fd.url);
     }
   });
+}
+
+// TOTP 输入框检测：聚焦 TOTP 字段时弹出含验证码的凭据列表，选中后填入动态码
+function setupTotpFieldDetection(
+  collector: CollectAutofillContentService,
+  inserter: InsertAutofillContentService,
+  inlineMenu: InlineMenu
+): void {
+  let pendingField: HTMLInputElement | null = null;
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+  document.addEventListener("focusin", (e) => {
+    const target = e.target as HTMLElement;
+    if (!(target instanceof HTMLInputElement)) return;
+    if (!collector.isTotpField(target)) return;
+
+    pendingField = target;
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+      const field = pendingField;
+      if (!field) return;
+      requestTotpItems(field, inserter, inlineMenu);
+    }, 80);
+  });
+}
+
+function requestTotpItems(
+  field: HTMLInputElement,
+  inserter: InsertAutofillContentService,
+  inlineMenu: InlineMenu
+): void {
+  console.log("[PWBook] 请求 TOTP 凭据，URL:", location.href);
+  try {
+    chrome.runtime.sendMessage(
+      { type: "GET_VAULT_ITEMS_FOR_URL", url: location.href },
+      (response) => {
+        if (chrome.runtime.lastError) {
+          console.error("[PWBook] 请求 TOTP 凭据失败:", chrome.runtime.lastError.message);
+          return;
+        }
+        const items = (response?.items as Array<Record<string, unknown>>) ?? [];
+        const totpItems = items.filter((i) => String(i.totp ?? "").trim().length > 0);
+        console.log("[PWBook] TOTP 候选数:", totpItems.length);
+        if (totpItems.length === 0) return;
+
+        inlineMenu.show(totpItems, {
+          anchor: field,
+          subtitle: "选择账户填充验证码",
+          onSelect: async (item) => {
+            const totpRaw = String(item.totp ?? "").trim();
+            const config = parseOtpauthUri(totpRaw);
+            if (!config) {
+              console.warn("[PWBook] TOTP 配置无效");
+              return;
+            }
+            try {
+              const { code } = await generateTotpCode(config);
+              inserter.fillTotp(field, code);
+              if (item.id) {
+                try {
+                  chrome.runtime.sendMessage({
+                    type: "UPDATE_LAST_USED",
+                    id: String(item.id),
+                  });
+                } catch {
+                  // 忽略
+                }
+              }
+            } catch (err) {
+              console.error("[PWBook] TOTP 生成失败:", err);
+            }
+          },
+        });
+      }
+    );
+  } catch (err) {
+    console.error("[PWBook] 扩展上下文已失效，请刷新页面:", err);
+  }
 }

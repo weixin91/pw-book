@@ -297,6 +297,7 @@ async function handleGetVaultItems(urlStr: string): Promise<Array<Record<string,
     username: data.login?.username ?? "",
     password: data.login?.password ?? "",
     uri: data.login?.uris?.[0]?.uri ?? "",
+    totp: data.login?.totp ?? "",
   }));
   return result;
 }

@@ -1,5 +1,11 @@
 // 行内菜单 / 账号选择器
 
+export interface InlineMenuOptions {
+  anchor?: HTMLInputElement | null;
+  onSelect?: (item: Record<string, unknown>) => void;
+  subtitle?: string;
+}
+
 export class InlineMenu {
   private container: HTMLDivElement | null = null;
 
@@ -8,7 +14,7 @@ export class InlineMenu {
     private onSelect: (item: Record<string, unknown>) => void
   ) {}
 
-  show(items: Array<Record<string, unknown>>): void {
+  show(items: Array<Record<string, unknown>>, options: InlineMenuOptions = {}): void {
     this.remove();
 
     const container = this.document.createElement("div");
@@ -26,7 +32,7 @@ export class InlineMenu {
       overflow: hidden;
     `;
 
-    const anchorField = this.findAnchorField();
+    const anchorField = options.anchor ?? this.findAnchorField();
     if (anchorField) {
       const rect = anchorField.getBoundingClientRect();
       // position: fixed 使用视口坐标，无需加 scrollX/scrollY
@@ -37,6 +43,21 @@ export class InlineMenu {
       container.style.left = "50%";
       container.style.transform = "translate(-50%, -50%)";
     }
+
+    if (options.subtitle) {
+      const header = this.document.createElement("div");
+      header.style.cssText = `
+        padding: 8px 12px;
+        background: #f5f7fa;
+        color: #666;
+        font-size: 11px;
+        border-bottom: 1px solid #eee;
+      `;
+      header.textContent = options.subtitle;
+      container.appendChild(header);
+    }
+
+    const handler = options.onSelect ?? this.onSelect;
 
     for (const item of items) {
       const row = this.document.createElement("div");
@@ -56,7 +77,7 @@ export class InlineMenu {
       });
       row.addEventListener("click", (e) => {
         e.stopPropagation();
-        this.onSelect(item);
+        handler(item);
         this.remove();
       });
 

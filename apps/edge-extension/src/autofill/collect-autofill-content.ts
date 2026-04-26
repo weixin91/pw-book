@@ -101,4 +101,58 @@ export class CollectAutofillContentService {
 
     return candidates.length > 0 ? candidates[0] : null;
   }
+
+  // 判断给定输入框是否是 TOTP / 一次性验证码字段
+  isTotpField(input: HTMLInputElement): boolean {
+    if (!input || input.tagName !== "INPUT") return false;
+    if (input.type === "password" || input.type === "hidden") return false;
+    const acceptableTypes = ["text", "number", "tel", ""];
+    if (!acceptableTypes.includes(input.type)) return false;
+
+    const autocomplete = (input.autocomplete || "").toLowerCase();
+    if (autocomplete.includes("one-time-code")) return true;
+
+    const attrText = `${input.name} ${input.id} ${input.placeholder} ${input.getAttribute("aria-label") ?? ""} ${input.title ?? ""}`.toLowerCase();
+    const totpKeywords = [
+      "one-time",
+      "onetime",
+      "otp",
+      "totp",
+      "2fa",
+      "mfa",
+      "two-factor",
+      "two factor",
+      "verification",
+      "verifycode",
+      "verify-code",
+      "security code",
+      "auth code",
+      "authcode",
+      "authenticator",
+      "token",
+      "验证码",
+      "动态码",
+      "动态密码",
+      "安全码",
+      "校验码",
+      "校验",
+      "短信验证",
+    ];
+    if (totpKeywords.some((k) => attrText.includes(k))) {
+      // 排除明显的非 TOTP 用途："email" / "phone" / "captcha"
+      if (/captcha|图形/.test(attrText)) return false;
+      return true;
+    }
+
+    // maxLength 6~8 + 数字输入模式 + name 含 code 视作 TOTP
+    const maxLen = input.maxLength;
+    if (maxLen >= 4 && maxLen <= 10) {
+      const inputMode = (input.inputMode || "").toLowerCase();
+      if (inputMode === "numeric" || input.type === "number" || input.type === "tel") {
+        if (/code/.test(attrText)) return true;
+      }
+    }
+
+    return false;
+  }
 }

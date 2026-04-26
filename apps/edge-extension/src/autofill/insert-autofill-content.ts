@@ -26,6 +26,13 @@ export class InsertAutofillContentService {
     }
   }
 
+  fillTotp(field: HTMLInputElement, code: string): void {
+    if (!field || !code) return;
+    this.setInputValue(field, code);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+    field.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
   private getVisibleInputs(): HTMLInputElement[] {
     const inputs = Array.from(this.document.querySelectorAll("input"));
     return inputs.filter((el) => {
