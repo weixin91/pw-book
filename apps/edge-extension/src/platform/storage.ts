@@ -153,18 +153,24 @@ export const StorageService = {
   async getUserKey(): Promise<Uint8Array | null> {
     try {
       const result = await chrome.storage.session.get("userKey");
-      if (!result.userKey) return null;
-      return new Uint8Array(result.userKey);
+      if (result.userKey) return new Uint8Array(result.userKey);
+      // 回退到 local storage，支持“从不”锁定模式在浏览器重启后恢复
+      const localResult = await chrome.storage.local.get("userKey");
+      if (localResult.userKey) return new Uint8Array(localResult.userKey);
+      return null;
     } catch {
       return null;
     }
   },
 
   async setUserKey(userKey: Uint8Array): Promise<void> {
-    await chrome.storage.session.set({ userKey: Array.from(userKey) });
+    const data = { userKey: Array.from(userKey) };
+    await chrome.storage.session.set(data);
+    await chrome.storage.local.set(data); // 同时持久化，支持“从不”锁定和重启恢复
   },
 
   async clearUserKey(): Promise<void> {
     await chrome.storage.session.remove("userKey");
+    await chrome.storage.local.remove("userKey");
   },
 } as const;

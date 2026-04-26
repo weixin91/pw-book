@@ -1,9 +1,14 @@
 import React, { useEffect, useState } from "react";
 import { StorageService } from "../../platform/storage";
+import { BrowserApi } from "../../platform/browser-api";
 import { PendingChangesQueue } from "../../sync/pending-changes";
 import { parseUri } from "../../autofill/domain-utils";
 import { TotpDisplay } from "./TotpDisplay";
 import { parseOtpauthUri } from "../../crypto/totp";
+import {
+  PasswordGeneratorSettingsService,
+  generatePassword,
+} from "../settings";
 
 interface Props {
   editId: string | null;
@@ -33,10 +38,18 @@ export function CipherForm({ editId, onBack, onSaved, onDeleted }: Props): React
   const [loading, setLoading] = useState(false);
   const [passkeyInfo, setPasskeyInfo] = useState<PasskeyInfo | null>(null);
   const [rawData, setRawData] = useState<Record<string, unknown> | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showTotp, setShowTotp] = useState(false);
 
   useEffect(() => {
     if (editId) {
       loadCipher(editId);
+    } else {
+      BrowserApi.getActiveBrowserTab().then((tab) => {
+        if (tab?.url && !tab.url.startsWith("chrome-extension://") && !tab.url.startsWith("edge://")) {
+          setUris([{ uri: tab.url }]);
+        }
+      });
     }
   }, [editId]);
 
@@ -236,6 +249,75 @@ export function CipherForm({ editId, onBack, onSaved, onDeleted }: Props): React
     }
   }
 
+  async function handleGeneratePassword() {
+    const settings = await PasswordGeneratorSettingsService.load();
+    const generated = generatePassword(settings);
+    setPassword(generated);
+  }
+
+  function renderPasswordInput() {
+    return (
+      <div style={{ marginBottom: 12 }}>
+        <label style={{ display: "block", fontSize: 12, color: "#666", marginBottom: 4 }}>密码</label>
+        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          <input
+            type={showPassword ? "text" : "password"}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            style={{
+              flex: 1,
+              padding: "8px 10px",
+              borderRadius: 6,
+              border: "1px solid #ddd",
+              fontSize: 13,
+              boxSizing: "border-box",
+            }}
+          />
+          <button
+            onClick={() => setShowPassword((v) => !v)}
+            title={showPassword ? "隐藏密码" : "显示密码"}
+            style={{
+              border: "1px solid #ddd",
+              background: "#fff",
+              borderRadius: 6,
+              width: 32,
+              height: 32,
+              cursor: "pointer",
+              color: "#666",
+              fontSize: 14,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0,
+            }}
+          >
+            {showPassword ? "🙈" : "👁"}
+          </button>
+          <button
+            onClick={handleGeneratePassword}
+            title="生成随机密码"
+            style={{
+              border: "1px solid #ddd",
+              background: "#fff",
+              borderRadius: 6,
+              width: 32,
+              height: 32,
+              cursor: "pointer",
+              color: "#666",
+              fontSize: 16,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0,
+            }}
+          >
+            ⚡
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ padding: 16 }}>
       <div style={{ display: "flex", alignItems: "center", marginBottom: 16 }}>
@@ -257,7 +339,7 @@ export function CipherForm({ editId, onBack, onSaved, onDeleted }: Props): React
       </div>
       {renderInput("名称", name, setName)}
       {renderInput("用户名", username, setUsername)}
-      {renderInput("密码", password, setPassword, "password")}
+      {renderPasswordInput()}
 
       <div style={{ marginBottom: 12 }}>
         <div
@@ -344,21 +426,43 @@ export function CipherForm({ editId, onBack, onSaved, onDeleted }: Props): React
         <label style={{ display: "block", fontSize: 12, color: "#666", marginBottom: 4 }}>
           TOTP 密钥（otpauth:// URI 或 Base32 secret）
         </label>
-        <input
-          type="text"
-          value={totp}
-          placeholder="otpauth://totp/Issuer:account?secret=..."
-          onChange={(e) => setTotp(e.target.value)}
-          style={{
-            width: "100%",
-            padding: "8px 10px",
-            borderRadius: 6,
-            border: "1px solid #ddd",
-            fontSize: 13,
-            boxSizing: "border-box",
-            fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-          }}
-        />
+        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          <input
+            type={showTotp ? "text" : "password"}
+            value={totp}
+            placeholder="otpauth://totp/Issuer:account?secret=..."
+            onChange={(e) => setTotp(e.target.value)}
+            style={{
+              flex: 1,
+              padding: "8px 10px",
+              borderRadius: 6,
+              border: "1px solid #ddd",
+              fontSize: 13,
+              boxSizing: "border-box",
+              fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+            }}
+          />
+          <button
+            onClick={() => setShowTotp((v) => !v)}
+            title={showTotp ? "隐藏密钥" : "显示密钥"}
+            style={{
+              border: "1px solid #ddd",
+              background: "#fff",
+              borderRadius: 6,
+              width: 32,
+              height: 32,
+              cursor: "pointer",
+              color: "#666",
+              fontSize: 14,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0,
+            }}
+          >
+            {showTotp ? "🙈" : "👁"}
+          </button>
+        </div>
         {totp.trim() && parseOtpauthUri(totp.trim()) && (
           <div style={{ marginTop: 8 }}>
             <TotpDisplay totp={totp.trim()} />

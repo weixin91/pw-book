@@ -15,6 +15,7 @@ import {
   deriveRecoveryKeyHash,
   deriveRecoveryMasterKey,
 } from "../crypto/crypto-service";
+import { LockSettingsService, type LockSettings } from "../background/lock-timer";
 
 type Tab = "register" | "login";
 
@@ -28,6 +29,8 @@ const DEFAULT_KDF = {
 export function OptionsApp(): React.ReactElement {
   const [serverUrl, setServerUrl] = useState("http://localhost:3000");
   const [autofillMode, setAutofillMode] = useState<"auto" | "manual">("auto");
+  const [timeoutMin, setTimeoutMin] = useState(15);
+  const [lockOnBackground, setLockOnBackground] = useState(false);
   const [tab, setTab] = useState<Tab>("register");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -40,6 +43,10 @@ export function OptionsApp(): React.ReactElement {
   useEffect(() => {
     StorageService.getServerUrl().then((url) => setServerUrl(url));
     StorageService.getAutofillMode().then((mode) => setAutofillMode(mode));
+    LockSettingsService.load().then((settings: LockSettings) => {
+      setTimeoutMin(settings.timeoutMin);
+      setLockOnBackground(settings.lockOnBackground);
+    });
   }, []);
 
   async function handleSaveServerUrl() {
@@ -51,6 +58,14 @@ export function OptionsApp(): React.ReactElement {
   async function handleSaveAutofillMode(mode: "auto" | "manual") {
     await StorageService.setAutofillMode(mode);
     setAutofillMode(mode);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  }
+
+  async function handleSaveLockSettings(nextTimeoutMin: number, nextLockOnBackground: boolean) {
+    await LockSettingsService.save({ timeoutMin: nextTimeoutMin, lockOnBackground: nextLockOnBackground });
+    setTimeoutMin(nextTimeoutMin);
+    setLockOnBackground(nextLockOnBackground);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   }
@@ -259,6 +274,34 @@ export function OptionsApp(): React.ReactElement {
             手动填充（始终弹出列表选择）
           </label>
         </div>
+      </div>
+
+      <div style={{ marginBottom: 24, padding: 16, borderRadius: 8, border: "1px solid #eee", background: "#fafafa" }}>
+        <label style={{ display: "block", fontSize: 14, marginBottom: 6, fontWeight: 500 }}>保险库自动锁定</label>
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ display: "block", fontSize: 13, color: "#555", marginBottom: 4 }}>空闲超时后自动锁定</label>
+          <select
+            value={timeoutMin}
+            onChange={(e) => handleSaveLockSettings(Number(e.target.value), lockOnBackground)}
+            style={{ padding: "8px 12px", borderRadius: 6, border: "1px solid #ddd", fontSize: 14, cursor: "pointer" }}
+          >
+            <option value={1}>1 分钟</option>
+            <option value={5}>5 分钟</option>
+            <option value={10}>10 分钟</option>
+            <option value={15}>15 分钟</option>
+            <option value={30}>30 分钟</option>
+            <option value={60}>1 小时</option>
+            <option value={0}>从不</option>
+          </select>
+        </div>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, cursor: "pointer" }}>
+          <input
+            type="checkbox"
+            checked={lockOnBackground}
+            onChange={(e) => handleSaveLockSettings(timeoutMin, e.target.checked)}
+          />
+          系统锁屏时立即锁定保险库
+        </label>
       </div>
 
       {recoveryKey ? (

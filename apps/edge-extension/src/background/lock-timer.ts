@@ -37,6 +37,7 @@ export async function startLockTimer(timeoutMin?: number): Promise<void> {
   stopLockTimer();
   const settings = await LockSettingsService.load();
   const effectiveTimeout = timeoutMin ?? settings.timeoutMin;
+  if (effectiveTimeout <= 0) return; // “从不”锁定，不启动定时器
   lockTimer = setTimeout(() => {
     StorageService.clearUserKey().catch(() => {});
   }, effectiveTimeout * 60 * 1000);

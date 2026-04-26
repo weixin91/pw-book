@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { ClipboardManager } from "../../platform/clipboard";
 import {
   PasswordGeneratorSettingsService,
+  generatePassword,
   type PasswordGeneratorSettings,
 } from "../settings";
 
@@ -60,69 +61,18 @@ export function PasswordGenerator({ onBack }: Props): React.ReactElement {
     minSpecial,
   ]);
 
-  function generate(): string {
-    const uppercase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-    const lowercase = "abcdefghijklmnopqrstuvwxyz";
-    const numbers = "23456789"; // 排除易混淆字符后的数字
-    const numbersAll = "0123456789";
-    const special = "!@#$%^&*()_+-=[]{}|;:,.<>?";
-    const ambiguous = "0O1lI";
-
-    let resultChars: string[] = [];
-
-    // 1. 先填充最小数字数
-    if (includeNumbers && minNumbers > 0) {
-      const numPool = excludeAmbiguous ? numbers : numbersAll;
-      for (let i = 0; i < minNumbers; i++) {
-        resultChars.push(numPool[randomIndex(numPool.length)]);
-      }
-    }
-
-    // 2. 再填充最小特殊字符数
-    if (includeSpecial && minSpecial > 0) {
-      for (let i = 0; i < minSpecial; i++) {
-        resultChars.push(special[randomIndex(special.length)]);
-      }
-    }
-
-    // 3. 构建剩余字符池
-    let charset = "";
-    if (includeLowercase) charset += lowercase;
-    if (includeUppercase) charset += uppercase;
-    if (includeNumbers) charset += excludeAmbiguous ? numbers : numbersAll;
-    if (includeSpecial) charset += special;
-
-    if (excludeAmbiguous) {
-      for (const ch of ambiguous) {
-        charset = charset.replaceAll(ch, "");
-      }
-    }
-
-    if (charset.length === 0) return "";
-
-    // 4. 填充剩余长度
-    const remaining = Math.max(0, length - resultChars.length);
-    for (let i = 0; i < remaining; i++) {
-      resultChars.push(charset[randomIndex(charset.length)]);
-    }
-
-    // 5. Fisher-Yates 打乱
-    for (let i = resultChars.length - 1; i > 0; i--) {
-      const j = randomIndex(i + 1);
-      [resultChars[i], resultChars[j]] = [resultChars[j], resultChars[i]];
-    }
-
-    return resultChars.join("");
-  }
-
-  function randomIndex(max: number): number {
-    const array = new Uint32Array(1);
-    crypto.getRandomValues(array);
-    return array[0] % max;
-  }
-
   function handleGenerate() {
-    setPassword(generate());
+    const settings: PasswordGeneratorSettings = {
+      length,
+      includeUppercase,
+      includeLowercase,
+      includeNumbers,
+      includeSpecial,
+      excludeAmbiguous,
+      minNumbers,
+      minSpecial,
+    };
+    setPassword(generatePassword(settings));
   }
 
   async function handleCopy() {

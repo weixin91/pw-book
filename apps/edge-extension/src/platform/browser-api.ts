@@ -11,6 +11,11 @@ export const BrowserApi = {
     return tab ?? null;
   },
 
+  async getActiveBrowserTab(): Promise<Tab | null> {
+    const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+    return tab ?? null;
+  },
+
   async sendMessageToTab(tabId: number, message: unknown): Promise<unknown> {
     return chrome.tabs.sendMessage(tabId, message);
   },
