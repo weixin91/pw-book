@@ -6,6 +6,7 @@ import { LoginDetectionEngine } from "../autofill/login-detection.js";
 import { SavePrompt } from "../autofill/save-prompt.js";
 import { InlineMenu } from "../autofill/inline-menu.js";
 import { StorageService } from "../platform/storage.js";
+import { installWebAuthnBridge } from "./webauthn-handler.js";
 
 declare const __PWBOOK_INITIALIZED__: boolean | undefined;
 
@@ -19,6 +20,15 @@ if (typeof __PWBOOK_INITIALIZED__ === "undefined") {
 }
 
 async function initContentScript(): Promise<void> {
+  // WebAuthn 桥接需要尽早安装，避免页面初始化阶段就调用 navigator.credentials
+  if (window.top === window.self) {
+    try {
+      installWebAuthnBridge(document);
+    } catch (err) {
+      console.warn("[PWBook] WebAuthn 桥接安装失败:", err);
+    }
+  }
+
   const collector = new CollectAutofillContentService(document);
   const inserter = new InsertAutofillContentService(document);
   new LoginDetectionEngine(document, handleFormSubmit, handleAjaxLoginSuccess);

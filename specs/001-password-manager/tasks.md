@@ -148,10 +148,10 @@ description: "密码管理应用功能实现的任务列表"
 
 ### Edge 插件任务
 
-- [ ] T061 [P] [US5] 实现 TOTP 验证码生成器于 `apps/edge-extension/src/crypto/totp.ts`（RFC 6238, SHA-1/256/512）
-- [ ] T062 [US5] 实现 TOTP 倒计时 UI 于 `apps/edge-extension/src/popup/components/TotpDisplay.tsx`
-- [ ] T063 [P] [US5] 实现 Passkey 存储结构于 `apps/edge-extension/src/crypto/passkey-storage.ts`（凭据类型 PASSKEY）
-- [ ] T064 [US5] 实现 WebAuthn 拦截于 `apps/edge-extension/src/content/webauthn-handler.ts`（create/get 凭据代理，遵循 FR-008）
+- [X] T061 [P] [US5] 实现 TOTP 验证码生成器于 `apps/edge-extension/src/crypto/totp.ts`（RFC 6238, SHA-1/256/512）
+- [X] T062 [US5] 实现 TOTP 倒计时 UI 于 `apps/edge-extension/src/popup/components/TotpDisplay.tsx`
+- [X] T063 [P] [US5] 实现 Passkey 存储结构于 `apps/edge-extension/src/crypto/passkey-storage.ts`（凭据类型 PASSKEY）
+- [X] T064 [US5] 实现 WebAuthn 拦截于 `apps/edge-extension/src/content/webauthn-handler.ts`（create/get 凭据代理，遵循 FR-008）
 
 **检查点**：Passkey 和 TOTP 在 Edge 端可用，为 Android 实现提供参考
 

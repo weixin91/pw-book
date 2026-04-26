@@ -7,6 +7,19 @@ import { startLockTimer, initIdleListener } from "./lock-timer.js";
 import { PendingChangesQueue } from "../sync/pending-changes.js";
 import { SyncScheduler } from "../sync/sync-scheduler.js";
 import { parseUri, isUriMatch, type DomainAssocLite } from "../autofill/domain-utils.js";
+import {
+  generatePasskey,
+  importPasskeyPrivateKey,
+  exportPublicKeyRaw,
+  buildAuthenticatorData,
+  encodeCoseKeyEs256,
+  encodeAttestationObjectNone,
+  signAssertion,
+  base64UrlEncode,
+  base64UrlDecode,
+  CIPHER_TYPE_PASSKEY,
+  type PasskeyCipherData,
+} from "../crypto/passkey-storage.js";
 
 interface StoredFormData {
   tabId: number;
@@ -176,6 +189,30 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     handleSaveCipher(msg.data as Record<string, unknown>).then((result) => {
       sendResponse(result);
     });
+    return true;
+  }
+
+  if (msg.type === "WEBAUTHN_CREATE") {
+    handleWebAuthnCreate(
+      String(msg.origin ?? ""),
+      msg.publicKey
+    )
+      .then((result) => sendResponse({ ok: true, result }))
+      .catch((err) =>
+        sendResponse({ ok: false, error: err instanceof Error ? err.message : String(err) })
+      );
+    return true;
+  }
+
+  if (msg.type === "WEBAUTHN_GET") {
+    handleWebAuthnGet(
+      String(msg.origin ?? ""),
+      msg.publicKey
+    )
+      .then((result) => sendResponse({ ok: true, result }))
+      .catch((err) =>
+        sendResponse({ ok: false, error: err instanceof Error ? err.message : String(err) })
+      );
     return true;
   }
 
@@ -356,6 +393,242 @@ async function handleSaveCipher(data: Record<string, unknown>): Promise<{ succes
   } catch (err) {
     return { success: false, error: String(err) };
   }
+}
+
+// ─── WebAuthn 桥接处理 ───────────────────────────────────────────
+
+const PASSKEY_AAGUID = new Uint8Array(16); // 全 0：软件认证器
+
+interface WebAuthnEnvelope {
+  id: string;
+  rawId: BufferMarker;
+  response: Record<string, BufferMarker | string | undefined>;
+}
+
+interface BufferMarker {
+  __pwbookBytes: string;
+}
+
+function bytes(buf: Uint8Array): BufferMarker {
+  return { __pwbookBytes: base64UrlEncode(buf) };
+}
+
+function deserializeBuffers(value: unknown): unknown {
+  if (value === null || value === undefined) return value;
+  if (Array.isArray(value)) return value.map(deserializeBuffers);
+  if (typeof value === "object") {
+    const obj = value as Record<string, unknown>;
+    if (typeof obj.__pwbookBytes === "string" && Object.keys(obj).length === 1) {
+      return base64UrlDecode(obj.__pwbookBytes as string);
+    }
+    const out: Record<string, unknown> = {};
+    for (const k of Object.keys(obj)) out[k] = deserializeBuffers(obj[k]);
+    return out;
+  }
+  return value;
+}
+
+function originToRpId(origin: string, requested?: string): string {
+  let host = "";
+  try {
+    host = new URL(origin).hostname;
+  } catch {
+    host = origin;
+  }
+  if (!requested) return host;
+  // RP 仅允许指定与当前 host 相等或为其父域
+  const reqLower = requested.toLowerCase();
+  const hostLower = host.toLowerCase();
+  if (hostLower === reqLower) return reqLower;
+  if (hostLower.endsWith("." + reqLower)) return reqLower;
+  // 不合法的 rpId，使用当前 host 兜底
+  return hostLower;
+}
+
+function buildClientDataJSON(type: "webauthn.create" | "webauthn.get", challenge: Uint8Array, origin: string): Uint8Array {
+  const json = JSON.stringify({
+    type,
+    challenge: base64UrlEncode(challenge),
+    origin,
+    crossOrigin: false,
+  });
+  return new TextEncoder().encode(json);
+}
+
+async function sha256Bytes(data: Uint8Array): Promise<Uint8Array> {
+  return new Uint8Array(await crypto.subtle.digest("SHA-256", data as unknown as BufferSource));
+}
+
+async function handleWebAuthnCreate(origin: string, publicKeyRaw: unknown): Promise<WebAuthnEnvelope> {
+  const userKey = await StorageService.getUserKey();
+  if (!userKey) throw new Error("保险库未解锁，无法创建 Passkey");
+
+  const publicKey = deserializeBuffers(publicKeyRaw) as Record<string, unknown>;
+  const rp = (publicKey.rp as Record<string, unknown>) ?? {};
+  const user = (publicKey.user as Record<string, unknown>) ?? {};
+  const rpIdRequested = typeof rp.id === "string" ? rp.id : undefined;
+  const rpId = originToRpId(origin, rpIdRequested);
+  const rpName = typeof rp.name === "string" ? rp.name : undefined;
+  const challenge = publicKey.challenge instanceof Uint8Array ? publicKey.challenge : new Uint8Array(0);
+  const userHandle = user.id instanceof Uint8Array ? user.id : crypto.getRandomValues(new Uint8Array(16));
+  const userName = typeof user.name === "string" ? user.name : undefined;
+  const userDisplayName = typeof user.displayName === "string" ? user.displayName : undefined;
+
+  const material = await generatePasskey({
+    rpId,
+    rpName,
+    userHandle,
+    userName,
+    userDisplayName,
+  });
+
+  const { x, y } = await exportPublicKeyRaw(material.publicKey);
+  const cose = encodeCoseKeyEs256(x, y);
+  const credentialIdBytes = base64UrlDecode(material.data.credentialId);
+
+  const authData = await buildAuthenticatorData({
+    rpId,
+    signCount: 0,
+    userPresent: true,
+    userVerified: true,
+    attestedCredentialData: {
+      aaguid: PASSKEY_AAGUID,
+      credentialId: credentialIdBytes,
+      publicKeyCose: cose,
+    },
+  });
+
+  const attestationObject = encodeAttestationObjectNone(authData);
+  const clientDataJSON = buildClientDataJSON("webauthn.create", challenge, origin);
+
+  // 加密保存为 PASSKEY 类型 Cipher
+  const cipherData: PasskeyCipherData = {
+    name: rpName ?? rpId,
+    notes: null,
+    fields: [],
+    lastUsedAt: new Date().toISOString(),
+    passkey: material.data,
+  };
+  const encrypted = await encryptCipherData(JSON.stringify(cipherData), userKey);
+  const cipher = {
+    id: crypto.randomUUID(),
+    userId: "",
+    type: CIPHER_TYPE_PASSKEY,
+    data: encrypted,
+    favorite: false,
+    reprompt: 0,
+    createdAt: new Date().toISOString(),
+    modifiedAt: new Date().toISOString(),
+  };
+  const ciphers = await StorageService.getCiphers();
+  ciphers.push(cipher);
+  await StorageService.setCiphers(ciphers);
+
+  const queue = new PendingChangesQueue();
+  await queue.enqueue({
+    cipherId: cipher.id,
+    operation: "CREATE",
+    encryptedData: encrypted,
+    clientTimestamp: new Date().toISOString(),
+  });
+
+  return {
+    id: material.data.credentialId,
+    rawId: bytes(credentialIdBytes),
+    response: {
+      clientDataJSON: bytes(clientDataJSON),
+      attestationObject: bytes(attestationObject),
+    },
+  };
+}
+
+async function handleWebAuthnGet(origin: string, publicKeyRaw: unknown): Promise<WebAuthnEnvelope> {
+  const userKey = await StorageService.getUserKey();
+  if (!userKey) throw new Error("保险库未解锁，无法使用 Passkey");
+
+  const publicKey = deserializeBuffers(publicKeyRaw) as Record<string, unknown>;
+  const rpIdRequested = typeof publicKey.rpId === "string" ? publicKey.rpId : undefined;
+  const rpId = originToRpId(origin, rpIdRequested);
+  const challenge = publicKey.challenge instanceof Uint8Array ? publicKey.challenge : new Uint8Array(0);
+  const allowList = Array.isArray(publicKey.allowCredentials)
+    ? (publicKey.allowCredentials as Array<Record<string, unknown>>)
+    : [];
+  const allowedIds = new Set<string>(
+    allowList
+      .map((c) => (c.id instanceof Uint8Array ? base64UrlEncode(c.id) : null))
+      .filter((v): v is string => !!v)
+  );
+
+  const ciphers = await StorageService.getCiphers();
+  let matched: { cipher: typeof ciphers[number]; passkey: PasskeyCipherData } | null = null;
+  for (const cipher of ciphers) {
+    if (cipher.type !== CIPHER_TYPE_PASSKEY) continue;
+    try {
+      const plain = await decryptCipherData(cipher.data, userKey);
+      const data = JSON.parse(plain) as PasskeyCipherData;
+      if (data.passkey?.rpId !== rpId) continue;
+      if (allowedIds.size > 0 && !allowedIds.has(data.passkey.credentialId)) continue;
+      matched = { cipher, passkey: data };
+      break;
+    } catch {
+      // 跳过无法解密的凭据
+    }
+  }
+
+  if (!matched) {
+    throw new Error("当前站点没有可用的 Passkey");
+  }
+
+  const passkey = matched.passkey.passkey;
+  const newCounter = (passkey.counter ?? 0) + 1;
+  const authData = await buildAuthenticatorData({
+    rpId,
+    signCount: newCounter,
+    userPresent: true,
+    userVerified: true,
+  });
+
+  const clientDataJSON = buildClientDataJSON("webauthn.get", challenge, origin);
+  const clientDataHash = await sha256Bytes(clientDataJSON);
+  const privateKey = await importPasskeyPrivateKey(passkey.privateKey);
+  const signature = await signAssertion(privateKey, authData, clientDataHash);
+
+  // 更新 counter 并重新加密保存
+  const updatedData: PasskeyCipherData = {
+    ...matched.passkey,
+    lastUsedAt: new Date().toISOString(),
+    passkey: { ...passkey, counter: newCounter },
+  };
+  const encrypted = await encryptCipherData(JSON.stringify(updatedData), userKey);
+  const idx = ciphers.findIndex((c) => c.id === matched!.cipher.id);
+  if (idx >= 0) {
+    ciphers[idx] = {
+      ...ciphers[idx],
+      data: encrypted,
+      modifiedAt: new Date().toISOString(),
+    };
+    await StorageService.setCiphers(ciphers);
+
+    const queue = new PendingChangesQueue();
+    await queue.enqueue({
+      cipherId: ciphers[idx].id,
+      operation: "UPDATE",
+      encryptedData: encrypted,
+      clientTimestamp: new Date().toISOString(),
+    });
+  }
+
+  const credentialIdBytes = base64UrlDecode(passkey.credentialId);
+  return {
+    id: passkey.credentialId,
+    rawId: bytes(credentialIdBytes),
+    response: {
+      clientDataJSON: bytes(clientDataJSON),
+      authenticatorData: bytes(authData),
+      signature: bytes(signature),
+      userHandle: bytes(base64UrlDecode(passkey.userHandle)),
+    },
+  };
 }
 
 async function isCredentialAlreadySaved(url: string, username: string, password: string): Promise<boolean> {

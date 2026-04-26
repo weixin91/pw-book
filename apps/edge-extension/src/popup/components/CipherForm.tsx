@@ -2,6 +2,8 @@ import React, { useEffect, useState } from "react";
 import { StorageService } from "../../platform/storage";
 import { PendingChangesQueue } from "../../sync/pending-changes";
 import { parseUri } from "../../autofill/domain-utils";
+import { TotpDisplay } from "./TotpDisplay";
+import { parseOtpauthUri } from "../../crypto/totp";
 
 interface Props {
   editId: string | null;
@@ -20,6 +22,7 @@ export function CipherForm({ editId, onBack, onSaved, onDeleted }: Props): React
   const [password, setPassword] = useState("");
   const [uris, setUris] = useState<UriEntry[]>([{ uri: "" }]);
   const [notes, setNotes] = useState("");
+  const [totp, setTotp] = useState("");
   const [favorite, setFavorite] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -47,6 +50,7 @@ export function CipherForm({ editId, onBack, onSaved, onDeleted }: Props): React
         .filter((u) => u.uri.length > 0);
       setUris(parsed.length > 0 ? parsed : [{ uri: "" }]);
       setNotes(data.notes || "");
+      setTotp(data.login?.totp || "");
       setFavorite(cipher.favorite);
     } catch {
       // ignore
@@ -92,7 +96,7 @@ export function CipherForm({ editId, onBack, onSaved, onDeleted }: Props): React
           username: username || null,
           password: password || null,
           uris: cleanUris,
-          totp: null,
+          totp: totp.trim() ? totp.trim() : null,
         },
       };
 
@@ -267,6 +271,32 @@ export function CipherForm({ editId, onBack, onSaved, onDeleted }: Props): React
       </div>
 
       {renderInput("备注", notes, setNotes)}
+
+      <div style={{ marginBottom: 12 }}>
+        <label style={{ display: "block", fontSize: 12, color: "#666", marginBottom: 4 }}>
+          TOTP 密钥（otpauth:// URI 或 Base32 secret）
+        </label>
+        <input
+          type="text"
+          value={totp}
+          placeholder="otpauth://totp/Issuer:account?secret=..."
+          onChange={(e) => setTotp(e.target.value)}
+          style={{
+            width: "100%",
+            padding: "8px 10px",
+            borderRadius: 6,
+            border: "1px solid #ddd",
+            fontSize: 13,
+            boxSizing: "border-box",
+            fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+          }}
+        />
+        {totp.trim() && parseOtpauthUri(totp.trim()) && (
+          <div style={{ marginTop: 8 }}>
+            <TotpDisplay totp={totp.trim()} />
+          </div>
+        )}
+      </div>
       <label
         style={{
           display: "flex",
