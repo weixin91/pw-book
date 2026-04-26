@@ -30,7 +30,9 @@
       "Bash(sqlite3 /c/projects/pw-book/apps/backend/prisma/dev.db \"SELECT userId, deviceId, deviceName, lastSyncAt FROM sync_records;\")",
       "Bash(sqlite3 /c/projects/pw-book/apps/backend/prisma/dev.db \"SELECT userId, deviceId, lastSyncAt FROM sync_records;\")",
       "Bash(git add *)",
-      "Bash(pnpm build *)"
+      "Bash(pnpm build *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)"
     ]
   }
 }
