@@ -38,6 +38,8 @@
      │                                        │
 ```
 
+**注意**：`domainAssociations[]` 由服务端权威下发，客户端在每次同步时**整体覆盖**本地缓存（不做合并、不进 pending 队列）；增删改通过独立的 `POST/PUT/DELETE /api/domain-associations` 直连接口完成，参见 [api.md §4](./api.md#4-域名关联接口)。本节的 pending 变更队列仅承载凭据（Cipher）数据。
+
 ### 2.2 增量同步
 
 ```

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { StorageService } from "../../platform/storage";
 import { PendingChangesQueue } from "../../sync/pending-changes";
+import { parseUri } from "../../autofill/domain-utils";
 
 interface Props {
   editId: string | null;
@@ -9,11 +10,15 @@ interface Props {
   onDeleted?: () => void;
 }
 
+interface UriEntry {
+  uri: string;
+}
+
 export function CipherForm({ editId, onBack, onSaved, onDeleted }: Props): React.ReactElement {
   const [name, setName] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [uri, setUri] = useState("");
+  const [uris, setUris] = useState<UriEntry[]>([{ uri: "" }]);
   const [notes, setNotes] = useState("");
   const [favorite, setFavorite] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -36,12 +41,31 @@ export function CipherForm({ editId, onBack, onSaved, onDeleted }: Props): React
       setName(data.name || "");
       setUsername(data.login?.username || "");
       setPassword(data.login?.password || "");
-      setUri(data.login?.uris?.[0]?.uri || "");
+      const loaded = (data.login?.uris ?? []) as Array<{ uri?: string }>;
+      const parsed = loaded
+        .map((u) => ({ uri: u?.uri ?? "" }))
+        .filter((u) => u.uri.length > 0);
+      setUris(parsed.length > 0 ? parsed : [{ uri: "" }]);
       setNotes(data.notes || "");
       setFavorite(cipher.favorite);
     } catch {
       // ignore
     }
+  }
+
+  function updateUri(index: number, value: string) {
+    setUris((prev) => prev.map((u, i) => (i === index ? { uri: value } : u)));
+  }
+
+  function addUri(prefix?: string) {
+    setUris((prev) => [...prev, { uri: prefix ?? "" }]);
+  }
+
+  function removeUri(index: number) {
+    setUris((prev) => {
+      if (prev.length <= 1) return [{ uri: "" }];
+      return prev.filter((_, i) => i !== index);
+    });
   }
 
   async function handleSave() {
@@ -51,15 +75,23 @@ export function CipherForm({ editId, onBack, onSaved, onDeleted }: Props): React
       if (!userKey) return;
 
       const { encryptCipherData } = await import("../../crypto/crypto-service");
+
+      // 过滤空 URI 并去重
+      const cleanUris = uris
+        .map((u) => u.uri.trim())
+        .filter((u) => u.length > 0)
+        .filter((u, i, arr) => arr.indexOf(u) === i)
+        .map((u) => ({ uri: u, match: null }));
+
       const cipherData = {
-        name: name || uri || "未命名",
+        name: name || cleanUris[0]?.uri || "未命名",
         notes: notes || null,
         fields: [],
         lastUsedAt: null,
         login: {
           username: username || null,
           password: password || null,
-          uris: uri ? [{ uri, match: null }] : [],
+          uris: cleanUris,
           totp: null,
         },
       };
@@ -148,7 +180,92 @@ export function CipherForm({ editId, onBack, onSaved, onDeleted }: Props): React
       {renderInput("名称", name, setName)}
       {renderInput("用户名", username, setUsername)}
       {renderInput("密码", password, setPassword, "password")}
-      {renderInput("网站", uri, setUri)}
+
+      <div style={{ marginBottom: 12 }}>
+        <div
+          style={{
+            fontSize: 12,
+            color: "#666",
+            marginBottom: 6,
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
+          <span>自动填充选项（网站或 APP）</span>
+        </div>
+        {uris.map((entry, index) => {
+          const id = parseUri(entry.uri);
+          const kindLabel = id?.kind === "android" ? "APP" : id?.kind === "web" ? "网站" : "URI";
+          return (
+            <div
+              key={index}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                marginBottom: 6,
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 11,
+                  color: "#888",
+                  minWidth: 32,
+                }}
+              >
+                {kindLabel}
+              </span>
+              <input
+                type="text"
+                value={entry.uri}
+                placeholder="https://example.com 或 androidapp://com.example"
+                onChange={(e) => updateUri(index, e.target.value)}
+                style={{
+                  flex: 1,
+                  padding: "8px 10px",
+                  borderRadius: 6,
+                  border: "1px solid #ddd",
+                  fontSize: 13,
+                  boxSizing: "border-box",
+                }}
+              />
+              <button
+                onClick={() => removeUri(index)}
+                title="删除"
+                style={{
+                  border: "1px solid #ddd",
+                  background: "#fff",
+                  borderRadius: 6,
+                  width: 28,
+                  height: 28,
+                  cursor: "pointer",
+                  color: "#666",
+                  fontSize: 16,
+                  lineHeight: 1,
+                }}
+              >
+                ×
+              </button>
+            </div>
+          );
+        })}
+        <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
+          <button
+            onClick={() => addUri("https://")}
+            style={smallButtonStyle()}
+          >
+            + 网站
+          </button>
+          <button
+            onClick={() => addUri("androidapp://")}
+            style={smallButtonStyle()}
+          >
+            + APP
+          </button>
+        </div>
+      </div>
+
       {renderInput("备注", notes, setNotes)}
       <label
         style={{
@@ -205,6 +322,18 @@ export function CipherForm({ editId, onBack, onSaved, onDeleted }: Props): React
       )}
     </div>
   );
+}
+
+function smallButtonStyle(): React.CSSProperties {
+  return {
+    border: "1px solid #1a73e8",
+    background: "#fff",
+    color: "#1a73e8",
+    borderRadius: 6,
+    padding: "4px 10px",
+    fontSize: 12,
+    cursor: "pointer",
+  };
 }
 
 function renderInput(

@@ -6,6 +6,7 @@ import { decryptCipherData, encryptCipherData } from "../crypto/crypto-service.j
 import { startLockTimer, initIdleListener } from "./lock-timer.js";
 import { PendingChangesQueue } from "../sync/pending-changes.js";
 import { SyncScheduler } from "../sync/sync-scheduler.js";
+import { parseUri, isUriMatch, type DomainAssocLite } from "../autofill/domain-utils.js";
 
 interface StoredFormData {
   tabId: number;
@@ -25,15 +26,12 @@ function getPendingKey(tabId: number): string {
   return `_pwbook_pending_${tabId}`;
 }
 
-function getBaseDomain(url: string): string {
-  try {
-    const hostname = new URL(url).hostname;
-    const parts = hostname.split(".");
-    if (parts.length <= 2) return hostname;
-    return parts.slice(-2).join(".");
-  } catch {
-    return url;
-  }
+async function getAssocRules(): Promise<DomainAssocLite[]> {
+  const list = await StorageService.getDomainAssociations();
+  return list.map((r) => ({
+    domains: r.domains ?? [],
+    packageNames: r.packageNames ?? [],
+  }));
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -227,7 +225,9 @@ async function handleGetVaultItems(urlStr: string): Promise<Array<Record<string,
     return [];
   }
 
-  const baseDomain = getBaseDomain(urlStr);
+  const sourceId = parseUri(urlStr);
+  if (!sourceId) return [];
+  const rules = await getAssocRules();
 
   const matched = [];
   for (const cipher of ciphers) {
@@ -237,7 +237,9 @@ async function handleGetVaultItems(urlStr: string): Promise<Array<Record<string,
       const uris = data.login?.uris ?? [];
       const isMatch = uris.some((u: { uri?: string }) => {
         if (!u.uri) return false;
-        return getBaseDomain(u.uri) === baseDomain;
+        const targetId = parseUri(u.uri);
+        if (!targetId) return false;
+        return isUriMatch(sourceId, targetId, rules);
       });
       if (isMatch) matched.push({ cipher, data });
     } catch {
@@ -268,60 +270,89 @@ async function handleSaveCipher(data: Record<string, unknown>): Promise<{ succes
     if (!userKey) {
       return { success: false, error: "未解锁保险库" };
     }
-    const encryptedData = await encryptCipherData(JSON.stringify(data), userKey);
-
-    const cipher = {
-      id: crypto.randomUUID(),
-      userId: "", // 由服务端填充
-      type: 1, // LOGIN
-      data: encryptedData,
-      favorite: false,
-      reprompt: 0,
-      createdAt: new Date().toISOString(),
-      modifiedAt: new Date().toISOString(),
-    };
 
     const ciphers = await StorageService.getCiphers();
-    const name = String(data.name ?? "");
-    const username = String((data.login as Record<string, unknown>)?.username ?? "");
+    const incomingLogin = (data.login as Record<string, unknown>) ?? {};
+    const incomingUsername = String(incomingLogin.username ?? "");
+    const incomingPassword = String(incomingLogin.password ?? "");
+    const incomingUris = (incomingLogin.uris as Array<{ uri?: string }>) ?? [];
+    const incomingUri = incomingUris[0]?.uri ?? "";
+    const incomingId = incomingUri ? parseUri(incomingUri) : null;
+    const rules = await getAssocRules();
 
-    // 检查是否已有相同域名+用户名的凭据，有则更新
+    // 命中条件：URI 匹配（含子域名共享与关联规则） + 用户名完全相同
     let updatedCipherId: string | null = null;
-    for (let i = 0; i < ciphers.length; i++) {
-      try {
-        const plainText = await decryptCipherData(ciphers[i].data, userKey);
-        const existing = JSON.parse(plainText) as Record<string, unknown>;
-        const existingName = String(existing.name ?? "");
-        const existingUsername = String((existing.login as Record<string, unknown>)?.username ?? "");
-        if (existingName === name && existingUsername === username) {
+    let resultEncrypted: string | null = null;
+
+    if (incomingId) {
+      for (let i = 0; i < ciphers.length; i++) {
+        try {
+          const plainText = await decryptCipherData(ciphers[i].data, userKey);
+          const existing = JSON.parse(plainText) as Record<string, unknown>;
+          const existingLogin = (existing.login as Record<string, unknown>) ?? {};
+          const existingUsername = String(existingLogin.username ?? "");
+          if (existingUsername !== incomingUsername) continue;
+
+          const existingUris = (existingLogin.uris as Array<{ uri?: string }>) ?? [];
+          const uriMatched = existingUris.some((u) => {
+            if (!u.uri) return false;
+            const id = parseUri(u.uri);
+            return id ? isUriMatch(incomingId, id, rules) : false;
+          });
+          if (!uriMatched) continue;
+
+          // 命中：保留原有 name / notes / fields / uris 等，仅更新 password 与 lastUsedAt
+          const merged = {
+            ...existing,
+            lastUsedAt: new Date().toISOString(),
+            login: {
+              ...existingLogin,
+              password: incomingPassword,
+            },
+          };
+          resultEncrypted = await encryptCipherData(JSON.stringify(merged), userKey);
           ciphers[i] = {
             ...ciphers[i],
-            data: encryptedData,
+            data: resultEncrypted,
             modifiedAt: new Date().toISOString(),
           };
           updatedCipherId = ciphers[i].id;
           break;
+        } catch {
+          // 跳过无法解密的凭据
         }
-      } catch {
-        // 跳过无法解密的凭据
       }
     }
 
+    let newCipherId: string | null = null;
     if (!updatedCipherId) {
+      resultEncrypted = await encryptCipherData(JSON.stringify(data), userKey);
+      const cipher = {
+        id: crypto.randomUUID(),
+        userId: "", // 由服务端填充
+        type: 1, // LOGIN
+        data: resultEncrypted,
+        favorite: false,
+        reprompt: 0,
+        createdAt: new Date().toISOString(),
+        modifiedAt: new Date().toISOString(),
+      };
       ciphers.push(cipher);
+      newCipherId = cipher.id;
     }
 
     await StorageService.setCiphers(ciphers);
 
+    const targetId = updatedCipherId ?? newCipherId!;
     const queue = new PendingChangesQueue();
     await queue.enqueue({
-      cipherId: updatedCipherId || cipher.id,
+      cipherId: targetId,
       operation: updatedCipherId ? "UPDATE" : "CREATE",
-      encryptedData,
-      clientTimestamp: cipher.modifiedAt,
+      encryptedData: resultEncrypted!,
+      clientTimestamp: new Date().toISOString(),
     });
 
-    return { success: true, id: updatedCipherId || cipher.id };
+    return { success: true, id: targetId };
   } catch (err) {
     return { success: false, error: String(err) };
   }
@@ -333,7 +364,9 @@ async function isCredentialAlreadySaved(url: string, username: string, password:
   if (!userKey) return false;
 
   const ciphers = await StorageService.getCiphers();
-  const baseDomain = getBaseDomain(url);
+  const sourceId = parseUri(url);
+  if (!sourceId) return false;
+  const rules = await getAssocRules();
 
   for (const cipher of ciphers) {
     try {
@@ -342,7 +375,9 @@ async function isCredentialAlreadySaved(url: string, username: string, password:
       const uris = data.login?.uris ?? [];
       const isDomainMatch = uris.some((u: { uri?: string }) => {
         if (!u.uri) return false;
-        return getBaseDomain(u.uri) === baseDomain;
+        const targetId = parseUri(u.uri);
+        if (!targetId) return false;
+        return isUriMatch(sourceId, targetId, rules);
       });
       if (isDomainMatch && data.login?.username === username && data.login?.password === password) {
         return true;

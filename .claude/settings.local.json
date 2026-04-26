@@ -15,7 +15,22 @@
       "Bash(node *)",
       "Bash(curl -s http://localhost:3000/health)",
       "Bash(npx tsc *)",
-      "Bash(npx vite *)"
+      "Bash(npx vite *)",
+      "Bash(npm run *)",
+      "Bash(pnpm run *)",
+      "Bash(pnpm --version)",
+      "Bash(export PATH=\"/c/Program Files/nodejs:/c/Users/weixi/AppData/Local/pnpm:/c/Users/weixi/AppData/Roaming/npm:$PATH\")",
+      "Bash(pnpm test *)",
+      "Bash(npx prisma *)",
+      "Bash(pnpm --filter edge-extension build)",
+      "Bash(cmd /c \"node --version && pnpm --version\")",
+      "Bash(export PATH=\"/c/Users/weixi/AppData/Local/Microsoft/WinGet/Packages/SQLite.SQLite_Microsoft.Winget.Source_8wekyb3d8bbwe:$PATH\")",
+      "Bash(sqlite3 /c/projects/pw-book/apps/backend/prisma/dev.db \"SELECT id, userId, type, favorite, createdAt, modifiedAt FROM ciphers;\")",
+      "Bash(sqlite3 /c/projects/pw-book/apps/backend/prisma/dev.db \"SELECT id, email FROM users;\")",
+      "Bash(sqlite3 /c/projects/pw-book/apps/backend/prisma/dev.db \"SELECT userId, deviceId, deviceName, lastSyncAt FROM sync_records;\")",
+      "Bash(sqlite3 /c/projects/pw-book/apps/backend/prisma/dev.db \"SELECT userId, deviceId, lastSyncAt FROM sync_records;\")",
+      "Bash(git add *)",
+      "Bash(pnpm build *)"
     ]
   }
 }

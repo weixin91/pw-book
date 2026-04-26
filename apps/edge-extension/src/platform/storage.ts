@@ -1,7 +1,7 @@
 // 保险库本地存储抽象层
 // 使用 chrome.storage.local 持久化加密数据，session 存储解密密钥
 
-import type { Cipher, PendingChange, SyncStatus } from "@pwbook/shared-types";
+import type { Cipher, PendingChange, SyncStatus, DomainAssociation } from "@pwbook/shared-types";
 
 const LOCAL_KEYS = {
   ENCRYPTED_KEY: "encKey",
@@ -16,6 +16,7 @@ const LOCAL_KEYS = {
   REJECTED_SITES: "rejectedSites",
   SERVER_URL: "serverUrl",
   AUTOFILL_MODE: "autofillMode",
+  DOMAIN_ASSOCIATIONS: "domainAssociations",
 } as const;
 
 export interface StoredProfile {
@@ -136,6 +137,15 @@ export const StorageService = {
 
   async setAutofillMode(mode: "auto" | "manual"): Promise<void> {
     await chrome.storage.local.set({ [LOCAL_KEYS.AUTOFILL_MODE]: mode });
+  },
+
+  async getDomainAssociations(): Promise<DomainAssociation[]> {
+    const result = await chrome.storage.local.get(LOCAL_KEYS.DOMAIN_ASSOCIATIONS);
+    return result[LOCAL_KEYS.DOMAIN_ASSOCIATIONS] ?? [];
+  },
+
+  async setDomainAssociations(rules: DomainAssociation[]): Promise<void> {
+    await chrome.storage.local.set({ [LOCAL_KEYS.DOMAIN_ASSOCIATIONS]: rules });
   },
 
   // --- chrome.storage.session (MV3, Service Worker 存活期间) ---

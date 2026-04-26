@@ -84,6 +84,11 @@ export class SyncClient {
       await StorageService.setCiphers(Array.from(localMap.values()));
     }
 
+    // 域名关联规则采用服务端权威：每次拉取都覆盖本地缓存
+    if (Array.isArray(data.domainAssociations)) {
+      await StorageService.setDomainAssociations(data.domainAssociations);
+    }
+
     await StorageService.setLastSyncToken(data.syncToken);
   }
 }

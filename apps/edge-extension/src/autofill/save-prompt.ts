@@ -2,6 +2,7 @@
 
 import { StorageService } from "../platform/storage.js";
 import { shouldPromptSave } from "./rejected-sites.js";
+import { getBaseDomainFromAny } from "./domain-utils.js";
 
 interface SavePromptData {
   username: string;
@@ -15,9 +16,9 @@ export class SavePrompt {
   constructor(private document: Document) {}
 
   async show(data: SavePromptData): Promise<void> {
-    console.log("[PWBook SavePrompt] show() 被调用, domain:", getBaseDomain(data.url), "username:", data.username, "password:", data.password ? "有" : "无");
+    const domain = getBaseDomainFromAny(data.url);
+    console.log("[PWBook SavePrompt] show() 被调用, domain:", domain, "username:", data.username, "password:", data.password ? "有" : "无");
     // 5 秒内检查拒绝记录
-    const domain = getBaseDomain(data.url);
     if (!shouldPromptSave(domain, await StorageService.getRejectedSites())) {
       console.log("[PWBook SavePrompt] 域名在拒绝列表中，不显示提示:", domain);
       return;
@@ -118,7 +119,7 @@ export class SavePrompt {
 
   private async saveCipher(data: SavePromptData): Promise<{ success: boolean; error?: string }> {
     const cipherData = {
-      name: getBaseDomain(data.url),
+      name: getBaseDomainFromAny(data.url),
       notes: null,
       fields: [],
       lastUsedAt: new Date().toISOString(),
@@ -150,16 +151,5 @@ export class SavePrompt {
     const expireAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
     sites.push({ domain, rejectedAt, expireAt });
     await StorageService.setRejectedSites(sites);
-  }
-}
-
-function getBaseDomain(url: string): string {
-  try {
-    const hostname = new URL(url).hostname;
-    const parts = hostname.split(".");
-    if (parts.length <= 2) return hostname;
-    return parts.slice(-2).join(".");
-  } catch {
-    return url;
   }
 }

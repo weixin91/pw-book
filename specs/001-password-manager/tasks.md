@@ -129,12 +129,12 @@ description: "密码管理应用功能实现的任务列表"
 
 ### 后端任务
 
-- [ ] T056 [P] [US4] 实现域名关联 CRUD API 于 `apps/backend/src/domain-assoc/routes.ts`（遵循 `contracts/api.md`）
+- [X] T056 [P] [US4] 实现域名关联 CRUD API 于 `apps/backend/src/domain-assoc/routes.ts`（遵循 `contracts/api.md`）
 
 ### Edge 插件任务
 
-- [ ] T057 [US4] 实现域名关联规则同步于 `apps/edge-extension/src/sync/domain-assoc-sync.ts`
-- [ ] T058 [P] [US4] 实现基础域名提取工具于 `apps/edge-extension/src/autofill/domain-utils.ts`
+- [X] T057 [US4] 实现域名关联规则同步于 `apps/edge-extension/src/sync/domain-assoc-sync.ts`
+- [X] T058 [P] [US4] 实现基础域名提取工具于 `apps/edge-extension/src/autofill/domain-utils.ts`
 
 **检查点**：跨域名凭据共享在 Edge 端可用，后端 API 为 Android 接入做好准备
 

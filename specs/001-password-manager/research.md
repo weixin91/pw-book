@@ -91,9 +91,16 @@ Bitwarden 浏览器扩展在四个隔离上下文中运行：
 - 填充后记录 `lastUsedAt` 时间戳，用于 FR-019 默认填充最近使用的账号
 
 **域名匹配**：
-- 基础域名提取（如 `tieba.baidu.com` → `baidu.com`）
-- 用户配置的域名关联规则表
-- URI 匹配算法支持通配符和正则
+
+- **URI 解析**：所有可填充目标统一以 `Cipher.data.login.uris[].uri` 字符串存储，匹配前先经 `parseUri()` 解析为 `UriIdentifier { kind, hostname?, baseDomain?, packageName?, raw }`：
+  - `http(s)://` → `kind: "web"`，提取 `hostname` 与 `baseDomain`
+  - `androidapp://com.example` → `kind: "android"`，`packageName = "com.example"`
+  - 其他 → `kind: "other"`，仅原样保留
+- **基础域名提取**：维护多段顶级后缀白名单（`com.cn / co.uk / co.jp / com.hk / com.tw / com.au / co.kr / com.sg / com.br / com.mx / co.za / co.in / com.ar / com.tr / com.ua` 等），命中则取末三段（`shop.example.com.cn → example.com.cn`），否则取末两段（`a.b.example.com → example.com`），从而正确处理国别二级 TLD
+- **子域名自动共享**：两条凭据 `baseDomain` 相等即视为可互填（实现 FR-006）
+- **跨类型共享**：`web ↔ android` 间的关联**仅**通过用户在「域名关联规则表」中显式建立的 `DomainAssociation { domains[], packageNames[] }` 实现；网站之间的跨基础域名关联也走同一规则表
+- **多 URI 凭据**：单条凭据可在 `uris[]` 中保存任意数量的网站和 APP 目标（例如 `https://www.baidu.com` + `androidapp://com.baidu.tieba`），自动填充时对每一条独立调用 `isUriMatch`，命中即可作为候选
+- **不使用通配符或正则**：当前实现仅基于「主机/包名 + 基础域名」的精确比对，未引入 Bitwarden 的 `UriMatchType` 通配符/正则方案，以减少歧义与误填风险（后续如有需要再扩展 `LoginUri.match` 字段）
 
 **性能优化与防护**：
 

@@ -19,10 +19,32 @@ interface Props {
 export function VaultList({ onAdd, onEdit, onOpenGenerator }: Props): React.ReactElement {
   const [items, setItems] = useState<VaultItem[]>([]);
   const [search, setSearch] = useState("");
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
 
   useEffect(() => {
     loadItems();
   }, []);
+
+  useEffect(() => {
+    if (!openMenuId) return;
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (!target?.closest?.("[data-copy-menu]")) {
+        setOpenMenuId(null);
+        setMenuPos(null);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [openMenuId]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 1500);
+    return () => clearTimeout(t);
+  }, [toast]);
 
   async function loadItems() {
     const ciphers = await StorageService.getCiphers();
@@ -87,18 +109,26 @@ export function VaultList({ onAdd, onEdit, onOpenGenerator }: Props): React.Reac
       return a.name.localeCompare(b.name);
     });
 
-  async function handleCopyPassword(cipher: Cipher) {
+  async function handleCopy(cipher: Cipher, field: "username" | "password") {
+    setOpenMenuId(null);
+    setMenuPos(null);
     const userKey = await StorageService.getUserKey();
-    if (!userKey) return;
+    if (!userKey) {
+      setToast("保险库未解锁");
+      return;
+    }
     const { decryptCipherData } = await import("../../crypto/crypto-service");
     try {
       const data = JSON.parse(await decryptCipherData(cipher.data, userKey));
-      const password = data.login?.password;
-      if (password) {
-        await ClipboardManager.copy(password);
+      const value: string | undefined = data.login?.[field];
+      if (!value) {
+        setToast(field === "username" ? "用户名为空" : "密码为空");
+        return;
       }
+      await ClipboardManager.copy(value);
+      setToast(field === "username" ? "用户名已复制" : "密码已复制");
     } catch {
-      // ignore
+      setToast("复制失败");
     }
   }
 
@@ -185,19 +215,85 @@ export function VaultList({ onAdd, onEdit, onOpenGenerator }: Props): React.Reac
               <div style={{ fontWeight: 500, fontSize: 14 }}>{item.name}</div>
               <div style={{ color: "#888", fontSize: 12 }}>{item.username}</div>
             </div>
-            <button
-              onClick={() => handleCopyPassword(item.cipher)}
-              style={{
-                padding: "4px 8px",
-                borderRadius: 4,
-                border: "1px solid #ddd",
-                background: "#fff",
-                fontSize: 12,
-                cursor: "pointer",
-              }}
-            >
-              复制密码
-            </button>
+            <div data-copy-menu>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (openMenuId === item.cipher.id) {
+                    setOpenMenuId(null);
+                    setMenuPos(null);
+                  } else {
+                    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                    setMenuPos({
+                      top: rect.bottom + 4,
+                      right: window.innerWidth - rect.right,
+                    });
+                    setOpenMenuId(item.cipher.id);
+                  }
+                }}
+                style={{
+                  padding: "4px 8px",
+                  borderRadius: 4,
+                  border: "1px solid #ddd",
+                  background: "#fff",
+                  fontSize: 12,
+                  cursor: "pointer",
+                }}
+              >
+                复制
+              </button>
+              {openMenuId === item.cipher.id && menuPos && (
+                <div
+                  style={{
+                    position: "fixed",
+                    top: menuPos.top,
+                    right: menuPos.right,
+                    background: "#fff",
+                    border: "1px solid #ddd",
+                    borderRadius: 6,
+                    boxShadow: "0 4px 12px rgba(0,0,0,0.12)",
+                    zIndex: 1000,
+                    minWidth: 110,
+                    overflow: "hidden",
+                  }}
+                >
+                  <button
+                    onClick={() => handleCopy(item.cipher, "username")}
+                    disabled={!item.username}
+                    style={{
+                      display: "block",
+                      width: "100%",
+                      padding: "8px 12px",
+                      border: "none",
+                      background: "none",
+                      textAlign: "left",
+                      fontSize: 12,
+                      cursor: item.username ? "pointer" : "not-allowed",
+                      color: item.username ? "#333" : "#bbb",
+                    }}
+                  >
+                    复制用户名
+                  </button>
+                  <button
+                    onClick={() => handleCopy(item.cipher, "password")}
+                    style={{
+                      display: "block",
+                      width: "100%",
+                      padding: "8px 12px",
+                      border: "none",
+                      background: "none",
+                      textAlign: "left",
+                      fontSize: 12,
+                      cursor: "pointer",
+                      color: "#333",
+                      borderTop: "1px solid #f0f0f0",
+                    }}
+                  >
+                    复制密码
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         ))}
         {filtered.length === 0 && (
@@ -206,6 +302,25 @@ export function VaultList({ onAdd, onEdit, onOpenGenerator }: Props): React.Reac
           </div>
         )}
       </div>
+      {toast && (
+        <div
+          style={{
+            position: "fixed",
+            bottom: 16,
+            left: "50%",
+            transform: "translateX(-50%)",
+            background: "rgba(0,0,0,0.82)",
+            color: "#fff",
+            padding: "6px 14px",
+            borderRadius: 16,
+            fontSize: 12,
+            zIndex: 100,
+            pointerEvents: "none",
+          }}
+        >
+          {toast}
+        </div>
+      )}
     </div>
   );
 }

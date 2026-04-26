@@ -351,7 +351,38 @@ Authorization: Bearer <token>
 
 ---
 
-### 4.3 删除关联规则
+### 4.3 更新关联规则
+
+```http
+PUT /api/domain-associations/:id
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+**Request Body**（`domains` 与 `packageNames` 均为可选字段，未传则保持原值）:
+```json
+{
+  "domains": ["baidu.com", "tieba.baidu.com", "pan.baidu.com"],
+  "packageNames": ["com.baidu.tieba"]
+}
+```
+
+**Response 200**:
+```json
+{
+  "id": "770e8400-e29b-41d4-a716-446655440002",
+  "userId": "550e8400-e29b-41d4-a716-446655440000",
+  "domains": ["baidu.com", "tieba.baidu.com", "pan.baidu.com"],
+  "packageNames": ["com.baidu.tieba"],
+  "createdAt": "2026-04-20T10:00:00Z"
+}
+```
+
+**Response 404**: 关联规则不存在或不属于当前用户
+
+---
+
+### 4.4 删除关联规则
 
 ```http
 DELETE /api/domain-associations/:id
@@ -359,6 +390,14 @@ Authorization: Bearer <token>
 ```
 
 **Response 204**
+
+---
+
+### 4.5 域名关联与凭据 URI 的关系
+
+> **重要**：单个凭据自身保存的可填充域名/包名列表存放在 `Cipher.data.login.uris[]` 中（每项格式为 `{ uri, match }`），由客户端在编辑界面维护，不通过本接口管理。
+>
+> 本节接口仅维护「跨基础域名」「网站 ↔ Android APP」之间的**联动关系**，例如把 `baidu.com` 与 `com.baidu.tieba` 互相关联，使两者下保存的凭据在自动填充候选列表中互通显示。具体匹配算法见 [data-model.md §2.4](../data-model.md#24-domain-association域名关联规则)。
 
 ---
 
