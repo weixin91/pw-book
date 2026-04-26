@@ -86,7 +86,7 @@
 |------|------|------|
 | `id` | UUID | 主键 |
 | `userId` | UUID | 所属用户 |
-| `type` | Enum | `LOGIN`, `CARD`, `IDENTITY`, `SECURE_NOTE`, `PASSKEY` |
+| `type` | Enum | `LOGIN` (1), `CARD` (2), `IDENTITY` (3), `SECURE_NOTE` (4), `PASSKEY` (5)。**说明**：Passkey 数据既可作为独立 `type=5` 条目，也可作为 `type=1` (LOGIN) 条目的附加字段。Edge 端采用后者，将 passkey 内嵌于 LOGIN 条目中，以便与同一站点的账号密码共存于同一凭据。 |
 | `data` | String | 加密后的 JSON 数据（AES-256-GCM） |
 | `favorite` | Boolean | 是否收藏 |
 | `reprompt` | Enum | `NONE`, `PASSWORD`（主密码重新确认） |
@@ -128,15 +128,18 @@ interface CipherData {
     type: number;
   };
 
-  // Passkey 类型
+  // Passkey（作为 LOGIN 的可选附加字段，或独立 PASSKEY 类型）
   passkey?: {
-    credentialId: string;
-    privateKey: string;
+    credentialId: string;     // Base64Url
+    privateKey: string;       // Base64Url（JWK 或 SPKI 导出）
+    publicKey: string;        // Base64Url（SPKI 格式公钥）
     rpId: string;             // Relying Party ID
-    userHandle: string;
-    userDisplayName: string;
+    rpName?: string;          // RP 显示名称
+    userHandle: string;       // Base64Url
+    userName?: string;        // 用户名称
+    userDisplayName?: string; // 用户显示名称
     counter: number;          // 签名计数器（防重放）
-    createdAt: string;
+    createdAt: string;        // ISO 8601
   };
 
   // 通用字段

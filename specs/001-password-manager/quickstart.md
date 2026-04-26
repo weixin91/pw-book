@@ -279,8 +279,15 @@ A: Android 自动填充服务在以下场景工作：
 ### Q: 如何测试 Passkey 功能？
 
 A: 使用测试站点：
-- `https://webauthn.io/` — 在线 WebAuthn 测试
+- `https://webauthn.io/` — 在线 WebAuthn 测试（支持注册/登录流程）
 - `https://demo.yubico.com/webauthn-technical/` — Yubico 技术演示
+
+**测试步骤**：
+1. 确保保险库中已存在目标站点的 LOGIN 凭据（用户名/密码）
+2. 在站点上选择注册 Passkey，验证是否弹出「保存通行密钥」弹窗，提供「保存到现有凭据」或「新建」选项
+3. 完成注册后，在保险库编辑页查看该凭据，应显示 Passkey 的添加时间和 RP 信息
+4. 退出登录后再次访问站点，选择 Passkey 登录，验证是否能正确完成认证
+5. 若为同一站点保存了多个 Passkey，验证登录时是否弹出选择列表
 
 ### Q: 服务端是否存储任何明文数据？
 

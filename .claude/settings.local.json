@@ -17,6 +17,13 @@
       "Bash(npx tsc *)",
       "Bash(npx vite *)",
       "Bash(npm run *)",
+      "Bash(npm test *)",
+      "Bash(npx eslint *)",
+      "Bash(npx esbuild *)",
+      "Bash(git reset *)",
+      "Bash(pnpm build *)",
+      "Bash(npx pnpm *)",
+      "Bash(git pull *)",
       "Bash(pnpm run *)",
       "Bash(pnpm --version)",
       "Bash(export PATH=\"/c/Program Files/nodejs:/c/Users/weixi/AppData/Local/pnpm:/c/Users/weixi/AppData/Roaming/npm:$PATH\")",
@@ -30,9 +37,10 @@
       "Bash(sqlite3 /c/projects/pw-book/apps/backend/prisma/dev.db \"SELECT userId, deviceId, deviceName, lastSyncAt FROM sync_records;\")",
       "Bash(sqlite3 /c/projects/pw-book/apps/backend/prisma/dev.db \"SELECT userId, deviceId, lastSyncAt FROM sync_records;\")",
       "Bash(git add *)",
-      "Bash(pnpm build *)",
       "Bash(git commit -m ' *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(npx vitest *)",
+      "Bash(pnpm add *)"
     ]
   }
 }

@@ -69,9 +69,12 @@ export interface CipherData {
   passkey?: {
     credentialId: string;
     privateKey: string;
+    publicKey: string;
     rpId: string;
+    rpName?: string;
     userHandle: string;
-    userDisplayName: string;
+    userName?: string;
+    userDisplayName?: string;
     counter: number;
     createdAt: string;
   };

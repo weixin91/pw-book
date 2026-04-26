@@ -10,6 +10,7 @@ interface VaultItem {
   name: string;
   username: string;
   hasTotp: boolean;
+  hasPasskey: boolean;
 }
 
 interface Props {
@@ -59,15 +60,17 @@ export function VaultList({ onAdd, onEdit, onOpenGenerator }: Props): React.Reac
         try {
           const data = JSON.parse(await decryptCipherData(cipher.data, userKey));
           const totpRaw = String(data.login?.totp ?? "").trim();
+          const pk = data.passkey as { credentialId?: string } | undefined;
           return {
             cipher,
             name: data.name || "未命名",
             username: data.login?.username || "",
             hasTotp: totpRaw.length > 0 && parseOtpauthUri(totpRaw) !== null,
+            hasPasskey: !!pk?.credentialId,
           };
         } catch (err) {
           console.error("[VaultList] 解密失败:", cipher.id, err);
-          return { cipher, name: "解密失败", username: "", hasTotp: false };
+          return { cipher, name: "解密失败", username: "", hasTotp: false, hasPasskey: false };
         }
       })
     );
@@ -245,7 +248,12 @@ export function VaultList({ onAdd, onEdit, onOpenGenerator }: Props): React.Reac
               style={{ cursor: "pointer", flex: 1 }}
               onClick={() => onEdit(item.cipher.id)}
             >
-              <div style={{ fontWeight: 500, fontSize: 14 }}>{item.name}</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <div style={{ fontWeight: 500, fontSize: 14 }}>{item.name}</div>
+                {item.hasPasskey && (
+                  <span style={{ fontSize: 12 }} title="包含通行密钥">🔐</span>
+                )}
+              </div>
               <div style={{ color: "#888", fontSize: 12 }}>{item.username}</div>
             </div>
             <div data-copy-menu>

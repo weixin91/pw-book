@@ -16,6 +16,12 @@ interface UriEntry {
   uri: string;
 }
 
+interface PasskeyInfo {
+  rpId: string;
+  rpName?: string;
+  createdAt: string;
+}
+
 export function CipherForm({ editId, onBack, onSaved, onDeleted }: Props): React.ReactElement {
   const [name, setName] = useState("");
   const [username, setUsername] = useState("");
@@ -25,6 +31,8 @@ export function CipherForm({ editId, onBack, onSaved, onDeleted }: Props): React
   const [totp, setTotp] = useState("");
   const [favorite, setFavorite] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [passkeyInfo, setPasskeyInfo] = useState<PasskeyInfo | null>(null);
+  const [rawData, setRawData] = useState<Record<string, unknown> | null>(null);
 
   useEffect(() => {
     if (editId) {
@@ -41,6 +49,7 @@ export function CipherForm({ editId, onBack, onSaved, onDeleted }: Props): React
     const { decryptCipherData } = await import("../../crypto/crypto-service");
     try {
       const data = JSON.parse(await decryptCipherData(cipher.data, userKey));
+      setRawData(data);
       setName(data.name || "");
       setUsername(data.login?.username || "");
       setPassword(data.login?.password || "");
@@ -52,6 +61,17 @@ export function CipherForm({ editId, onBack, onSaved, onDeleted }: Props): React
       setNotes(data.notes || "");
       setTotp(data.login?.totp || "");
       setFavorite(cipher.favorite);
+
+      const pk = data.passkey;
+      if (pk?.credentialId) {
+        setPasskeyInfo({
+          rpId: pk.rpId,
+          rpName: pk.rpName,
+          createdAt: pk.createdAt,
+        });
+      } else {
+        setPasskeyInfo(null);
+      }
     } catch {
       // ignore
     }
@@ -87,7 +107,7 @@ export function CipherForm({ editId, onBack, onSaved, onDeleted }: Props): React
         .filter((u, i, arr) => arr.indexOf(u) === i)
         .map((u) => ({ uri: u, match: null }));
 
-      const cipherData = {
+      const cipherData: Record<string, unknown> = {
         name: name || cleanUris[0]?.uri || "未命名",
         notes: notes || null,
         fields: [],
@@ -99,6 +119,11 @@ export function CipherForm({ editId, onBack, onSaved, onDeleted }: Props): React
           totp: totp.trim() ? totp.trim() : null,
         },
       };
+
+      // 保留原有的 passkey（如果存在）
+      if (rawData?.passkey) {
+        cipherData.passkey = rawData.passkey;
+      }
 
       const encryptedData = await encryptCipherData(JSON.stringify(cipherData), userKey);
       const ciphers = await StorageService.getCiphers();
@@ -160,6 +185,55 @@ export function CipherForm({ editId, onBack, onSaved, onDeleted }: Props): React
     });
 
     onDeleted?.();
+  }
+
+  async function handleDeletePasskey() {
+    if (!editId || !passkeyInfo || !rawData) return;
+    if (!window.confirm("确定删除此通行密钥吗？此操作不可恢复。")) return;
+
+    const userKey = await StorageService.getUserKey();
+    if (!userKey) return;
+
+    const { encryptCipherData } = await import("../../crypto/crypto-service");
+    const { passkey: _, ...restData } = rawData;
+    const encryptedData = await encryptCipherData(JSON.stringify(restData), userKey);
+
+    const ciphers = await StorageService.getCiphers();
+    const idx = ciphers.findIndex((c) => c.id === editId);
+    if (idx >= 0) {
+      ciphers[idx] = {
+        ...ciphers[idx],
+        data: encryptedData,
+        modifiedAt: new Date().toISOString(),
+      };
+      await StorageService.setCiphers(ciphers);
+
+      const queue = new PendingChangesQueue();
+      await queue.enqueue({
+        cipherId: editId,
+        operation: "UPDATE",
+        encryptedData,
+        clientTimestamp: new Date().toISOString(),
+      });
+
+      setPasskeyInfo(null);
+      setRawData(restData);
+    }
+  }
+
+  function formatDate(iso: string): string {
+    try {
+      const d = new Date(iso);
+      return d.toLocaleDateString("zh-CN", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    } catch {
+      return iso;
+    }
   }
 
   return (
@@ -255,16 +329,10 @@ export function CipherForm({ editId, onBack, onSaved, onDeleted }: Props): React
           );
         })}
         <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
-          <button
-            onClick={() => addUri("https://")}
-            style={smallButtonStyle()}
-          >
+          <button onClick={() => addUri("https://")} style={smallButtonStyle()}>
             + 网站
           </button>
-          <button
-            onClick={() => addUri("androidapp://")}
-            style={smallButtonStyle()}
-          >
+          <button onClick={() => addUri("androidapp://")} style={smallButtonStyle()}>
             + APP
           </button>
         </div>
@@ -297,6 +365,45 @@ export function CipherForm({ editId, onBack, onSaved, onDeleted }: Props): React
           </div>
         )}
       </div>
+
+      {passkeyInfo && (
+        <div
+          style={{
+            marginBottom: 12,
+            padding: 12,
+            borderRadius: 8,
+            border: "1px solid #e3f2fd",
+            background: "#f8fbff",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+            <span style={{ fontSize: 16 }}>🔐</span>
+            <span style={{ fontSize: 14, fontWeight: 500 }}>通行密钥</span>
+          </div>
+          <div style={{ fontSize: 12, color: "#666", marginBottom: 4 }}>
+            站点：{passkeyInfo.rpName || passkeyInfo.rpId}
+          </div>
+          <div style={{ fontSize: 12, color: "#888", marginBottom: 8 }}>
+            添加时间：{formatDate(passkeyInfo.createdAt)}
+          </div>
+          <button
+            onClick={handleDeletePasskey}
+            disabled={loading}
+            style={{
+              padding: "6px 12px",
+              borderRadius: 6,
+              border: "1px solid #d32f2f",
+              background: "#fff",
+              color: "#d32f2f",
+              fontSize: 12,
+              cursor: loading ? "not-allowed" : "pointer",
+            }}
+          >
+            删除通行密钥
+          </button>
+        </div>
+      )}
+
       <label
         style={{
           display: "flex",
@@ -307,11 +414,7 @@ export function CipherForm({ editId, onBack, onSaved, onDeleted }: Props): React
           cursor: "pointer",
         }}
       >
-        <input
-          type="checkbox"
-          checked={favorite}
-          onChange={(e) => setFavorite(e.target.checked)}
-        />
+        <input type="checkbox" checked={favorite} onChange={(e) => setFavorite(e.target.checked)} />
         收藏此凭据
       </label>
       <button
@@ -366,12 +469,7 @@ function smallButtonStyle(): React.CSSProperties {
   };
 }
 
-function renderInput(
-  label: string,
-  value: string,
-  onChange: (v: string) => void,
-  type = "text"
-) {
+function renderInput(label: string, value: string, onChange: (v: string) => void, type = "text") {
   return (
     <div style={{ marginBottom: 12 }}>
       <label style={{ display: "block", fontSize: 12, color: "#666", marginBottom: 4 }}>

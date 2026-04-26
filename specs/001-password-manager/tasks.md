@@ -150,8 +150,10 @@ description: "密码管理应用功能实现的任务列表"
 
 - [X] T061 [P] [US5] 实现 TOTP 验证码生成器于 `apps/edge-extension/src/crypto/totp.ts`（RFC 6238, SHA-1/256/512）
 - [X] T062 [US5] 实现 TOTP 倒计时 UI 于 `apps/edge-extension/src/popup/components/TotpDisplay.tsx`
-- [X] T063 [P] [US5] 实现 Passkey 存储结构于 `apps/edge-extension/src/crypto/passkey-storage.ts`（凭据类型 PASSKEY）
-- [X] T064 [US5] 实现 WebAuthn 拦截于 `apps/edge-extension/src/content/webauthn-handler.ts`（create/get 凭据代理，遵循 FR-008）
+- [X] T063 [P] [US5] 实现 Passkey 存储结构于 `apps/edge-extension/src/crypto/passkey-storage.ts`。Passkey 数据作为 `type=1` (LOGIN) 凭据的附加字段（`data.passkey`）存储，与同一站点的用户名/密码共存，避免独立 `type=5` 条目带来的管理碎片化
+- [X] T064 [US5] 实现 WebAuthn 桥接与选择弹窗于 `apps/edge-extension/src/content/webauthn-handler.ts` 和 `apps/edge-extension/src/content/passkey-prompt.ts`。create 时先查询同域名 LOGIN 候选凭据并弹窗让用户选择「保存到现有」或「新建」；get 时若多匹配则弹窗让用户选择具体凭证，单匹配直接自动选用
+- [X] T075 [US5] 实现凭据编辑页 Passkey 展示与删除于 `apps/edge-extension/src/popup/components/CipherForm.tsx`。加载时读取 `data.passkey`，展示 `rpId`/`rpName` 与添加时间，提供「删除通行密钥」按钮（仅移除 passkey 字段，保留 login 等其他数据）。保存凭据时保留原有 passkey 字段防止意外丢失
+- [X] T076 [US5] 实现凭据列表 Passkey 图标指示于 `apps/edge-extension/src/popup/components/VaultList.tsx`。列表项若包含 `data.passkey`，在名称旁显示 🔐 图标以快速识别
 
 **检查点**：Passkey 和 TOTP 在 Edge 端可用，为 Android 实现提供参考
 

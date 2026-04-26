@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build && pnpm exec esbuild src/content/content-script.ts --bundle --outfile=dist/content.js --format=iife --target=chrome120 --minify && pnpm exec esbuild src/content/webauthn-page.ts --bundle --outfile=dist/webauthn-page.js --format=iife --target=chrome120 --minify",
+    "build": "tsc && vite build && npx esbuild src/content/content-script.ts --bundle --outfile=dist/content.js --format=iife --target=chrome120 --minify && npx esbuild src/content/webauthn-page.ts --bundle --outfile=dist/webauthn-page.js --format=iife --target=chrome120 --minify",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint src/ --ext .ts,.tsx"

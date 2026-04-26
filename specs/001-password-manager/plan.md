@@ -89,8 +89,8 @@ apps/
 ├── edge-extension/       # Edge 浏览器插件
 │   ├── src/
 │   │   ├── background/   # Service Worker（核心业务逻辑）
-│   │   ├── content/      # Content Scripts（自动填充、表单检测）
-│   │   ├── popup/        # 扩展弹窗 UI
+│   │   ├── content/      # Content Scripts（自动填充、表单检测、WebAuthn 桥接与 Passkey 弹窗）
+│   │   ├── popup/        # 扩展弹窗 UI（保险库列表、凭据编辑、密码生成器、Passkey 管理）
 │   │   ├── options/      # 设置页面
 │   │   ├── crypto/       # Web Crypto 加密实现
 │   │   ├── sync/         # 同步客户端

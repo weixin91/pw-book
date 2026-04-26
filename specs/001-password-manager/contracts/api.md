@@ -605,7 +605,7 @@ const ws = new WebSocket('wss://api.pwbook.example.com/ws?token=<jwt>');
 | 2 | `CARD` | 银行卡 |
 | 3 | `IDENTITY` | 身份信息 |
 | 4 | `SECURE_NOTE` | 安全笔记 |
-| 5 | `PASSKEY` | Passkey 凭据 |
+| 5 | `PASSKEY` | Passkey 凭据（独立类型）。**Edge 端实现**：Passkey 数据作为 `type=1` (LOGIN) 凭据的 `data.passkey` 附加字段存储，与同一站点的用户名/密码共存 |
 
 ### KdfType
 
