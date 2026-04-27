@@ -366,34 +366,22 @@ CookieData
 
 ### 2.9 CookieSyncConfig（Cookie 同步规则配置）
 
-按域名配置自动同步行为，**可同步到服务端**实现多端规则共享。
+按域名配置同步行为，**可同步到服务端**实现多端规则共享。当前版本仅支持手动 Push/Pull，不包含自动同步。
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | `id` | UUID | 主键 |
 | `userId` | UUID | 所属用户 |
 | `domain` | String | 基础域名（如 `example.com`） |
-| `autoPush` | Boolean | Cookie 变化时自动推送（默认 false） |
-| `autoPull` | Boolean | 访问站点时自动拉取注入（默认 false） |
 | `includeLocalStorage` | Boolean | 是否同步 localStorage（默认 false） |
 | `createdAt` | DateTime | 创建时间 |
 | `modifiedAt` | DateTime | 最后修改时间 |
-
-**自动同步行为**：
-
-| 配置 | autoPush=true | autoPull=true |
-|------|--------------|---------------|
-| 触发时机 | `chrome.cookies.onChanged` 且变化域名匹配 | `chrome.tabs.onUpdated` 且访问域名匹配 |
-| 防抖 | 10 秒防抖，30 秒冷却期 | 标签页去重（同域名已有打开标签则不拉取） |
-| 用户体验 | 静默推送，Badge 状态指示 | 注入后自动刷新页面使 Cookie 生效 |
 
 **本地存储**（Edge）：
 ```typescript
 // chrome.storage.local
 cookieSyncConfig: {
   [domain: string]: {
-    autoPush: boolean;
-    autoPull: boolean;
     includeLocalStorage: boolean;
   }
 }

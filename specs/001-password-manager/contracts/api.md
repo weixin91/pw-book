@@ -477,7 +477,7 @@ Content-Type: application/json
 }
 ```
 
-**用途**: 自动同步（autoPush）时，若多个域名的 Cookie 在防抖窗口内同时变化，批量提交以提高效率。
+**用途**: 手动同步时，支持将多个域名的 Cookie 批量提交以提高效率。
 
 ---
 
@@ -552,8 +552,6 @@ Content-Type: application/json
 **Request Body**:
 ```json
 {
-  "autoPush": true,
-  "autoPull": false,
   "includeLocalStorage": false
 }
 ```
@@ -563,8 +561,6 @@ Content-Type: application/json
 {
   "id": "aa0e8400-e29b-41d4-a716-446655440006",
   "domain": "example.com",
-  "autoPush": true,
-  "autoPull": false,
   "includeLocalStorage": false,
   "createdAt": "2026-04-22T10:00:00Z",
   "modifiedAt": "2026-04-22T12:00:00Z"
@@ -585,8 +581,6 @@ Authorization: Bearer <token>
     {
       "id": "aa0e8400-e29b-41d4-a716-446655440006",
       "domain": "example.com",
-      "autoPush": true,
-      "autoPull": false,
       "includeLocalStorage": false,
       "createdAt": "2026-04-22T10:00:00Z",
       "modifiedAt": "2026-04-22T12:00:00Z"

@@ -369,7 +369,7 @@ chrome-extension/
     listen.ts      # 消息处理器：Push / Pull / Remove / Edit Cookie
     subscribe.ts   # 存储订阅：状态变化时更新 Badge、Context Menu
   pages/
-    popup/         # 弹窗：手动 Push/Pull、开关 autoPush/autoPull
+    popup/         # 弹窗：手动 Push/Pull、includeLocalStorage 开关
     sidepanel/     # 侧边栏管理面板：查看所有域名 Cookie、编辑单条 Cookie
     content/       # Content Script：localStorage 的读取与写入
     options/       # 设置页：账号配置（Cloudflare/GitHub）、全局选项
@@ -457,40 +457,29 @@ Base64 字符串
 - 但 pw-book 已有端到端加密体系（User Key + AES-256-GCM），无需额外的基于用户密码的加密层。可直接用 User Key 加密 protobuf 编码后的二进制数据
 - 如果采用 protobuf，需要引入 `protobufjs` 或类似的编解码库，增加约 50-100KB 打包体积。考虑到 pw-book 的 Cookie 同步是 P3 优先级，**初期可先用 JSON + gzip，后续如体积敏感再迁移到 protobuf**
 
-### 10.4 自动同步规则设计
+### 10.4 同步规则设计
 
-sync-your-cookie 的自动同步规则设计简洁而实用：
+sync-your-cookie 的自动同步规则设计简洁而实用。pw-book 当前版本**仅保留手动 Push/Pull**，不实现自动同步，但规则配置按域名存储的方式仍然适用：
 
 **按域名配置（DomainConfigStorage）**:
 ```typescript
 interface DomainConfig {
   domainMap: {
     [host: string]: {
-      autoPush?: boolean;   // Cookie 变化时自动推送
-      autoPull?: boolean;   // 访问站点时自动拉取并注入
-      favIconUrl?: string;  // 站点图标（UI 展示）
-      sourceUrl?: string;   // 来源 URL
+      includeLocalStorage?: boolean; // 是否同步 localStorage（默认 false）
+      favIconUrl?: string;           // 站点图标（UI 展示）
+      sourceUrl?: string;            // 来源 URL
     }
   }
 }
 ```
 
-**Auto Push（自动推送）**:
-- 监听 `chrome.cookies.onChanged` 事件
-- 变化域名匹配 `domainMap` 中 `autoPush=true` 的条目时触发
-- **10 秒防抖**：cookie 频繁变化时合并为一次推送
-- **30 秒冷却**：同一周期内最多触发一次自动推送
-- 支持多域名批量推送：`pushMultipleDomainCookies()`
-
-**Auto Pull（自动拉取）**:
-- 监听 `chrome.tabs.onUpdated`（`status === 'loading'`）
-- 访问域名匹配 `domainPull=true` 时触发
-- **去重机制**：检查是否已有同域名的打开标签页，避免重复拉取
-- 拉取后自动刷新页面（`chrome.tabs.reload`），使 Cookie 生效
+**手动同步**：
+- 用户通过 Popup 面板手动触发 Push/Pull
+- Pull 后自动刷新页面（`chrome.tabs.reload`），使 Cookie 生效
 
 **对我们的启示**：
 - 按域名配置同步规则的方式非常实用，应在 pw-book 中采用
-- 防抖和去重策略值得直接借鉴，避免频繁同步和页面重复刷新
 - pw-book 可将规则配置同步到服务端，实现多端规则共享
 
 ### 10.5 存储后端设计
@@ -551,7 +540,7 @@ for (const cookie of cookieDetails) {
 | 方面 | sync-your-cookie 方案 | pw-book 适配建议 |
 |------|----------------------|-----------------|
 | **编码** | protobuf + gzip + 可选 AES-GCM | JSON + gzip（初期），User Key 端到端加密。后续可评估 protobuf |
-| **自动规则** | 按域名 autoPush / autoPull | 直接借鉴，规则可同步到服务端 |
+| **同步规则** | 按域名配置同步开关 | 直接借鉴，规则可同步到服务端（当前版本仅手动 Push/Pull） |
 | **防抖** | 10 秒防抖 + 30 秒冷却 | 直接借鉴 |
 | **存储粒度** | 单 KV key 存全量 | 按域名分记录，利用现有同步协议 |
 | **localStorage** | Content Script 读写 | 直接借鉴，但标记为可选/实验性功能 |
