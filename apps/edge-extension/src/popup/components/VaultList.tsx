@@ -723,38 +723,56 @@ function renderSyncFooter(status: SyncStatus | null, onSyncNow: () => void): Rea
           </span>
         )}
       </span>
-      <button
-        onClick={onSyncNow}
-        title="立即同步"
-        style={{
-          position: "absolute",
-          right: 36,
-          background: "none",
-          border: "none",
-          cursor: "pointer",
-          fontSize: 16,
-          color: "#666",
-          padding: "4px 8px",
-        }}
-      >
-        &#x21bb;
-      </button>
-      <button
-        onClick={() => chrome.runtime.openOptionsPage()}
-        title="打开设置"
+      <div
         style={{
           position: "absolute",
           right: 4,
-          background: "none",
-          border: "none",
-          cursor: "pointer",
-          fontSize: 18,
-          color: "#666",
-          padding: "4px 10px",
+          display: "flex",
+          alignItems: "center",
+          gap: 2,
         }}
       >
-        &#9881;
-      </button>
+        <button
+          onClick={onSyncNow}
+          title="立即同步"
+          style={{
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            fontSize: 16,
+            color: "#666",
+            padding: "4px 6px",
+            lineHeight: 1,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            width: 28,
+            height: 28,
+          }}
+        >
+          &#x21bb;
+        </button>
+        <button
+          onClick={() => chrome.runtime.openOptionsPage()}
+          title="打开设置"
+          style={{
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            fontSize: 16,
+            color: "#666",
+            padding: "4px 6px",
+            lineHeight: 1,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            width: 28,
+            height: 28,
+          }}
+        >
+          &#9881;
+        </button>
+      </div>
     </div>
   );
 }
