@@ -11,6 +11,7 @@ export interface CookieItem {
   secure: boolean;
   httpOnly: boolean;
   sameSite: "no_restriction" | "lax" | "strict" | "unspecified";
+  partitioned?: boolean;
   expirationDate?: number;
   hostOnly: boolean;
   session: boolean;
@@ -74,6 +75,7 @@ export async function extractCookiesForDomain(baseDomain: string): Promise<Cooki
       hostOnly: c.hostOnly,
       session: c.session,
       storeId: c.storeId,
+      partitioned: (c as unknown as Record<string, unknown>).partitioned as boolean | undefined,
     }));
 }
 

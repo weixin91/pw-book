@@ -26,18 +26,25 @@ export async function injectCookie(cookie: CookieItem): Promise<boolean> {
       path: cookie.path,
       secure: cookie.secure,
       httpOnly: cookie.httpOnly,
-      storeId: cookie.storeId,
     };
-    // hostOnly cookie 不传递 domain，否则 Chrome API 可能拒绝
-    if (!cookie.hostOnly) {
-      details.domain = cookie.domain;
+    // 不传递空/undefined 的 storeId
+    if (cookie.storeId) {
+      details.storeId = cookie.storeId;
     }
-    // sameSite 为 unspecified 时不传递，否则 Chrome API 会拒绝
+    // hostOnly cookie 不传递 domain；非 hostOnly 去掉前导点（.domain → domain）
+    if (!cookie.hostOnly) {
+      details.domain = cookie.domain.startsWith(".") ? cookie.domain.slice(1) : cookie.domain;
+    }
+    // sameSite 为 unspecified 时不传递
     if (cookie.sameSite && cookie.sameSite !== "unspecified") {
       details.sameSite = cookie.sameSite as chrome.cookies.SameSiteStatus;
     }
     if (cookie.expirationDate) {
       details.expirationDate = cookie.expirationDate;
+    }
+    // Partitioned Cookie (CHIPS) 支持
+    if ((cookie as unknown as Record<string, unknown>).partitioned === true) {
+      (details as unknown as Record<string, unknown>).partitioned = true;
     }
     await chrome.cookies.set(details);
     return true;
