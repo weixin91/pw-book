@@ -20,9 +20,10 @@ interface Props {
   onAdd: () => void;
   onEdit: (id: string) => void;
   onOpenGenerator: () => void;
+  onOpenCookieSync: () => void;
 }
 
-export function VaultList({ onAdd, onEdit, onOpenGenerator }: Props): React.ReactElement {
+export function VaultList({ onAdd, onEdit, onOpenGenerator, onOpenCookieSync }: Props): React.ReactElement {
   const [items, setItems] = useState<VaultItem[]>([]);
   const [search, setSearch] = useState("");
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -267,22 +268,38 @@ export function VaultList({ onAdd, onEdit, onOpenGenerator }: Props): React.Reac
           新增
         </button>
       </div>
-      <button
-        onClick={onOpenGenerator}
-        style={{
-          width: "100%",
-          padding: "8px",
-          borderRadius: 6,
-          border: "1px solid #1a73e8",
-          background: "#fff",
-          color: "#1a73e8",
-          fontSize: 13,
-          cursor: "pointer",
-          marginBottom: 12,
-        }}
-      >
-        密码生成器
-      </button>
+      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+        <button
+          onClick={onOpenGenerator}
+          style={{
+            flex: 1,
+            padding: "8px",
+            borderRadius: 6,
+            border: "1px solid #1a73e8",
+            background: "#fff",
+            color: "#1a73e8",
+            fontSize: 13,
+            cursor: "pointer",
+          }}
+        >
+          密码生成器
+        </button>
+        <button
+          onClick={onOpenCookieSync}
+          style={{
+            flex: 1,
+            padding: "8px",
+            borderRadius: 6,
+            border: "1px solid #1a73e8",
+            background: "#fff",
+            color: "#1a73e8",
+            fontSize: 13,
+            cursor: "pointer",
+          }}
+        >
+          Cookie 同步
+        </button>
+      </div>
       {suggestions.length > 0 && (
         <div style={{ marginBottom: 12 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
@@ -683,16 +700,36 @@ function renderSyncFooter(status: SyncStatus | null): React.ReactElement {
         borderTop: "1px solid #eee",
         fontSize: 11,
         color: "#888",
-        textAlign: "center",
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
         zIndex: 50,
       }}
     >
-      {text}
-      {status && status.pendingChanges > 0 && (
-        <span style={{ marginLeft: 8, color: "#1a73e8" }}>
-          待同步: {status.pendingChanges}
-        </span>
-      )}
+      <span>
+        {text}
+        {status && status.pendingChanges > 0 && (
+          <span style={{ marginLeft: 8, color: "#1a73e8" }}>
+            待同步: {status.pendingChanges}
+          </span>
+        )}
+      </span>
+      <button
+        onClick={() => chrome.runtime.openOptionsPage()}
+        title="打开设置"
+        style={{
+          position: "absolute",
+          right: 4,
+          background: "none",
+          border: "none",
+          cursor: "pointer",
+          fontSize: 18,
+          color: "#666",
+          padding: "4px 10px",
+        }}
+      >
+        &#9881;
+      </button>
     </div>
   );
 }

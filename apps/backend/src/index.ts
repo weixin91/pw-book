@@ -9,6 +9,7 @@ import { cipherRoutes } from "./ciphers/routes.js";
 import { deviceRoutes } from "./devices/routes.js";
 import { domainAssocRoutes } from "./domain-assoc/routes.js";
 import { cookieRoutes } from "./cookies/routes.js";
+import { cookieConfigRoutes } from "./cookies/config-routes.js";
 import { registerWebSocket } from "./websocket/server.js";
 
 dotenv.config();
@@ -33,6 +34,7 @@ await app.register(cipherRoutes, { prefix: "/api/ciphers" });
 await app.register(deviceRoutes, { prefix: "/api/devices" });
 await app.register(domainAssocRoutes, { prefix: "/api/domain-associations" });
 await app.register(cookieRoutes, { prefix: "/api/cookies" });
+await app.register(cookieConfigRoutes, { prefix: "/api/cookie-sync-config" });
 registerWebSocket(app);
 
 app.get("/health", async () => ({ status: "ok" }));

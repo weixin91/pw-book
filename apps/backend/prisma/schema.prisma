@@ -29,6 +29,7 @@ model User {
   syncRecords       SyncRecord[]
   devices           Device[]
   cookies           CookieData[]
+  cookieSyncConfigs CookieSyncConfig[]
   rejectedSites     RejectedSite[]
 
   @@map("users")
@@ -93,16 +94,33 @@ model Device {
 }
 
 model CookieData {
-  id         String   @id @default(uuid())
-  userId     String
-  domain     String
+  id            String   @id @default(uuid())
+  userId        String
+  domain        String
   encryptedData String
-  modifiedAt DateTime @default(now())
+  createdAt     DateTime @default(now())
+  modifiedAt    DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, domain])
   @@map("cookies")
+}
+
+model CookieSyncConfig {
+  id                  String   @id @default(uuid())
+  userId              String
+  domain              String
+  autoPush            Boolean  @default(false)
+  autoPull            Boolean  @default(false)
+  includeLocalStorage Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  modifiedAt          DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, domain])
+  @@map("cookie_sync_configs")
 }
 
 model RejectedSite {

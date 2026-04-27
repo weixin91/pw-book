@@ -8,6 +8,7 @@ import { InlineMenu } from "../autofill/inline-menu.js";
 import { StorageService } from "../platform/storage.js";
 import { parseOtpauthUri, generateTotpCode } from "../crypto/totp.js";
 import { installWebAuthnBridge } from "./webauthn-handler.js";
+import { initLocalStorageBridge } from "./localstorage-bridge.js";
 
 declare const __PWBOOK_INITIALIZED__: boolean | undefined;
 
@@ -56,6 +57,9 @@ async function initContentScript(): Promise<void> {
 
   // TOTP 自动填充始终启用（与密码自动填充模式独立）
   setupTotpFieldDetection(collector, inserter, inlineMenu);
+
+  // 初始化 localStorage 桥接
+  initLocalStorageBridge();
 
   // 监听 background script 消息
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {

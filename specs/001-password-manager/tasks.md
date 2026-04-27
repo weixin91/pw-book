@@ -167,21 +167,21 @@ description: "密码管理应用功能实现的任务列表"
 
 ### 后端任务
 
-- [ ] T067 [P] [US6] 实现 Cookie 数据模型与 Prisma Schema 于 `apps/backend/prisma/schema.prisma`（CookieData、CookieSyncConfig 表）
-- [ ] T068 [P] [US6] 实现 Cookie 同步 API 于 `apps/backend/src/cookies/routes.ts`（POST /api/cookies、POST /api/cookies/batch、GET /api/cookies/:domain、GET /api/cookies、DELETE /api/cookies/:domain，遵循 `contracts/api.md` §5.1–5.5）
-- [ ] T069 [P] [US6] 实现 Cookie 同步规则配置 API 于 `apps/backend/src/cookies/config-routes.ts`（PUT/GET/DELETE /api/cookie-sync-config，遵循 `contracts/api.md` §5.6）
+- [X] T067 [P] [US6] 实现 Cookie 数据模型与 Prisma Schema 于 `apps/backend/prisma/schema.prisma`（CookieData、CookieSyncConfig 表）
+- [X] T068 [P] [US6] 实现 Cookie 同步 API 于 `apps/backend/src/cookies/routes.ts`（POST /api/cookies、POST /api/cookies/batch、GET /api/cookies/:domain、GET /api/cookies、DELETE /api/cookies/:domain，遵循 `contracts/api.md` §5.1–5.5）
+- [X] T069 [P] [US6] 实现 Cookie 同步规则配置 API 于 `apps/backend/src/cookies/config-routes.ts`（PUT/GET/DELETE /api/cookie-sync-config，遵循 `contracts/api.md` §5.6）
 
 ### Edge 插件任务
 
-- [ ] T070 [US6] 实现 Cookie 提取与编码模块于 `apps/edge-extension/src/cookie/cookie-extractor.ts`（`chrome.cookies.getAll()` 封装、CookieItem 格式化、排除敏感字段）
-- [ ] T071 [P] [US6] 实现 Cookie 数据编解码与压缩于 `apps/edge-extension/src/cookie/cookie-codec.ts`（JSON → gzip → AES-256-GCM 加密 → Base64；反向解码。复用 User Key，参考 `contracts/crypto.md`）
-- [ ] T072 [US6] 实现 Cookie 同步客户端于 `apps/edge-extension/src/sync/cookie-sync-client.ts`（上传/拉取/删除、批量上传、错误处理与重试）
-- [ ] T073 [US6] 实现 Cookie 注入引擎于 `apps/edge-extension/src/cookie/cookie-injector.ts`（`chrome.cookies.set()` 封装、按 domain/path/secure 等属性精确还原、localStorage 通过 content script 注入）
-- [ ] T074 [US6] 实现自动同步规则配置存储于 `apps/edge-extension/src/cookie/sync-config-storage.ts`（按域名存储 autoPush/autoPull/includeLocalStorage，与服务端规则双向同步）
-- [ ] T075 [US6] 实现自动推送（autoPush）逻辑于 `apps/edge-extension/src/background/cookie-auto-push.ts`（监听 `chrome.cookies.onChanged`、按域名规则筛选、10 秒防抖 + 30 秒冷却、Badge 状态指示）
-- [ ] T076 [US6] 实现自动拉取（autoPull）逻辑于 `apps/edge-extension/src/background/cookie-auto-pull.ts`（监听 `chrome.tabs.onUpdated`、按域名规则筛选、标签页去重避免重复拉取、注入后可选刷新页面）
-- [ ] T077 [P] [US6] 实现 Popup Cookie 同步控制面板于 `apps/edge-extension/src/popup/components/CookieSyncPanel.tsx`（当前域名手动 Push/Pull、autoPush/autoPull 开关、localStorage 同步开关）
-- [ ] T078 [P] [US6] 实现 Content Script localStorage 桥接于 `apps/edge-extension/src/content/localstorage-bridge.ts`（消息接口：GET_LOCAL_STORAGE / SET_LOCAL_STORAGE，同源策略下的安全读写）
+- [X] T070 [US6] 实现 Cookie 提取与编码模块于 `apps/edge-extension/src/cookie/cookie-extractor.ts`（`chrome.cookies.getAll()` 封装、CookieItem 格式化、排除敏感字段）
+- [X] T071 [P] [US6] 实现 Cookie 数据编解码与压缩于 `apps/edge-extension/src/cookie/cookie-codec.ts`（JSON → gzip → AES-256-GCM 加密 → Base64；反向解码。复用 User Key，参考 `contracts/crypto.md`）
+- [X] T072 [US6] 实现 Cookie 同步客户端于 `apps/edge-extension/src/sync/cookie-sync-client.ts`（上传/拉取/删除、批量上传、错误处理与重试）
+- [X] T073 [US6] 实现 Cookie 注入引擎于 `apps/edge-extension/src/cookie/cookie-injector.ts`（`chrome.cookies.set()` 封装、按 domain/path/secure 等属性精确还原、localStorage 通过 content script 注入）
+- [X] T074 [US6] 实现自动同步规则配置存储于 `apps/edge-extension/src/cookie/sync-config-storage.ts`（按域名存储 autoPush/autoPull/includeLocalStorage，与服务端规则双向同步）
+- [X] T075 [US6] 实现自动推送（autoPush）逻辑于 `apps/edge-extension/src/background/cookie-auto-push.ts`（监听 `chrome.cookies.onChanged`、按域名规则筛选、10 秒防抖 + 30 秒冷却、Badge 状态指示）
+- [X] T076 [US6] 实现自动拉取（autoPull）逻辑于 `apps/edge-extension/src/background/cookie-auto-pull.ts`（监听 `chrome.tabs.onUpdated`、按域名规则筛选、标签页去重避免重复拉取、注入后可选刷新页面）
+- [X] T077 [P] [US6] 实现 Popup Cookie 同步控制面板于 `apps/edge-extension/src/popup/components/CookieSyncPanel.tsx`（当前域名手动 Push/Pull、autoPush/autoPull 开关、localStorage 同步开关）
+- [X] T078 [P] [US6] 实现 Content Script localStorage 桥接于 `apps/edge-extension/src/content/localstorage-bridge.ts`（消息接口：GET_LOCAL_STORAGE / SET_LOCAL_STORAGE，同源策略下的安全读写）
 
 **检查点**：Cookie 同步仅在 Edge 端可用；手动同步和自动同步（autoPush/autoPull）均通过独立测试
 

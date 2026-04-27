@@ -259,60 +259,68 @@ export function CipherForm({ editId, onBack, onSaved, onDeleted }: Props): React
     return (
       <div style={{ marginBottom: 12 }}>
         <label style={{ display: "block", fontSize: 12, color: "#666", marginBottom: 4 }}>密码</label>
-        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+        <div style={{ position: "relative" }}>
           <input
             type={showPassword ? "text" : "password"}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             style={{
-              flex: 1,
-              padding: "8px 10px",
+              width: "100%",
+              padding: "8px 72px 8px 10px",
               borderRadius: 6,
               border: "1px solid #ddd",
               fontSize: 13,
               boxSizing: "border-box",
             }}
           />
-          <button
-            onClick={() => setShowPassword((v) => !v)}
-            title={showPassword ? "隐藏密码" : "显示密码"}
+          <div
             style={{
-              border: "1px solid #ddd",
-              background: "#fff",
-              borderRadius: 6,
-              width: 32,
-              height: 32,
-              cursor: "pointer",
-              color: "#666",
-              fontSize: 14,
+              position: "absolute",
+              right: 4,
+              top: "50%",
+              transform: "translateY(-50%)",
               display: "flex",
+              gap: 2,
               alignItems: "center",
-              justifyContent: "center",
-              flexShrink: 0,
             }}
           >
-            {showPassword ? "🙈" : "👁"}
-          </button>
-          <button
-            onClick={handleGeneratePassword}
-            title="生成随机密码"
-            style={{
-              border: "1px solid #ddd",
-              background: "#fff",
-              borderRadius: 6,
-              width: 32,
-              height: 32,
-              cursor: "pointer",
-              color: "#666",
-              fontSize: 16,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              flexShrink: 0,
-            }}
-          >
-            ⚡
-          </button>
+            <button
+              onClick={() => setShowPassword((v) => !v)}
+              title={showPassword ? "隐藏密码" : "显示密码"}
+              style={{
+                border: "none",
+                background: "transparent",
+                width: 28,
+                height: 28,
+                cursor: "pointer",
+                color: "#666",
+                fontSize: 14,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              {showPassword ? "🙈" : "👁"}
+            </button>
+            <button
+              onClick={handleGeneratePassword}
+              title="生成随机密码"
+              style={{
+                border: "none",
+                background: "transparent",
+                width: 28,
+                height: 28,
+                cursor: "pointer",
+                color: "#666",
+                fontSize: 16,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              ⚡
+            </button>
+          </div>
         </div>
       </div>
     );
