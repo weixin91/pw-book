@@ -3,14 +3,36 @@
 
 import type { CookieItem, LocalStorageItem, CookieData } from "./cookie-extractor.js";
 
-/**
- * 构造 Cookie 设置的 URL
- */
-function buildCookieUrl(cookie: CookieItem): string {
-  const protocol = cookie.secure ? "https" : "http";
-  // domain 可能以 . 开头（表示子域共享），构造 URL 时去掉前缀点
+function buildSetDetails(cookie: CookieItem, overrideSecure?: boolean): chrome.cookies.SetDetails {
+  const secure = overrideSecure ?? cookie.secure;
+  const protocol = secure ? "https" : "http";
   const host = cookie.domain.startsWith(".") ? cookie.domain.slice(1) : cookie.domain;
-  return `${protocol}://${host}${cookie.path}`;
+  const url = `${protocol}://${host}${cookie.path}`;
+
+  const details: chrome.cookies.SetDetails = {
+    url,
+    name: cookie.name,
+    value: cookie.value,
+    path: cookie.path,
+    secure,
+    httpOnly: cookie.httpOnly,
+  };
+  if (cookie.storeId) {
+    details.storeId = cookie.storeId;
+  }
+  if (!cookie.hostOnly) {
+    details.domain = host;
+  }
+  if (cookie.sameSite && cookie.sameSite !== "unspecified") {
+    details.sameSite = cookie.sameSite as chrome.cookies.SameSiteStatus;
+  }
+  if (cookie.expirationDate) {
+    details.expirationDate = cookie.expirationDate;
+  }
+  if ((cookie as unknown as Record<string, unknown>).partitioned === true) {
+    (details as unknown as Record<string, unknown>).partitioned = true;
+  }
+  return details;
 }
 
 /**
@@ -18,43 +40,32 @@ function buildCookieUrl(cookie: CookieItem): string {
  */
 export async function injectCookie(cookie: CookieItem): Promise<boolean> {
   try {
-    const url = buildCookieUrl(cookie);
-    const details: chrome.cookies.SetDetails = {
-      url,
-      name: cookie.name,
-      value: cookie.value,
-      path: cookie.path,
-      secure: cookie.secure,
-      httpOnly: cookie.httpOnly,
-    };
-    // 不传递空/undefined 的 storeId
-    if (cookie.storeId) {
-      details.storeId = cookie.storeId;
-    }
-    // hostOnly cookie 不传递 domain；非 hostOnly 去掉前导点（.domain → domain）
-    if (!cookie.hostOnly) {
-      details.domain = cookie.domain.startsWith(".") ? cookie.domain.slice(1) : cookie.domain;
-    }
-    // sameSite 为 unspecified 时不传递
-    if (cookie.sameSite && cookie.sameSite !== "unspecified") {
-      details.sameSite = cookie.sameSite as chrome.cookies.SameSiteStatus;
-    }
-    if (cookie.expirationDate) {
-      details.expirationDate = cookie.expirationDate;
-    }
-    // Partitioned Cookie (CHIPS) 支持
-    if ((cookie as unknown as Record<string, unknown>).partitioned === true) {
-      (details as unknown as Record<string, unknown>).partitioned = true;
-    }
-    await chrome.cookies.set(details);
+    await chrome.cookies.set(buildSetDetails(cookie));
     return true;
-  } catch (err) {
-    console.warn(
-      `[PWBook] Cookie 注入失败: ${cookie.name} ` +
-      `(domain=${cookie.domain}, path=${cookie.path}, secure=${cookie.secure}, sameSite=${cookie.sameSite}, hostOnly=${cookie.hostOnly})`,
-      err
-    );
-    return false;
+  } catch {
+    // 首次失败：对于非 secure cookie，尝试强制 secure=true 重试（兼容 HSTS 站点）
+    if (!cookie.secure) {
+      try {
+        await chrome.cookies.set(buildSetDetails(cookie, true));
+        return true;
+      } catch {
+        // 重试也失败，继续走最后的降级
+      }
+    }
+    // 最终降级：不传递 domain，让 Chrome 根据 URL 自行推断
+    try {
+      const details = buildSetDetails(cookie);
+      delete (details as unknown as Record<string, unknown>).domain;
+      await chrome.cookies.set(details);
+      return true;
+    } catch (err) {
+      console.warn(
+        `[PWBook] Cookie 注入失败: ${cookie.name} ` +
+        `(domain=${cookie.domain}, path=${cookie.path}, secure=${cookie.secure}, sameSite=${cookie.sameSite}, hostOnly=${cookie.hostOnly})`,
+        err
+      );
+      return false;
+    }
   }
 }
 
