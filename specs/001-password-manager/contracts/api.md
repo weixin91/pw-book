@@ -403,7 +403,9 @@ Authorization: Bearer <token>
 
 ## 5. Cookie 同步接口（仅 Edge 插件）
 
-### 5.1 上传 Cookie
+Cookie 同步数据按域名独立存储，每条记录包含该域名下完整的 Cookie 列表（可选 localStorage）。数据在客户端用 User Key 加密，服务端不解密。
+
+### 5.1 上传/覆盖某域名 Cookie
 
 ```http
 POST /api/cookies
@@ -420,11 +422,66 @@ Content-Type: application/json
 }
 ```
 
-**Response 201**
+| 字段 | 类型 | 必需 | 说明 |
+|------|------|------|------|
+| `domain` | String | 是 | 基础域名（如 `example.com`） |
+| `encryptedData` | String | 是 | 加密后的 CookieData JSON（含 gzip 压缩） |
+| `modifiedAt` | ISO 8601 | 是 | 客户端变更时间 |
+
+**Response 201**:
+```json
+{
+  "id": "990e8400-e29b-41d4-a716-446655440005",
+  "domain": "example.com",
+  "encryptedData": "<encrypted-cookie-json-base64>",
+  "modifiedAt": "2026-04-22T12:00:00Z"
+}
+```
+
+**行为**: 若该用户下已存在相同 `domain` 的记录，则覆盖（last-write-wins）。
 
 ---
 
-### 5.2 获取 Cookie
+### 5.2 批量上传多域名 Cookie
+
+```http
+POST /api/cookies/batch
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+**Request Body**:
+```json
+{
+  "items": [
+    {
+      "domain": "example.com",
+      "encryptedData": "<encrypted-cookie-json-base64>",
+      "modifiedAt": "2026-04-22T12:00:00Z"
+    },
+    {
+      "domain": "another.com",
+      "encryptedData": "<encrypted-cookie-json-base64>",
+      "modifiedAt": "2026-04-22T12:00:00Z"
+    }
+  ]
+}
+```
+
+**Response 200**:
+```json
+{
+  "accepted": ["example.com", "another.com"],
+  "rejected": [],
+  "newSyncToken": "<opaque-sync-token>"
+}
+```
+
+**用途**: 自动同步（autoPush）时，若多个域名的 Cookie 在防抖窗口内同时变化，批量提交以提高效率。
+
+---
+
+### 5.3 获取某域名 Cookie
 
 ```http
 GET /api/cookies/:domain
@@ -434,11 +491,118 @@ Authorization: Bearer <token>
 **Response 200**:
 ```json
 {
+  "id": "990e8400-e29b-41d4-a716-446655440005",
   "domain": "example.com",
   "encryptedData": "<encrypted-cookie-json-base64>",
   "modifiedAt": "2026-04-22T12:00:00Z"
 }
 ```
+
+**Response 404**: 该域名无同步记录
+
+---
+
+### 5.4 获取全部 Cookie 同步列表
+
+```http
+GET /api/cookies
+Authorization: Bearer <token>
+```
+
+**Response 200**:
+```json
+{
+  "data": [
+    {
+      "id": "990e8400-e29b-41d4-a716-446655440005",
+      "domain": "example.com",
+      "encryptedData": "<encrypted-cookie-json-base64>",
+      "modifiedAt": "2026-04-22T12:00:00Z"
+    }
+  ],
+  "syncToken": "<opaque-sync-token>"
+}
+```
+
+**用途**: Edge 插件启动时全量拉取所有已同步域名的 Cookie 列表。
+
+---
+
+### 5.5 删除某域名 Cookie
+
+```http
+DELETE /api/cookies/:domain
+Authorization: Bearer <token>
+```
+
+**Response 204**
+
+---
+
+### 5.6 Cookie 同步规则配置
+
+#### 5.6.1 创建/更新规则
+
+```http
+PUT /api/cookie-sync-config/:domain
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+**Request Body**:
+```json
+{
+  "autoPush": true,
+  "autoPull": false,
+  "includeLocalStorage": false
+}
+```
+
+**Response 200**:
+```json
+{
+  "id": "aa0e8400-e29b-41d4-a716-446655440006",
+  "domain": "example.com",
+  "autoPush": true,
+  "autoPull": false,
+  "includeLocalStorage": false,
+  "createdAt": "2026-04-22T10:00:00Z",
+  "modifiedAt": "2026-04-22T12:00:00Z"
+}
+```
+
+#### 5.6.2 获取所有规则
+
+```http
+GET /api/cookie-sync-config
+Authorization: Bearer <token>
+```
+
+**Response 200**:
+```json
+{
+  "data": [
+    {
+      "id": "aa0e8400-e29b-41d4-a716-446655440006",
+      "domain": "example.com",
+      "autoPush": true,
+      "autoPull": false,
+      "includeLocalStorage": false,
+      "createdAt": "2026-04-22T10:00:00Z",
+      "modifiedAt": "2026-04-22T12:00:00Z"
+    }
+  ]
+}
+```
+
+#### 5.6.3 删除规则
+
+```http
+DELETE /api/cookie-sync-config/:domain
+Authorization: Bearer <token>
+```
+
+**Response 204**
 
 ---
 

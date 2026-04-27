@@ -283,6 +283,122 @@ function shouldPromptSave(domain: string): boolean {
 }
 ```
 
+### 2.8 CookieData（Cookie 同步数据）
+
+存储某域名下的 Cookie 和 localStorage 数据，**仅 Edge 插件实现**，Android 端不实现 Cookie 同步。
+
+**服务端存储结构**（按域名独立记录）：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `id` | UUID | 主键 |
+| `userId` | UUID | 所属用户 |
+| `domain` | String | 基础域名（如 `example.com`），唯一索引 `(userId, domain)` |
+| `encryptedData` | String | 用 User Key 加密的 CookieData JSON（AES-256-GCM） |
+| `modifiedAt` | DateTime | 最后修改时间（服务端时间） |
+| `createdAt` | DateTime | 创建时间 |
+
+**加密前 JSON 结构（CookieData）**：
+
+```typescript
+interface CookieData {
+  domain: string;
+  cookies: CookieItem[];
+  localStorageItems?: LocalStorageItem[];  // 可选，默认不同步
+  userAgent?: string;                      // 记录同步时的 UA，用于排查问题
+  createdAt: number;                       // 首次同步时间戳（ms）
+  updatedAt: number;                       // 最后更新时间戳（ms）
+}
+
+interface CookieItem {
+  name: string;
+  value: string;
+  domain: string;           // Cookie 的 domain 属性（可能以 . 开头）
+  path: string;
+  secure: boolean;
+  httpOnly: boolean;
+  sameSite: "no_restriction" | "lax" | "strict" | "unspecified";
+  expirationDate?: number;  // Unix 时间戳（秒），session cookie 无此字段
+  hostOnly: boolean;
+  session: boolean;
+  storeId?: string;         // 浏览器 cookie store ID（如 "0"）
+}
+
+interface LocalStorageItem {
+  key: string;
+  value: string;
+}
+```
+
+**编码流程（Edge 端）**：
+
+```
+CookieData JSON
+  ↓ JSON.stringify
+字符串
+  ↓ gzip (CompressionStream)
+压缩二进制
+  ↓ User Key AES-256-GCM 加密
+加密二进制
+  ↓ Base64
+encryptedData（提交到服务端）
+```
+
+**解码流程（Edge 端）**：
+
+```
+encryptedData
+  ↓ Base64 decode
+加密二进制
+  ↓ User Key AES-256-GCM 解密
+压缩二进制
+  ↓ gzip decompress (DecompressionStream)
+JSON 字符串
+  ↓ JSON.parse
+CookieData
+```
+
+**安全与隐私策略**：
+- Cookie 数据使用与凭据相同的 User Key 加密，服务端无法解密
+- HttpOnly Cookie 可被提取和注入（`chrome.cookies` API 的权限允许），但受目标站点的 Secure / SameSite 策略限制
+- localStorage 默认不同步（`syncLocalStorage: false`），用户需在设置中显式开启
+- 明确告知用户：Cookie 同步不保证 100% 跨设备可用性（受现代浏览器安全策略限制）
+
+### 2.9 CookieSyncConfig（Cookie 同步规则配置）
+
+按域名配置自动同步行为，**可同步到服务端**实现多端规则共享。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `id` | UUID | 主键 |
+| `userId` | UUID | 所属用户 |
+| `domain` | String | 基础域名（如 `example.com`） |
+| `autoPush` | Boolean | Cookie 变化时自动推送（默认 false） |
+| `autoPull` | Boolean | 访问站点时自动拉取注入（默认 false） |
+| `includeLocalStorage` | Boolean | 是否同步 localStorage（默认 false） |
+| `createdAt` | DateTime | 创建时间 |
+| `modifiedAt` | DateTime | 最后修改时间 |
+
+**自动同步行为**：
+
+| 配置 | autoPush=true | autoPull=true |
+|------|--------------|---------------|
+| 触发时机 | `chrome.cookies.onChanged` 且变化域名匹配 | `chrome.tabs.onUpdated` 且访问域名匹配 |
+| 防抖 | 10 秒防抖，30 秒冷却期 | 标签页去重（同域名已有打开标签则不拉取） |
+| 用户体验 | 静默推送，Badge 状态指示 | 注入后自动刷新页面使 Cookie 生效 |
+
+**本地存储**（Edge）：
+```typescript
+// chrome.storage.local
+cookieSyncConfig: {
+  [domain: string]: {
+    autoPush: boolean;
+    autoPull: boolean;
+    includeLocalStorage: boolean;
+  }
+}
+```
+
 ---
 
 ## 3. 本地存储模型（客户端）

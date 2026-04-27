@@ -342,6 +342,232 @@ Bitwarden 后端使用：
 
 ---
 
+## 10. sync-your-cookie 项目研究
+
+**来源项目**: [jackluson/sync-your-cookie](https://github.com/jackluson/sync-your-cookie)  
+**调研日期**: 2026/04/27  
+**调研目标**: 为 pw-book 的 Cookie 同步功能（US6）获取可落地的技术方案参考
+
+### 10.1 项目概述
+
+sync-your-cookie 是一款 Chrome/Edge 浏览器扩展，用于将 Cookie 和 localStorage 同步到 Cloudflare KV 或 GitHub Gist。核心定位是帮助开发者在不同设备/浏览器间共享登录状态。
+
+**功能特性**:
+- 支持同步 Cookie + localStorage 到 Cloudflare KV 或 GitHub Gist
+- 按域名配置 `Auto Merge`（自动合并）和 `Auto Push`（自动推送）规则
+- 使用 protobuf 编码 + gzip 压缩传输数据
+- 提供管理面板（Side Panel）查看、复制、管理已同步数据
+- 基于 Storage-key 的多账号隔离
+- 可选的 AES-GCM 密码加密
+
+### 10.2 架构设计
+
+```
+chrome-extension/
+  lib/background/
+    index.ts       # Service Worker 入口：cookie 变化监听、自动同步、初始化拉取
+    listen.ts      # 消息处理器：Push / Pull / Remove / Edit Cookie
+    subscribe.ts   # 存储订阅：状态变化时更新 Badge、Context Menu
+  pages/
+    popup/         # 弹窗：手动 Push/Pull、开关 autoPush/autoPull
+    sidepanel/     # 侧边栏管理面板：查看所有域名 Cookie、编辑单条 Cookie
+    content/       # Content Script：localStorage 的读取与写入
+    options/       # 设置页：账号配置（Cloudflare/GitHub）、全局选项
+packages/
+  protobuf/        # protobuf 定义 + 编解码 + gzip 压缩 + AES-GCM 加密
+  shared/          # 核心同步逻辑：Cloudflare/GitHub API 封装、合并写入、读取解码
+  storage/         # 本地存储抽象：cookieStorage、domainConfigStorage、accountStorage
+```
+
+**四执行上下文**（与 pw-book 相同）:
+1. **Background Service Worker** — 核心业务逻辑、API 通信、cookie 变化监听
+2. **Popup** — 手动触发同步、配置当前域名的自动规则
+3. **Content Scripts** — localStorage 的读取和注入（因同源策略，必须通过 content script 操作）
+4. **Side Panel** — 管理界面（Chrome Side Panel API）
+
+### 10.3 编码与压缩方案
+
+sync-your-cookie 采用三层编码策略来减小传输体积：
+
+**第一层：protobuf 结构化编码**
+
+```protobuf
+syntax = "proto3";
+
+message Cookie {
+  string domain = 1;
+  string name = 2;
+  string storeId = 3;
+  string value = 4;
+  bool session = 5;
+  bool hostOnly = 6;
+  float expirationDate = 7;
+  string path = 8;
+  bool httpOnly = 9;
+  bool secure = 10;
+  string sameSite = 11;
+}
+
+message LocalStorageItem {
+  string key = 1;
+  string value = 2;
+}
+
+message DomainCookie {
+  int64 createTime = 1;
+  int64 updateTime = 2;
+  repeated Cookie cookies = 5;
+  repeated LocalStorageItem localStorageItems = 6;
+  string userAgent = 7;
+}
+
+message CookiesMap {
+  int64 createTime = 1;
+  int64 updateTime = 2;
+  map<string, DomainCookie> domainCookieMap = 5;
+}
+```
+
+**第二层：gzip 压缩**
+
+使用浏览器原生 `CompressionStream` / `DecompressionStream` API 对 protobuf 二进制数据进行 gzip 压缩。实测可将典型 Cookie 数据压缩至原始大小的 15-30%。
+
+**第三层：可选 AES-GCM 加密**
+
+- 算法：AES-256-GCM
+- 密钥派生：PBKDF2-SHA256，100,000 次迭代，16 字节随机 salt
+- 格式：`[MAGIC (4)] [VERSION (1)] [SALT (16)] [IV (12)] [CIPHERTEXT]`
+- 加密后的数据再做 Base64 编码，便于文本存储（GitHub Gist）
+
+**完整编码流程**:
+```
+Cookie 对象
+  ↓ protobuf encode
+二进制 Uint8Array
+  ↓ gzip (CompressionStream)
+压缩后的二进制
+  ↓ Base64
+Base64 字符串
+  ↓ 可选 AES-GCM encrypt + Base64
+加密后的 Base64 字符串（写入 KV/Gist）
+```
+
+**对我们的启示**：
+- protobuf + gzip 的组合确实能显著减小传输体积，对于 Cookie 这种高频同步场景非常有价值
+- 但 pw-book 已有端到端加密体系（User Key + AES-256-GCM），无需额外的基于用户密码的加密层。可直接用 User Key 加密 protobuf 编码后的二进制数据
+- 如果采用 protobuf，需要引入 `protobufjs` 或类似的编解码库，增加约 50-100KB 打包体积。考虑到 pw-book 的 Cookie 同步是 P3 优先级，**初期可先用 JSON + gzip，后续如体积敏感再迁移到 protobuf**
+
+### 10.4 自动同步规则设计
+
+sync-your-cookie 的自动同步规则设计简洁而实用：
+
+**按域名配置（DomainConfigStorage）**:
+```typescript
+interface DomainConfig {
+  domainMap: {
+    [host: string]: {
+      autoPush?: boolean;   // Cookie 变化时自动推送
+      autoPull?: boolean;   // 访问站点时自动拉取并注入
+      favIconUrl?: string;  // 站点图标（UI 展示）
+      sourceUrl?: string;   // 来源 URL
+    }
+  }
+}
+```
+
+**Auto Push（自动推送）**:
+- 监听 `chrome.cookies.onChanged` 事件
+- 变化域名匹配 `domainMap` 中 `autoPush=true` 的条目时触发
+- **10 秒防抖**：cookie 频繁变化时合并为一次推送
+- **30 秒冷却**：同一周期内最多触发一次自动推送
+- 支持多域名批量推送：`pushMultipleDomainCookies()`
+
+**Auto Pull（自动拉取）**:
+- 监听 `chrome.tabs.onUpdated`（`status === 'loading'`）
+- 访问域名匹配 `domainPull=true` 时触发
+- **去重机制**：检查是否已有同域名的打开标签页，避免重复拉取
+- 拉取后自动刷新页面（`chrome.tabs.reload`），使 Cookie 生效
+
+**对我们的启示**：
+- 按域名配置同步规则的方式非常实用，应在 pw-book 中采用
+- 防抖和去重策略值得直接借鉴，避免频繁同步和页面重复刷新
+- pw-book 可将规则配置同步到服务端，实现多端规则共享
+
+### 10.5 存储后端设计
+
+sync-your-cookie 将**所有域名的 Cookie 数据存储在单个 KV key** 下：
+
+- **Cloudflare KV**: 一个 namespace 中只有一个 key（`storageKey`），value 是整个 `CookiesMap` 的编码数据
+- **GitHub Gist**: 一个 Gist 文件中存放所有数据
+- **合并策略**: 读取旧数据 → 按域名更新对应字段 → 完整写回
+
+**优点**：
+- 实现简单，无需管理多个 key
+- 天然支持多域名批量操作
+
+**缺点**：
+- 数据量大时读写开销增加（全量覆盖）
+- 并发修改风险（两设备同时 push 可能丢失一方的变更）
+- 无法单独获取某个域名的数据（必须下载全部）
+
+**pw-book 的改进方向**：
+- 每个域名独立存储记录（`POST /api/cookies` 按域名），支持增量获取
+- 利用 pw-book 已有的同步协议（pending changes + last-write-wins）处理并发冲突
+- 服务端存储结构化数据，而非单个大 blob
+
+### 10.6 Cookie 注入与 localStorage 同步
+
+**Cookie 注入**:
+```typescript
+for (const cookie of cookieDetails) {
+  const cookieDetail: chrome.cookies.SetDetails = {
+    domain: cookie.domain,
+    name: cookie.name,
+    url: constructedUrl,
+    storeId: cookie.storeId,
+    value: cookie.value,
+    expirationDate: cookie.expirationDate,
+    path: cookie.path,
+    httpOnly: cookie.httpOnly,
+    secure: cookie.secure,
+    sameSite: cookie.sameSite as chrome.cookies.SameSiteStatus,
+  };
+  chrome.cookies.set(cookieDetail);
+}
+```
+
+**localStorage 同步**:
+- 读取：Content Script 遍历 `localStorage` 所有 key-value，通过 `chrome.runtime.sendMessage` 回传
+- 写入：Background 发送消息到 Content Script，Content Script 执行 `localStorage.setItem()`
+- 受同源策略限制，只能操作当前页面的 localStorage
+
+**HttpOnly Cookie 的限制**:
+- `chrome.cookies.getAll()` 可以获取 HttpOnly Cookie
+- 但 `chrome.cookies.set()` 注入 HttpOnly Cookie 需要目标域名匹配
+- 某些安全策略（SameSite=Strict, Secure on HTTPS）会限制注入效果
+
+### 10.7 对 pw-book 的借鉴总结
+
+| 方面 | sync-your-cookie 方案 | pw-book 适配建议 |
+|------|----------------------|-----------------|
+| **编码** | protobuf + gzip + 可选 AES-GCM | JSON + gzip（初期），User Key 端到端加密。后续可评估 protobuf |
+| **自动规则** | 按域名 autoPush / autoPull | 直接借鉴，规则可同步到服务端 |
+| **防抖** | 10 秒防抖 + 30 秒冷却 | 直接借鉴 |
+| **存储粒度** | 单 KV key 存全量 | 按域名分记录，利用现有同步协议 |
+| **localStorage** | Content Script 读写 | 直接借鉴，但标记为可选/实验性功能 |
+| **加密** | 基于用户自设密码（PBKDF2 10万次） | 复用 pw-book 的 User Key（Argon2id/PBKDF2 60万次） |
+| **后端** | 第三方 KV（Cloudflare/GitHub） | 自托管后端，数据完全自主 |
+
+### 10.8 局限性与已知风险
+
+1. **全量覆盖写**：sync-your-cookie 每次 push 都是完整覆盖，多设备并发 push 必然丢失数据。pw-book 的自托管后端可解决此问题（独立记录 + last-write-wins）。
+2. **加密密码非 KDF 强派生**：sync-your-cookie 的加密密码是用户自设的任意字符串，强度依赖用户。pw-book 使用主密码派生的 User Key，安全性更高。
+3. **无冲突解决机制**：没有版本向量或时间戳冲突解决。pw-book 的 `modifiedAt` + last-write-wins 机制更完善。
+4. **localStorage 安全性**：同步 localStorage 可能包含敏感令牌（如 JWT），应明确告知用户风险，并提供「仅同步 Cookie」选项。
+5. **Cookie 安全属性限制**：现代浏览器的 Cookie 安全策略（SameSite=None 需 Secure、Partitioned Cookie 等）可能导致跨设备注入后无法正常使用。应在文档中明确列出限制。
+
+---
+
 ## 9. 风险与注意事项
 
 1. **自动填充的可靠性**：Bitwarden 投入大量工程资源处理各种网站的非标准表单。初期版本应优先覆盖主流网站，接受对部分非标准页面的降级处理。
@@ -349,3 +575,4 @@ Bitwarden 后端使用：
 3. **Android 自动填充服务**：需要实现 `AutofillService`，处理系统级的自动填充请求，与浏览器扩展的自动填充是两套独立实现。
 4. **Passkey 复杂度**：WebAuthn/FIDO2 协议复杂，CTAP2 通信涉及多个抽象层。建议分阶段实现，先支持 TOTP，再支持 Passkey。
 5. **端到端加密的正确性**：加密实现必须经过安全审计。建议使用经过验证的库（Web Crypto API / Tink / BouncyCastle），避免自行实现加密原语。
+6. **Cookie 同步的边界**：Cookie 同步受浏览器安全策略限制（SameSite、HttpOnly、Partitioned、Secure），无法保证 100% 的跨设备可用性。应在功能说明中明确告知用户此限制，并提供「仅密码管理，不启用 Cookie 同步」的选项。

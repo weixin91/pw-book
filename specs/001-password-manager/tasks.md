@@ -163,18 +163,27 @@ description: "密码管理应用功能实现的任务列表"
 
 **目标**：Edge 插件提取并同步 Cookie；按规范 Android 不实现 Cookie 同步。
 
-**独立测试**：仅在 Edge 插件中，验证特定站点的 Cookie 是否被提取并安全同步。
+**独立测试**：仅在 Edge 插件中，验证特定站点的 Cookie 是否被提取并安全同步。配置某域名的 autoPush 和 autoPull，验证自动同步行为是否符合预期。
 
 ### 后端任务
 
-- [ ] T067 [P] [US6] 实现 Cookie 同步 API 于 `apps/backend/src/cookies/routes.ts`（POST/GET，遵循 `contracts/api.md`）
+- [ ] T067 [P] [US6] 实现 Cookie 数据模型与 Prisma Schema 于 `apps/backend/prisma/schema.prisma`（CookieData、CookieSyncConfig 表）
+- [ ] T068 [P] [US6] 实现 Cookie 同步 API 于 `apps/backend/src/cookies/routes.ts`（POST /api/cookies、POST /api/cookies/batch、GET /api/cookies/:domain、GET /api/cookies、DELETE /api/cookies/:domain，遵循 `contracts/api.md` §5.1–5.5）
+- [ ] T069 [P] [US6] 实现 Cookie 同步规则配置 API 于 `apps/backend/src/cookies/config-routes.ts`（PUT/GET/DELETE /api/cookie-sync-config，遵循 `contracts/api.md` §5.6）
 
 ### Edge 插件任务
 
-- [ ] T068 [US6] 实现 Cookie 提取于 `apps/edge-extension/src/background/cookie-sync.ts`（`chrome.cookies` API）
-- [ ] T069 [US6] 实现 Cookie 加密和上传于 `apps/edge-extension/src/sync/cookie-upload.ts`
+- [ ] T070 [US6] 实现 Cookie 提取与编码模块于 `apps/edge-extension/src/cookie/cookie-extractor.ts`（`chrome.cookies.getAll()` 封装、CookieItem 格式化、排除敏感字段）
+- [ ] T071 [P] [US6] 实现 Cookie 数据编解码与压缩于 `apps/edge-extension/src/cookie/cookie-codec.ts`（JSON → gzip → AES-256-GCM 加密 → Base64；反向解码。复用 User Key，参考 `contracts/crypto.md`）
+- [ ] T072 [US6] 实现 Cookie 同步客户端于 `apps/edge-extension/src/sync/cookie-sync-client.ts`（上传/拉取/删除、批量上传、错误处理与重试）
+- [ ] T073 [US6] 实现 Cookie 注入引擎于 `apps/edge-extension/src/cookie/cookie-injector.ts`（`chrome.cookies.set()` 封装、按 domain/path/secure 等属性精确还原、localStorage 通过 content script 注入）
+- [ ] T074 [US6] 实现自动同步规则配置存储于 `apps/edge-extension/src/cookie/sync-config-storage.ts`（按域名存储 autoPush/autoPull/includeLocalStorage，与服务端规则双向同步）
+- [ ] T075 [US6] 实现自动推送（autoPush）逻辑于 `apps/edge-extension/src/background/cookie-auto-push.ts`（监听 `chrome.cookies.onChanged`、按域名规则筛选、10 秒防抖 + 30 秒冷却、Badge 状态指示）
+- [ ] T076 [US6] 实现自动拉取（autoPull）逻辑于 `apps/edge-extension/src/background/cookie-auto-pull.ts`（监听 `chrome.tabs.onUpdated`、按域名规则筛选、标签页去重避免重复拉取、注入后可选刷新页面）
+- [ ] T077 [P] [US6] 实现 Popup Cookie 同步控制面板于 `apps/edge-extension/src/popup/components/CookieSyncPanel.tsx`（当前域名手动 Push/Pull、autoPush/autoPull 开关、localStorage 同步开关）
+- [ ] T078 [P] [US6] 实现 Content Script localStorage 桥接于 `apps/edge-extension/src/content/localstorage-bridge.ts`（消息接口：GET_LOCAL_STORAGE / SET_LOCAL_STORAGE，同源策略下的安全读写）
 
-**检查点**：Cookie 同步仅在 Edge 端可用
+**检查点**：Cookie 同步仅在 Edge 端可用；手动同步和自动同步（autoPush/autoPull）均通过独立测试
 
 ---
 
@@ -182,11 +191,11 @@ description: "密码管理应用功能实现的任务列表"
 
 **目的**：影响多个用户故事的改进项
 
-- [ ] T070 [P] 添加 Docker 和 Docker Compose 自托管配置（`Dockerfile`、`docker-compose.yml` 于仓库根目录）
-- [ ] T071 [P] 添加后端集成测试于 `apps/backend/tests/integration/`（认证、同步、凭据、冲突解决）
-- [ ] T072 [P] 添加 Edge 端到端测试场景于 `apps/edge-extension/tests/e2e/`（自动填充流程、同步流程，遵循 `quickstart.md`）
-- [ ] T073 对照 `contracts/crypto.md` 第 11 节验证安全审计清单（AES-256-GCM、IV 唯一性、CSPRNG、无明文密码等）
-- [ ] T074 在 Edge 自动填充中实现性能保护措施（MutationObserver 防抖 100ms、500 个输入元素上限、非关键扫描使用 `requestIdleCallback`，遵循 `research.md`）
+- [ ] T079 [P] 添加 Docker 和 Docker Compose 自托管配置（`Dockerfile`、`docker-compose.yml` 于仓库根目录）
+- [ ] T080 [P] 添加后端集成测试于 `apps/backend/tests/integration/`（认证、同步、凭据、冲突解决）
+- [ ] T081 [P] 添加 Edge 端到端测试场景于 `apps/edge-extension/tests/e2e/`（自动填充流程、同步流程，遵循 `quickstart.md`）
+- [ ] T082 对照 `contracts/crypto.md` 第 11 节验证安全审计清单（AES-256-GCM、IV 唯一性、CSPRNG、无明文密码等）
+- [ ] T083 在 Edge 自动填充中实现性能保护措施（MutationObserver 防抖 100ms、500 个输入元素上限、非关键扫描使用 `requestIdleCallback`，遵循 `research.md`）
 
 ---
 
