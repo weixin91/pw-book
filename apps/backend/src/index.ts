@@ -42,6 +42,7 @@ app.get("/health", async () => ({ status: "ok" }));
 const PORT = parseInt(process.env.PORT || "3000", 10);
 const HOST = process.env.HOST || "0.0.0.0";
 
+// 安全提示：生产环境应在前方部署反向代理（如 Nginx、Caddy、Traefik）以提供 HTTPS/TLS 1.3
 try {
   await app.listen({ port: PORT, host: HOST });
   app.log.info(`Server running at http://${HOST}:${PORT}`);

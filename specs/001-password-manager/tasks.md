@@ -191,11 +191,11 @@ description: "密码管理应用功能实现的任务列表"
 
 **目的**：影响多个用户故事的改进项
 
-- [ ] T079 [P] 添加 Docker 和 Docker Compose 自托管配置（`Dockerfile`、`docker-compose.yml` 于仓库根目录）
-- [ ] T080 [P] 添加后端集成测试于 `apps/backend/tests/integration/`（认证、同步、凭据、冲突解决）
-- [ ] T081 [P] 添加 Edge 端到端测试场景于 `apps/edge-extension/tests/e2e/`（自动填充流程、同步流程，遵循 `quickstart.md`）
-- [ ] T082 对照 `contracts/crypto.md` 第 11 节验证安全审计清单（AES-256-GCM、IV 唯一性、CSPRNG、无明文密码等）
-- [ ] T083 在 Edge 自动填充中实现性能保护措施（MutationObserver 防抖 100ms、500 个输入元素上限、非关键扫描使用 `requestIdleCallback`，遵循 `research.md`）
+- [X] T079 [P] 添加 Docker 和 Docker Compose 自托管配置（`Dockerfile`、`docker-compose.yml` 于仓库根目录）
+- [X] T080 [P] 添加后端集成测试于 `apps/backend/tests/integration/`（认证、同步、凭据、冲突解决）
+- [X] T081 [P] 添加 Edge 端到端测试场景于 `apps/edge-extension/tests/e2e/`（自动填充流程、同步流程，遵循 `quickstart.md`）
+- [X] T082 对照 `contracts/crypto.md` 第 11 节验证安全审计清单（AES-256-GCM、IV 唯一性、CSPRNG、无明文密码等）
+- [X] T083 在 Edge 自动填充中实现性能保护措施（MutationObserver 防抖 100ms、500 个输入元素上限、非关键扫描使用 `requestIdleCallback`，遵循 `research.md`）
 
 ---
 

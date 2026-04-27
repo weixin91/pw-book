@@ -14,7 +14,7 @@ ENV NODE_ENV=production
 COPY --from=builder /app/apps/backend/dist ./dist
 COPY --from=builder /app/apps/backend/prisma ./prisma
 COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/apps/backend/node_modules ./node_modules
+# backend 特定依赖已在 /app/node_modules 中（pnpm workspace hoist）
 RUN npm install -g prisma
 RUN prisma generate
 EXPOSE 3000

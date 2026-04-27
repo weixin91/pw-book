@@ -288,7 +288,9 @@ function setupAutoDetection(
   });
 
   // 轻量轮询兜底：每 2 秒扫描一次，最多 30 次（1 分钟），找到表单后停止
+  // 使用 requestIdleCallback 避免阻塞主线程（非关键扫描）
   let pollCount = 0;
+  const scheduleScan = typeof requestIdleCallback === "function" ? requestIdleCallback : (cb: () => void) => setTimeout(cb, 1);
   const pollInterval = setInterval(() => {
     pollCount++;
     if (pollCount > 30) {
@@ -296,12 +298,14 @@ function setupAutoDetection(
       console.log("[PWBook] 轮询结束，未检测到持久登录表单");
       return;
     }
-    const fd = collector.scanPage();
-    if (fd) {
-      console.log("[PWBook] 轮询检测到表单");
-      requestVaultItems(fd.url);
-      clearInterval(pollInterval);
-    }
+    scheduleScan(() => {
+      const fd = collector.scanPage();
+      if (fd) {
+        console.log("[PWBook] 轮询检测到表单");
+        requestVaultItems(fd.url);
+        clearInterval(pollInterval);
+      }
+    });
   }, 2000);
 }
 
