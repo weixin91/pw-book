@@ -23,15 +23,21 @@ export async function injectCookie(cookie: CookieItem): Promise<boolean> {
       url,
       name: cookie.name,
       value: cookie.value,
-      domain: cookie.domain,
       path: cookie.path,
       secure: cookie.secure,
       httpOnly: cookie.httpOnly,
-      sameSite: cookie.sameSite as chrome.cookies.SameSiteStatus,
       storeId: cookie.storeId,
     };
+    // hostOnly cookie 不传递 domain，否则 Chrome API 可能拒绝
+    if (!cookie.hostOnly) {
+      details.domain = cookie.domain;
+    }
+    // sameSite 为 unspecified 时不传递，否则 Chrome API 会拒绝
+    if (cookie.sameSite && cookie.sameSite !== "unspecified") {
+      details.sameSite = cookie.sameSite as chrome.cookies.SameSiteStatus;
+    }
     if (cookie.expirationDate) {
-      (details as chrome.cookies.SetDetails).expirationDate = cookie.expirationDate;
+      details.expirationDate = cookie.expirationDate;
     }
     await chrome.cookies.set(details);
     return true;
