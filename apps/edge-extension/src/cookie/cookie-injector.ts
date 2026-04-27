@@ -42,7 +42,11 @@ export async function injectCookie(cookie: CookieItem): Promise<boolean> {
     await chrome.cookies.set(details);
     return true;
   } catch (err) {
-    console.warn(`[PWBook] Cookie 注入失败: ${cookie.name}`, err);
+    console.warn(
+      `[PWBook] Cookie 注入失败: ${cookie.name} ` +
+      `(domain=${cookie.domain}, path=${cookie.path}, secure=${cookie.secure}, sameSite=${cookie.sameSite}, hostOnly=${cookie.hostOnly})`,
+      err
+    );
     return false;
   }
 }

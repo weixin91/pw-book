@@ -16,10 +16,19 @@ export async function manualPullCookie(baseDomain: string, tabId: number): Promi
   if (!record) throw new Error("该域名无同步记录");
 
   const cookieData = await decodeCookieData<import("../cookie/cookie-extractor.js").CookieData>(record.encryptedData, userKey);
-  await injectCookieData(cookieData);
+  const result = await injectCookieData(cookieData);
 
   const config = await getSyncConfig(baseDomain);
   if (config?.includeLocalStorage && cookieData.localStorageItems) {
     await injectLocalStorage(tabId, cookieData.localStorageItems);
+  }
+
+  // 注入成功后刷新目标标签页
+  if (result.success > 0) {
+    try {
+      await chrome.tabs.reload(tabId);
+    } catch {
+      // 忽略刷新失败
+    }
   }
 }

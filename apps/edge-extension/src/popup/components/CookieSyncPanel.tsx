@@ -59,9 +59,9 @@ export function CookieSyncPanel(): React.ReactElement {
     try {
       await manualPushCookie(currentDomain, includeLocalStorage);
       setMessage("推送成功");
+      setTimeout(() => window.close(), 1200);
     } catch (err) {
       setMessage(`推送失败: ${err instanceof Error ? err.message : String(err)}`);
-    } finally {
       setLoading(false);
       setTimeout(() => setMessage(""), 3000);
     }
@@ -79,9 +79,10 @@ export function CookieSyncPanel(): React.ReactElement {
     try {
       await manualPullCookie(currentDomain, tab.id);
       setMessage("拉取成功，页面即将刷新");
+      // 延迟关闭弹窗，让用户看到成功提示
+      setTimeout(() => window.close(), 1200);
     } catch (err) {
       setMessage(`拉取失败: ${err instanceof Error ? err.message : String(err)}`);
-    } finally {
       setLoading(false);
       setTimeout(() => setMessage(""), 3000);
     }
