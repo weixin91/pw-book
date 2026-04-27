@@ -13,6 +13,12 @@ export class PendingChangesQueue {
     };
     changes.push(newChange);
     await StorageService.setPendingChanges(changes);
+    // 通知后台立即尝试同步
+    try {
+      chrome.runtime.sendMessage({ type: "TRIGGER_SYNC_NOW" });
+    } catch {
+      // ignore
+    }
   }
 
   async dequeue(changeId: string): Promise<void> {

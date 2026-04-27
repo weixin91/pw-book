@@ -55,6 +55,15 @@ export function VaultList({ onAdd, onEdit, onOpenGenerator, onOpenCookieSync }: 
     return () => clearTimeout(t);
   }, [toast]);
 
+  async function handleSyncNow() {
+    try {
+      await chrome.runtime.sendMessage({ type: "TRIGGER_SYNC_NOW" });
+      setToast("同步已触发");
+    } catch {
+      setToast("同步触发失败");
+    }
+  }
+
   async function loadItems() {
     const ciphers = await StorageService.getCiphers();
     const userKey = await StorageService.getUserKey();
@@ -659,12 +668,12 @@ export function VaultList({ onAdd, onEdit, onOpenGenerator, onOpenCookieSync }: 
           {toast}
         </div>
       )}
-      {renderSyncFooter(syncStatus)}
+      {renderSyncFooter(syncStatus, handleSyncNow)}
     </div>
   );
 }
 
-function renderSyncFooter(status: SyncStatus | null): React.ReactElement {
+function renderSyncFooter(status: SyncStatus | null, onSyncNow: () => void): React.ReactElement {
   let text = "未同步";
   if (status) {
     if (status.state === "SYNCING") {
@@ -714,6 +723,22 @@ function renderSyncFooter(status: SyncStatus | null): React.ReactElement {
           </span>
         )}
       </span>
+      <button
+        onClick={onSyncNow}
+        title="立即同步"
+        style={{
+          position: "absolute",
+          right: 36,
+          background: "none",
+          border: "none",
+          cursor: "pointer",
+          fontSize: 16,
+          color: "#666",
+          padding: "4px 8px",
+        }}
+      >
+        &#x21bb;
+      </button>
       <button
         onClick={() => chrome.runtime.openOptionsPage()}
         title="打开设置"

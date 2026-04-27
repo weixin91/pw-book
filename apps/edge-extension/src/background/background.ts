@@ -440,9 +440,9 @@ async function isCredentialAlreadySaved(url: string, username: string, password:
 // 初始化后台锁定监听
 initIdleListener();
 
-// 初始化同步调度器
+// 初始化同步调度器（轮询间隔 10 分钟）
 const syncScheduler = new SyncScheduler();
-syncScheduler.start();
+syncScheduler.start(600_000);
 
 // 监听保险库解锁消息，启动锁定计时器
 chrome.runtime.onMessage.addListener((message) => {
@@ -451,6 +451,9 @@ chrome.runtime.onMessage.addListener((message) => {
   if (msg.type === "VAULT_UNLOCKED") {
     startLockTimer().catch(() => {});
     // 解锁后立即尝试同步
+    syncScheduler.performSync().catch(() => {});
+  }
+  if (msg.type === "TRIGGER_SYNC_NOW") {
     syncScheduler.performSync().catch(() => {});
   }
   return false;
