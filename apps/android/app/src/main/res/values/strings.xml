@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Password Book</string>
+    <string name="unlock_title">解锁保险库</string>
+    <string name="unlock_hint">输入主密码</string>
+    <string name="unlock_button">解锁</string>
+    <string name="biometric_unlock">使用生物识别</string>
+    <string name="vault_title">保险库</string>
+    <string name="add_cipher">添加凭据</string>
+    <string name="edit_cipher">编辑凭据</string>
+    <string name="save">保存</string>
+    <string name="delete">删除</string>
+    <string name="cancel">取消</string>
+    <string name="password_generator">密码生成器</string>
+    <string name="generate">生成</string>
+    <string name="copy">复制</string>
+    <string name="username">用户名</string>
+    <string name="password">密码</string>
+    <string name="uri">网址</string>
+    <string name="notes">备注</string>
+    <string name="name">名称</string>
+    <string name="settings">设置</string>
+    <string name="sync_now">立即同步</string>
+    <string name="last_sync">上次同步: %1$s</string>
+    <string name="auto_fill">自动填充</string>
+    <string name="search">搜索</string>
+    <string name="favorites">收藏</string>
+    <string name="all_items">全部</string>
+    <string name="lock">锁定</string>
+</resources>

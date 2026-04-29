@@ -209,17 +209,17 @@ description: "密码管理应用功能实现的任务列表"
 
 ### Phase 1: 基础保险库（MVP）
 
-- [ ] T004 [P] 初始化 Android 项目于 `apps/android/`（build.gradle.kts, settings.gradle.kts，minSdk=28, compileSdk=35，模块结构按 plan.md）
-- [ ] T040 [P] 搭建 Android 项目架构于 `apps/android/app/build.gradle.kts`（Hilt KSP、Room、Navigation Compose、Ktor、Security、Biometric、Credentials、WorkManager 依赖）
-- [ ] T090 [P] 配置 Hilt Application 和基础 DI 模块于 `apps/android/app/di/`（AppModule、DatabaseModule、NetworkModule、CryptoModule、ServiceModule）
-- [ ] T041 [P] 实现 Kotlin 加密核心于 `apps/android/app/crypto/`（AES-256-GCM、Argon2id via BouncyCastle、PBKDF2、HKDF，与 Edge 协议兼容，遵循 `contracts/crypto.md`）
-- [ ] T091 [P] 实现 Room 数据库和实体于 `apps/android/app/data/local/`（CipherEntity、DomainAssocEntity、SyncQueueEntity、SettingEntity、RejectedSiteEntity 及对应 DAO）
-- [ ] T092 [P] 实现 Repository 层于 `apps/android/app/data/repository/`（CipherRepository、DomainAssocRepository、SettingsRepository）
-- [ ] T093 [P] 实现安全数据源于 `apps/android/app/data/datasource/`（EncryptedSharedPreferences 封装、Android Keystore 密钥管理）
-- [ ] T094 [P] 实现 Compose 主题、导航和基础页面框架于 `apps/android/app/ui/`（Theme、NavHost、UnlockScreen、VaultListScreen）
-- [ ] T095 [P] 实现主密码解锁流程于 `apps/android/app/ui/unlock/UnlockScreen.kt` 和 `apps/android/app/domain/usecase/UnlockVaultUseCase.kt`
-- [ ] T096 [P] 实现密码生成器于 `apps/android/app/domain/usecase/GeneratePasswordUseCase.kt` 和 `apps/android/app/ui/generator/PasswordGeneratorScreen.kt`
-- [ ] T097 实现凭据添加/编辑/删除页面于 `apps/android/app/ui/screens/edit/CipherEditScreen.kt`
+- [X] T004 [P] 初始化 Android 项目于 `apps/android/`（build.gradle.kts, settings.gradle.kts，minSdk=28, compileSdk=35，模块结构按 plan.md）
+- [X] T040 [P] 搭建 Android 项目架构于 `apps/android/app/build.gradle.kts`（Hilt KSP、Room、Navigation Compose、Ktor、Security、Biometric、Credentials、WorkManager 依赖）
+- [X] T090 [P] 配置 Hilt Application 和基础 DI 模块于 `apps/android/app/di/`（AppModule、DatabaseModule、NetworkModule、CryptoModule、ServiceModule）
+- [X] T041 [P] 实现 Kotlin 加密核心于 `apps/android/app/crypto/`（AES-256-GCM、Argon2id via BouncyCastle、PBKDF2、HKDF，与 Edge 协议兼容，遵循 `contracts/crypto.md`）
+- [X] T091 [P] 实现 Room 数据库和实体于 `apps/android/app/data/local/`（CipherEntity、DomainAssocEntity、SyncQueueEntity、SettingEntity、RejectedSiteEntity 及对应 DAO）
+- [X] T092 [P] 实现 Repository 层于 `apps/android/app/data/repository/`（CipherRepository、DomainAssocRepository、SettingsRepository）
+- [X] T093 [P] 实现安全数据源于 `apps/android/app/data/datasource/`（EncryptedSharedPreferences 封装、Android Keystore 密钥管理）
+- [X] T094 [P] 实现 Compose 主题、导航和基础页面框架于 `apps/android/app/ui/`（Theme、NavHost、UnlockScreen、VaultListScreen）
+- [X] T095 [P] 实现主密码解锁流程于 `apps/android/app/ui/unlock/UnlockScreen.kt` 和 `apps/android/app/domain/usecase/UnlockVaultUseCase.kt`
+- [X] T096 [P] 实现密码生成器于 `apps/android/app/domain/usecase/GeneratePasswordUseCase.kt` 和 `apps/android/app/ui/generator/PasswordGeneratorScreen.kt`
+- [X] T097 实现凭据添加/编辑/删除页面于 `apps/android/app/ui/screens/edit/CipherEditScreen.kt`
 
 ### Phase 2: 同步与自动填充
 
