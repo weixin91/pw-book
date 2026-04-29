@@ -205,36 +205,52 @@ description: "密码管理应用功能实现的任务列表"
 
 **前提条件**：后端（阶段 2 + US2 API）、同步协议（US2）、加密协议（contracts/crypto.md）均已稳定。Edge 端实现为 Android 提供参考实现。
 
-### Android — 基础搭建
+**详细技术方案**: 参见 `android-architecture.md`
 
-- [ ] T004 [P] 初始化 Android 项目于 `apps/android/`（build.gradle.kts, settings.gradle.kts，模块结构按 plan.md）
-- [ ] T040 [P] 搭建 Android 项目架构于 `apps/android/app/build.gradle.kts`（Hilt、Room、Navigation、Compose 依赖）
-- [ ] T041 [P] 实现 Kotlin 加密核心于 `apps/android/app/crypto/`（AES-256-GCM、KDF，与 Edge 协议兼容，遵循 `contracts/crypto.md`）
+### Phase 1: 基础保险库（MVP）
 
-### Android — 用户故事 2：多端数据同步
+- [ ] T004 [P] 初始化 Android 项目于 `apps/android/`（build.gradle.kts, settings.gradle.kts，minSdk=28, compileSdk=35，模块结构按 plan.md）
+- [ ] T040 [P] 搭建 Android 项目架构于 `apps/android/app/build.gradle.kts`（Hilt KSP、Room、Navigation Compose、Ktor、Security、Biometric、Credentials、WorkManager 依赖）
+- [ ] T090 [P] 配置 Hilt Application 和基础 DI 模块于 `apps/android/app/di/`（AppModule、DatabaseModule、NetworkModule、CryptoModule、ServiceModule）
+- [ ] T041 [P] 实现 Kotlin 加密核心于 `apps/android/app/crypto/`（AES-256-GCM、Argon2id via BouncyCastle、PBKDF2、HKDF，与 Edge 协议兼容，遵循 `contracts/crypto.md`）
+- [ ] T091 [P] 实现 Room 数据库和实体于 `apps/android/app/data/local/`（CipherEntity、DomainAssocEntity、SyncQueueEntity、SettingEntity、RejectedSiteEntity 及对应 DAO）
+- [ ] T092 [P] 实现 Repository 层于 `apps/android/app/data/repository/`（CipherRepository、DomainAssocRepository、SettingsRepository）
+- [ ] T093 [P] 实现安全数据源于 `apps/android/app/data/datasource/`（EncryptedSharedPreferences 封装、Android Keystore 密钥管理）
+- [ ] T094 [P] 实现 Compose 主题、导航和基础页面框架于 `apps/android/app/ui/`（Theme、NavHost、UnlockScreen、VaultListScreen）
+- [ ] T095 [P] 实现主密码解锁流程于 `apps/android/app/ui/unlock/UnlockScreen.kt` 和 `apps/android/app/domain/usecase/UnlockVaultUseCase.kt`
+- [ ] T096 [P] 实现密码生成器于 `apps/android/app/domain/usecase/GeneratePasswordUseCase.kt` 和 `apps/android/app/ui/generator/PasswordGeneratorScreen.kt`
+- [ ] T097 实现凭据添加/编辑/删除页面于 `apps/android/app/ui/screens/edit/CipherEditScreen.kt`
 
-- [ ] T042 实现 Ktor Client 和 API 服务层于 `apps/android/app/data/remote/ApiService.kt`
-- [ ] T043 实现 Android 同步管理器于 `apps/android/app/sync/SyncManager.kt`（全量/增量同步、离线队列）
-- [ ] T044 实现 Room 本地数据库和实体于 `apps/android/app/data/local/`（CipherEntity、SyncQueueEntity、DAO）
-- [ ] T045 [P] 实现 Android WebSocket 客户端于 `apps/android/app/sync/WebSocketClient.kt`
+### Phase 2: 同步与自动填充
 
-### Android — 用户故事 3：密码管理和生成
+- [ ] T042 [P] 实现 Ktor Client 和 API 服务层于 `apps/android/app/data/remote/api/`（AuthApi、SyncApi、CipherApi、DomainAssocApi，含 DTO 和 kotlinx.serialization）
+- [ ] T098 [P] 实现 WebSocket 同步客户端于 `apps/android/app/data/remote/websocket/SyncWebSocketClient.kt`
+- [ ] T043 实现 Android 同步管理器于 `apps/android/app/sync/SyncManager.kt`（全量/增量同步、last-write-wins 冲突解决）
+- [ ] T044 实现离线待处理变更队列于 `apps/android/app/sync/PendingChangesQueue.kt` 和 SyncQueueDao
+- [ ] T099 实现 WorkManager 定时同步任务于 `apps/android/app/sync/SyncWorker.kt`（15 分钟周期、网络恢复触发、前台触发）
+- [ ] T100 实现 `AutofillService` 于 `apps/android/app/service/autofill/PwBookAutofillService.kt`
+- [ ] T101 [P] 实现 AssistStructure 解析器于 `apps/android/app/service/autofill/StructureParser.kt`（用户名/密码字段识别、webDomain/packageName 提取）
+- [ ] T102 [P] 实现 FillResponse 构建和账号选择数据集于 `apps/android/app/service/autofill/FillResponseBuilder.kt`
+- [ ] T103 实现 `onSaveRequest` 保存密码逻辑于 `apps/android/app/service/autofill/SaveRequestHandler.kt`（结合拒绝列表 FR-020）
+- [ ] T060 实现 AutofillService 域名匹配于 `apps/android/app/domain/matcher/UriMatcher.kt`（与 Edge 端对齐的基础域名提取、包名匹配、DomainAssociation 规则应用）
 
-- [ ] T051 [P] 实现 Compose 主题和导航于 `apps/android/app/ui/theme/` 和 `apps/android/app/ui/navigation/`
-- [ ] T052 [P] 实现保险库列表页面于 `apps/android/app/ui/vault/VaultListScreen.kt`
-- [ ] T053 [P] 实现添加/编辑凭据页面于 `apps/android/app/ui/vault/CipherEditScreen.kt`
-- [ ] T054 [P] 实现密码生成器页面于 `apps/android/app/ui/generator/PasswordGeneratorScreen.kt`
-- [ ] T055 实现自动锁定和生物识别解锁于 `apps/android/app/ui/unlock/`（AndroidX Biometrics，遵循 FR-016）
+### Phase 3: 增强安全与 Passkey
 
-### Android — 用户故事 4：跨域名和应用共享凭据
+- [ ] T055 实现自动锁定和生物识别解锁于 `apps/android/app/service/biometric/`（BiometricUnlockManager、KeystoreHelper、BiometricPrompt + CryptoObject，遵循 FR-016）
+- [ ] T104 [P] 实现剪贴板安全管理于 `apps/android/app/domain/usecase/CopyPasswordUseCase.kt`（10 秒自动清空、计时器重置，遵循 FR-017/FR-023）
+- [ ] T065 [P] 实现 TOTP 生成和显示于 `apps/android/app/crypto/TotpGenerator.kt` 和 `apps/android/app/ui/components/TotpDisplay.kt`（RFC 6238、环形倒计时进度条）
+- [ ] T105 [P] 实现 ZXing 二维码扫描于 `apps/android/app/ui/screens/scan/TotpScanScreen.kt`（解析 otpauth:// URI）
+- [ ] T066 实现 `CredentialProviderService` 于 `apps/android/app/service/credential/PwBookCredentialProviderService.kt`（Passkey，遵循 FR-008）
+- [ ] T106 [P] 实现 Passkey 创建处理于 `apps/android/app/service/credential/PasskeyCreateHandler.kt`（两阶段流程、保存到现有凭据/新建、EC P-256 密钥对生成）
+- [ ] T107 [P] 实现 Passkey 认证处理于 `apps/android/app/service/credential/PasskeyGetHandler.kt`（查询阶段返回候选、选择阶段签名 WebAuthn 断言）
+- [ ] T108 实现 Passkey 创建/认证 Activity 于 `apps/android/app/service/credential/PasskeyCreateActivity.kt` 和 `PasskeyGetActivity.kt`（PendingIntent 处理、生物识别认证、返回 WebAuthn 响应）
+- [ ] T059 实现域名关联管理 UI 于 `apps/android/app/ui/screens/settings/DomainAssocScreen.kt`
 
-- [ ] T059 实现域名关联管理 UI 于 `apps/android/app/ui/domain/DomainAssocScreen.kt`
-- [ ] T060 实现 AutofillService 域名匹配于 `apps/android/app/service/AutofillService.kt`（包名和域名关联）
+### Phase 4: 打磨
 
-### Android — 用户故事 5：Passkey 和 TOTP 支持
-
-- [ ] T065 [P] 实现 TOTP 生成和显示于 `apps/android/app/ui/totp/` 和 `apps/android/app/crypto/TotpGenerator.kt`
-- [ ] T066 实现 Credential Provider Service 于 `apps/android/app/service/CredentialProviderService.kt`（Passkey，遵循 FR-008）
+- [ ] T109 [P] 实现加密兼容性测试（共享测试向量，验证 Android 加密结果与 Edge 端可互解密）
+- [ ] T110 [P] 添加单元测试覆盖（Crypto、URI Matcher、Password Generator、TOTP、Sync Conflict Resolver，目标 >80%）
+- [ ] T111 性能优化（Room 索引、LazyColumn 缓存、加密缓存、数据库查询优化）
 
 **检查点**：Android 应用所有功能可用，可与 Edge 和后端完成端到端测试
 

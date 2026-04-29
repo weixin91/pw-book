@@ -139,21 +139,34 @@ pnpm --filter edge-extension build
 
 ```
 apps/android/
-├── app/                    # 主应用模块
-│   ├── src/main/
-│   │   ├── java/com/pwbook/
-│   │   │   ├── data/       # Repository、DAO
-│   │   │   ├── domain/     # UseCase、Model
-│   │   │   ├── ui/         # Compose UI、ViewModel
-│   │   │   ├── service/    # AutofillService
-│   │   │   └── crypto/     # 加密实现
-│   │   └── res/            # 资源文件
-│   └── build.gradle.kts
-├── core/                   # 共享核心模块（加密、网络）
-└── build.gradle.kts
+└── app/
+    └── src/main/java/com/pwbook/
+        ├── PwBookApplication.kt
+        ├── data/                 # Repository、DAO、Room Entity
+        │   ├── local/            # Room DAO + Entity
+        │   ├── remote/           # Ktor Client API
+        │   ├── repository/       # Repository 实现
+        │   └── datasource/       # EncryptedSharedPreferences + Keystore
+        ├── domain/               # UseCase、Model、URI Matcher
+        ├── crypto/               # 加密核心（与 Edge 协议兼容）
+        ├── service/              # AutofillService、CredentialProvider、Biometric
+        ├── sync/                 # 同步客户端、离线队列、WorkManager
+        ├── ui/                   # Compose UI、ViewModel、Navigation
+        └── di/                   # Hilt 模块
 ```
 
-### 4.2 构建与运行
+详细架构设计参见 `android-architecture.md`。
+
+### 4.2 开发环境
+
+| 工具 | 版本 | 说明 |
+|------|------|------|
+| Android Studio | 最新稳定版 | 官方 IDE |
+| JDK | 21 | Gradle 构建要求 |
+| Android SDK | API 28–35 | minSdk=28 (Android 9), targetSdk=35 |
+| Kotlin | 2.1+ | 语言版本 |
+
+### 4.3 构建与运行
 
 ```bash
 # 进入 Android 项目
@@ -162,24 +175,45 @@ cd apps/android
 # 调试构建
 ./gradlew :app:assembleDebug
 
-# 安装到连接的设备
+# 安装到连接的设备或模拟器
 ./gradlew :app:installDebug
 
-# 运行测试
-./gradlew :app:test
+# 运行单元测试
+./gradlew :app:testDebugUnitTest
+
+# 运行 Compose UI 测试
+./gradlew :app:connectedDebugAndroidTest
 ```
 
-### 4.3 配置自动填充服务
+### 4.4 配置自动填充服务
 
 1. 在 Android 设置中搜索「自动填充服务」
 2. 选择「Password Book」
-3. 在任意登录页面长按输入框，选择自动填充
+3. 在任意 App 的登录页面，聚焦用户名/密码输入框
+4. 系统会弹出自动填充建议（Android 11+ 支持输入法内联建议）
 
-### 4.4 配置生物识别
+### 4.5 配置 Credential Provider（Passkey）
 
-1. 首次解锁后，进入设置 → 安全
+1. 在 Android 设置 → 密码与账号 → 密码管理器中，选择「Password Book」作为首选凭据提供者
+2. 在支持 Passkey 的网站上注册/登录时，系统会调用本应用
+3. 创建 Passkey 时，若保险库中已存在该站点的 LOGIN 凭据，会弹出「保存到现有凭据」或「新建凭据」选项
+
+### 4.6 配置生物识别解锁
+
+1. 首次用主密码解锁后，进入设置 → 安全
 2. 开启「使用生物识别快捷解锁」
-3. 验证指纹/面部识别
+3. 验证指纹/面部识别（要求 Class 3 强生物识别）
+4. 后续解锁可直接使用生物识别，无需输入主密码
+5. **注意**：设备重启后首次解锁必须输入主密码（Android Keystore 安全要求）
+
+### 4.7 调试技巧
+
+| 问题 | 排查方法 |
+|------|---------|
+| AutofillService 不触发 | 确认「自动填充服务」已选择本应用；目标 App 的输入框需设置 `autofillHints` 或标准输入类型 |
+| Passkey 不弹出 | 确认 Android 14+；确认「密码管理器」已选择本应用；检查 `CredentialProviderService` 的 `provider.xml` 配置 |
+| 生物识别失败 | 确认设备已录入指纹/面部；检查 `BiometricManager.canAuthenticate(BIOMETRIC_STRONG)` 返回值 |
+| 加密兼容性 | 使用 `contracts/crypto.md` 中的测试向量，验证 Android 加密结果与 Edge 端可互解密 |
 
 ---
 

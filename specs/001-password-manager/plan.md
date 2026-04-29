@@ -100,17 +100,47 @@ apps/
 │   ├── tests/
 │   └── vite.config.ts
 │
-└── android/              # Android 应用
-    ├── app/src/main/java/com/pwbook/
-    │   ├── data/         # Repository、DAO、Room Entity
-    │   ├── domain/       # UseCase、Model、加密核心
-    │   ├── ui/           # Compose UI、ViewModel、导航
-    │   ├── service/      # AutofillService、CredentialProvider
-    │   ├── crypto/       # 加密实现（与 Edge 端协议兼容）
-    │   ├── sync/         # 同步客户端（离线队列）
-    │   └── di/           # Hilt 模块
-    ├── core/             # 可共享核心模块
-    └── tests/
+└── android/              # Android 应用（详见 android-architecture.md）
+    └── app/
+        └── src/main/java/com/pwbook/
+            ├── PwBookApplication.kt          # Application 类，初始化 Timber、Hilt
+            ├── data/                         # 数据层
+            │   ├── local/                    # Room 数据库（DAO + Entity）
+            │   ├── remote/                   # Ktor Client API（DTO + WebSocket）
+            │   ├── repository/               # Repository 实现
+            │   └── datasource/               # EncryptedSharedPreferences + Keystore
+            ├── domain/                       # 业务逻辑层
+            │   ├── model/                    # 解密后的业务模型
+            │   ├── usecase/                  # UseCase（解锁、生成密码、匹配凭据等）
+            │   └── matcher/                  # URI 匹配逻辑（与 Edge 端对齐）
+            ├── crypto/                       # 加密核心（与 Edge 端协议兼容）
+            │   ├── KdfEngine.kt              # Argon2id / PBKDF2
+            │   ├── AesGcmEngine.kt           # AES-256-GCM
+            │   ├── KeyDerivation.kt          # Master Key 派生
+            │   ├── VaultEncryption.kt        # 保险库数据加解密
+            │   ├── PasskeyCrypto.kt          # Passkey 密钥对生成
+            │   └── SecureMemory.kt           # 敏感数据内存保护
+            ├── service/                      # Android 系统服务
+            │   ├── autofill/                 # AutofillService（账号密码填充）
+            │   ├── credential/               # CredentialProviderService（Passkey）
+            │   └── biometric/                # 生物识别解锁管理
+            ├── sync/                         # 同步客户端
+            │   ├── SyncManager.kt            # 同步调度核心
+            │   ├── PendingChangesQueue.kt    # 离线变更队列
+            │   ├── SyncWorker.kt             # WorkManager 后台同步
+            │   └── ConflictResolver.kt       # last-write-wins
+            ├── ui/                           # Jetpack Compose UI
+            │   ├── theme/                    # Color、Type、Theme
+            │   ├── navigation/               # NavHost
+            │   ├── screens/                  # 各页面 Screen
+            │   ├── components/               # 可复用组件
+            │   └── viewmodel/                # ViewModel（Hilt 注入）
+            └── di/                           # Hilt 模块
+                ├── AppModule.kt
+                ├── DatabaseModule.kt
+                ├── NetworkModule.kt
+                ├── CryptoModule.kt
+                └── ServiceModule.kt
 
 packages/
 └── shared-types/         # 共享 TypeScript 类型（可选，用于前后端类型一致）
