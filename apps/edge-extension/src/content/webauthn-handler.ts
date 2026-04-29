@@ -126,28 +126,34 @@ function querySaveCandidates(origin: string): Promise<Array<{ id: string; name: 
 
 async function handleGet(req: BridgeRequest): Promise<unknown> {
   const matches = await queryGetMatches(req.origin, req.publicKey);
+  console.log("[PWBook CS] handleGet: matches=", matches.length, "origin=", req.origin);
 
-  let selectedCredentialId: string | undefined;
-  if (matches.length === 1) {
-    selectedCredentialId = matches[0].credentialId;
-  } else if (matches.length > 1) {
+  if (matches.length === 0) {
+    console.log("[PWBook CS] handleGet: 无匹配, 拒绝并阻止 fallback");
+    throw new Error("当前站点没有可用的通行密钥");
+  }
+
+  let selectedCredentialId: string;
+  if (window.self !== window.top) {
+    selectedCredentialId = await requestPromptFromTopFrame(matches);
+  } else {
     selectedCredentialId = await showPasskeyGetPrompt(matches);
   }
+  console.log("[PWBook CS] handleGet: 用户选择 credentialId=", selectedCredentialId);
 
   return new Promise((resolve, reject) => {
     const payload: Record<string, unknown> = {
       type: "WEBAUTHN_GET",
       origin: req.origin,
       publicKey: req.publicKey,
+      selectedCredentialId,
     };
-    if (selectedCredentialId) {
-      payload.selectedCredentialId = selectedCredentialId;
-    }
 
     chrome.runtime.sendMessage(
       payload,
       (response: { ok?: boolean; result?: unknown; error?: string } | undefined) => {
         if (chrome.runtime.lastError) {
+          console.log("[PWBook CS] handleGet: background 错误=", chrome.runtime.lastError.message);
           reject(new Error(chrome.runtime.lastError.message));
           return;
         }
@@ -156,12 +162,42 @@ async function handleGet(req: BridgeRequest): Promise<unknown> {
           return;
         }
         if (response.ok) {
+          console.log("[PWBook CS] handleGet: background 成功");
           resolve(response.result);
         } else {
+          console.log("[PWBook CS] handleGet: background 失败=", response.error);
           reject(new Error(response.error ?? "WebAuthn 操作失败"));
         }
       }
     );
+  });
+}
+
+function requestPromptFromTopFrame(
+  matches: Array<{ id: string; name: string; rpId: string; credentialId: string }>
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const requestId = crypto.randomUUID();
+
+    function listener(message: unknown) {
+      if (typeof message !== "object" || message === null) return;
+      const msg = message as Record<string, unknown>;
+      if (msg.type !== "PASSKEY_PROMPT_RESPONSE" || msg.requestId !== requestId) return;
+      chrome.runtime.onMessage.removeListener(listener);
+      if (msg.ok) {
+        resolve(String(msg.credentialId));
+      } else {
+        reject(new Error(String(msg.error ?? "弹窗被取消")));
+      }
+    }
+
+    chrome.runtime.onMessage.addListener(listener);
+
+    chrome.runtime.sendMessage({
+      type: "SHOW_PASSKEY_PROMPT",
+      requestId,
+      matches,
+    });
   });
 }
 
@@ -173,11 +209,18 @@ function queryGetMatches(
     chrome.runtime.sendMessage(
       { type: "QUERY_PASSKEY_GET_MATCHES", origin, publicKey },
       (response: { ok?: boolean; matches?: Array<{ id: string; name: string; rpId: string; credentialId: string }>; error?: string } | undefined) => {
-        if (chrome.runtime.lastError || !response?.ok) {
+        if (chrome.runtime.lastError) {
+          console.log("[PWBook CS] queryGetMatches: runtime error=", chrome.runtime.lastError.message);
           resolve([]);
-        } else {
-          resolve(response.matches ?? []);
+          return;
         }
+        if (!response?.ok) {
+          console.log("[PWBook CS] queryGetMatches: background error=", response?.error);
+          resolve([]);
+          return;
+        }
+        console.log("[PWBook CS] queryGetMatches: success, matches=", response.matches?.length ?? 0);
+        resolve(response.matches ?? []);
       }
     );
   });

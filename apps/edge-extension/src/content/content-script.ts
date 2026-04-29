@@ -8,6 +8,7 @@ import { InlineMenu } from "../autofill/inline-menu.js";
 import { StorageService } from "../platform/storage.js";
 import { parseOtpauthUri, generateTotpCode } from "../crypto/totp.js";
 import { installWebAuthnBridge } from "./webauthn-handler.js";
+import { showPasskeyGetPrompt } from "./passkey-prompt.js";
 import { initLocalStorageBridge } from "./localstorage-bridge.js";
 
 declare const __PWBOOK_INITIALIZED__: boolean | undefined;
@@ -23,12 +24,11 @@ if (typeof __PWBOOK_INITIALIZED__ === "undefined") {
 
 async function initContentScript(): Promise<void> {
   // WebAuthn 桥接需要尽早安装，避免页面初始化阶段就调用 navigator.credentials
-  if (window.top === window.self) {
-    try {
-      installWebAuthnBridge(document);
-    } catch (err) {
-      console.warn("[PWBook] WebAuthn 桥接安装失败:", err);
-    }
+  // 每个 frame 都需要安装（包括 iframe），因为登录表单可能嵌在 iframe 中
+  try {
+    installWebAuthnBridge(document);
+  } catch (err) {
+    console.warn("[PWBook] WebAuthn 桥接安装失败:", err);
   }
 
   const collector = new CollectAutofillContentService(document);
@@ -66,6 +66,29 @@ async function initContentScript(): Promise<void> {
     if (typeof message !== "object" || message === null) return false;
     const msg = message as Record<string, unknown>;
     console.log("[PWBook] 收到 background 消息:", msg.type);
+
+    if (msg.type === "SHOW_PASSKEY_PROMPT") {
+      if (window.self !== window.top) return false;
+      const matches = (msg.matches as Array<{ id: string; name: string; rpId: string; credentialId: string }>) ?? [];
+      showPasskeyGetPrompt(matches)
+        .then((credentialId) => {
+          chrome.runtime.sendMessage({
+            type: "PASSKEY_PROMPT_RESPONSE",
+            requestId: msg.requestId,
+            ok: true,
+            credentialId,
+          });
+        })
+        .catch((err) => {
+          chrome.runtime.sendMessage({
+            type: "PASSKEY_PROMPT_RESPONSE",
+            requestId: msg.requestId,
+            ok: false,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        });
+      return false;
+    }
 
     if (msg.type === "SHOW_SAVE_PROMPT") {
       savePrompt.show({
@@ -226,12 +249,16 @@ function setupAutoDetection(
 
   // MutationObserver 防抖扫描
   let scanTimeout: ReturnType<typeof setTimeout> | null = null;
+  let lastMutationScanAt = 0;
+  const MUTATION_SCAN_COOLDOWN = 2000; // 2 秒冷却，防止动态页面持续触发
   const observer = new MutationObserver(() => {
     if (scanTimeout) clearTimeout(scanTimeout);
     scanTimeout = setTimeout(() => {
+      const now = Date.now();
+      if (now - lastMutationScanAt < MUTATION_SCAN_COOLDOWN) return;
       const newFormData = collector.scanPage();
       if (newFormData) {
-        console.log("[PWBook] MutationObserver 检测到表单变化");
+        lastMutationScanAt = now;
         requestVaultItems(newFormData.url);
       }
     }, 100);

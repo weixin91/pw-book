@@ -45,6 +45,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const msg = message as Record<string, unknown>;
   console.log("[PWBook BG] 收到消息:", msg.type, "来自 tab:", sender.tab?.id, "url:", sender.tab?.url);
 
+  // 跨 frame Passkey 弹窗转发：iframe → 顶层 frame → iframe
+  if (msg.type === "SHOW_PASSKEY_PROMPT" && sender.tab?.id) {
+    chrome.tabs.sendMessage(sender.tab.id, message, { frameId: 0 });
+    return false;
+  }
+  if (msg.type === "PASSKEY_PROMPT_RESPONSE" && sender.tab?.id) {
+    chrome.tabs.sendMessage(sender.tab.id, message);
+    return false;
+  }
+
   if (msg.type === "FORM_SUBMITTED" && sender.tab?.id && sender.tab.url) {
     const data: StoredFormData = {
       tabId: sender.tab.id,

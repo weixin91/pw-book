@@ -72,7 +72,7 @@ export async function generatePasskey(params: PasskeyCreationParams): Promise<Pa
 
 // 导入已有 Passkey 数据（用于解密后断言签名）
 export async function importPasskeyPrivateKey(privateKeyB64: string): Promise<CryptoKey> {
-  const pkcs8 = base64Decode(privateKeyB64);
+  const pkcs8 = base64UrlDecode(privateKeyB64);
   return crypto.subtle.importKey(
     "pkcs8",
     pkcs8 as unknown as BufferSource,

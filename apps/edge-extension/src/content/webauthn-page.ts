@@ -158,6 +158,11 @@
       if (!envelope) return originalGet(options);
       return buildPublicKeyCredential(envelope) as Credential;
     } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      // 无匹配或用户取消时，不 fallback 到系统 authenticator（避免弹出 Windows Hello 等）
+      if (msg.includes("没有可用的通行密钥") || msg.includes("用户取消了")) {
+        throw err;
+      }
       try {
         return await originalGet(options);
       } catch {

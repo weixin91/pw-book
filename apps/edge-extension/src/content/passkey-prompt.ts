@@ -38,6 +38,8 @@ function createContainer(): HTMLDivElement {
 function closePrompt() {
   const el = document.getElementById("__pwbook_passkey_prompt__");
   if (el) el.remove();
+  const card = document.getElementById("__pwbook_passkey_card__");
+  if (card) card.remove();
 }
 
 // ── 保存 Passkey 弹窗 ──
@@ -194,14 +196,33 @@ export function showPasskeyGetPrompt(
       return;
     }
 
-    const container = createContainer();
+    const old = document.getElementById("__pwbook_passkey_prompt__");
+    if (old) old.remove();
+
+    // 全屏透明点击捕获层
+    const backdrop = document.createElement("div");
+    backdrop.id = "__pwbook_passkey_prompt__";
+    backdrop.style.cssText = `
+      all: initial;
+      position: fixed;
+      inset: 0;
+      z-index: 2147483646;
+      font-family: system-ui, -apple-system, sans-serif;
+    `;
+
     const card = document.createElement("div");
+    card.id = "__pwbook_passkey_card__";
     card.style.cssText = `
+      all: initial;
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      z-index: 2147483647;
       background: #fff;
       border-radius: 12px;
       width: 380px;
-      max-width: 90vw;
-      max-height: 70vh;
+      max-width: calc(100vw - 32px);
+      max-height: 85vh;
       display: flex;
       flex-direction: column;
       box-shadow: 0 20px 60px rgba(0,0,0,0.25);
@@ -213,6 +234,7 @@ export function showPasskeyGetPrompt(
     header.style.cssText = `
       padding: 16px 20px; font-size: 16px; font-weight: 600;
       border-bottom: 1px solid #eee;
+      background: #e3f2fd;
     `;
     card.appendChild(header);
 
@@ -260,14 +282,13 @@ export function showPasskeyGetPrompt(
 
     card.appendChild(list);
 
-    container.addEventListener("click", (e) => {
-      if (e.target === container) {
-        closePrompt();
-        reject(new Error("用户取消了 Passkey 登录"));
-      }
+    backdrop.addEventListener("click", () => {
+      closePrompt();
+      reject(new Error("用户取消了 Passkey 登录"));
     });
 
-    container.appendChild(card);
-    document.body.appendChild(container);
+    const root = document.documentElement;
+    root.appendChild(backdrop);
+    root.appendChild(card);
   });
 }

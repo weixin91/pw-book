@@ -16,8 +16,9 @@ import {
   deriveRecoveryMasterKey,
 } from "../crypto/crypto-service";
 import { LockSettingsService, type LockSettings } from "../background/lock-timer";
+import { ImportPanel } from "./components/ImportPanel";
 
-type Tab = "register" | "login";
+type Tab = "register" | "login" | "import";
 
 const DEFAULT_KDF = {
   kdfType: "PBKDF2_SHA256" as const,
@@ -374,6 +375,21 @@ export function OptionsApp(): React.ReactElement {
             >
               登录
             </button>
+            <button
+              onClick={() => { setTab("import"); resetForm(); }}
+              style={{
+                padding: "10px 20px",
+                border: "none",
+                background: "transparent",
+                fontSize: 14,
+                cursor: "pointer",
+                borderBottom: tab === "import" ? "2px solid #1a73e8" : "2px solid transparent",
+                color: tab === "import" ? "#1a73e8" : "#666",
+                fontWeight: tab === "import" ? 500 : 400,
+              }}
+            >
+              导入
+            </button>
           </div>
 
           {error && (
@@ -430,6 +446,7 @@ export function OptionsApp(): React.ReactElement {
               </button>
             </div>
           )}
+          {tab === "import" && <ImportPanel />}
         </>
       )}
     </div>

@@ -147,7 +147,10 @@ export interface GetMatch {
 
 export async function queryPasskeyGetMatches(origin: string, publicKeyRaw: unknown): Promise<GetMatch[]> {
   const userKey = await StorageService.getUserKey();
-  if (!userKey) return [];
+  if (!userKey) {
+    console.log("[PWBook BG] queryPasskeyGetMatches: 保险库未解锁");
+    return [];
+  }
 
   const publicKey = deserializeBuffers(publicKeyRaw) as Record<string, unknown>;
   const rpIdRequested = typeof publicKey.rpId === "string" ? publicKey.rpId : undefined;
@@ -161,6 +164,8 @@ export async function queryPasskeyGetMatches(origin: string, publicKeyRaw: unkno
       .filter((v): v is string => !!v)
   );
 
+  console.log("[PWBook BG] queryPasskeyGetMatches: origin=", origin, "rpIdRequested=", rpIdRequested, "computed rpId=", rpId, "allowedIds count=", allowedIds.size);
+
   const ciphers = await StorageService.getCiphers();
   const matches: GetMatch[] = [];
 
@@ -169,9 +174,26 @@ export async function queryPasskeyGetMatches(origin: string, publicKeyRaw: unkno
       const plain = await decryptCipherData(cipher.data, userKey);
       const data = JSON.parse(plain) as Record<string, unknown>;
       const passkey = data.passkey as PasskeyData | undefined;
-      if (!passkey || passkey.rpId !== rpId) continue;
-      if (allowedIds.size > 0 && !allowedIds.has(passkey.credentialId)) continue;
+      if (!passkey) continue;
 
+      // rpId 匹配：直接相等，或当前 origin host 以 passkey.rpId 结尾（支持子域）
+      const originHost = new URL(origin).hostname.toLowerCase();
+      const passkeyRpId = passkey.rpId.toLowerCase();
+      const rpIdMatch = passkeyRpId === rpId ||
+        (passkeyRpId === originHost) ||
+        (originHost.endsWith("." + passkeyRpId));
+
+      if (!rpIdMatch) {
+        console.log("[PWBook BG] queryPasskeyGetMatches: rpId 不匹配, passkey.rpId=", passkey.rpId, "computed rpId=", rpId, "originHost=", originHost);
+        continue;
+      }
+
+      if (allowedIds.size > 0 && !allowedIds.has(passkey.credentialId)) {
+        console.log("[PWBook BG] queryPasskeyGetMatches: credentialId 不匹配, passkey.credentialId=", passkey.credentialId, "allowedIds=", Array.from(allowedIds));
+        continue;
+      }
+
+      console.log("[PWBook BG] queryPasskeyGetMatches: 匹配成功, cipherId=", cipher.id, "name=", data.name, "rpId=", passkey.rpId);
       matches.push({
         id: cipher.id,
         name: String(data.name || ""),
@@ -183,6 +205,7 @@ export async function queryPasskeyGetMatches(origin: string, publicKeyRaw: unkno
     }
   }
 
+  console.log("[PWBook BG] queryPasskeyGetMatches: 总匹配数=", matches.length);
   return matches;
 }
 
@@ -403,6 +426,13 @@ export async function handleWebAuthnGet(
   }
 
   const credentialIdBytes = base64UrlDecode(passkey.credentialId);
+  // userHandle 容错：部分导入数据可能不是合法 base64url，fallback 到 UTF-8
+  let userHandleBytes: Uint8Array;
+  try {
+    userHandleBytes = base64UrlDecode(passkey.userHandle);
+  } catch {
+    userHandleBytes = new TextEncoder().encode(passkey.userHandle);
+  }
   return {
     id: passkey.credentialId,
     rawId: bytes(credentialIdBytes),
@@ -410,7 +440,7 @@ export async function handleWebAuthnGet(
       clientDataJSON: bytes(clientDataJSON),
       authenticatorData: bytes(authData),
       signature: bytes(signature),
-      userHandle: bytes(base64UrlDecode(passkey.userHandle)),
+      userHandle: bytes(userHandleBytes),
     },
   };
 }
