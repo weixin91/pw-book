@@ -32,12 +32,19 @@ class GeneratePasswordUseCase @Inject constructor() {
         require(pool.isNotEmpty()) { "至少选择一种字符类型" }
 
         val password = mutableListOf<Char>()
-        repeat(minNumbers) { password.add(numberChars.random(random)) }
-        repeat(minSpecial) { password.add(specialChars.random(random)) }
+        repeat(minNumbers) { password.add(numberChars[random.nextInt(numberChars.length)]) }
+        repeat(minSpecial) { password.add(specialChars[random.nextInt(specialChars.length)]) }
         while (password.size < length) {
-            password.add(pool.random(random))
+            password.add(pool[random.nextInt(pool.length)])
         }
-        password.shuffle(random)
+
+        // Fisher-Yates shuffle with SecureRandom
+        for (i in password.size - 1 downTo 1) {
+            val j = random.nextInt(i + 1)
+            val tmp = password[i]
+            password[i] = password[j]
+            password[j] = tmp
+        }
         return password.joinToString("")
     }
 }

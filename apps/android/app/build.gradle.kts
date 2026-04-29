@@ -51,6 +51,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     composeOptions {
@@ -61,6 +62,8 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
             excludes += "/META-INF/versions/9/previous-compilation-data.bin"
+            excludes += "/META-INF/versions/9/OSGI-INF/MANIFEST.MF"
+            pickFirsts += "/META-INF/versions/9/OSGI-INF/MANIFEST.MF"
         }
     }
 }
