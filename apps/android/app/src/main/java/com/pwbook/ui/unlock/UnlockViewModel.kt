@@ -2,16 +2,21 @@ package com.pwbook.ui.unlock
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.pwbook.domain.VaultSession
 import com.pwbook.domain.usecase.UnlockVaultUseCase
+import com.pwbook.sync.SyncManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import timber.log.Timber
 import javax.inject.Inject
 
 @HiltViewModel
 class UnlockViewModel @Inject constructor(
-    private val unlockUseCase: UnlockVaultUseCase
+    private val unlockUseCase: UnlockVaultUseCase,
+    private val vaultSession: VaultSession,
+    private val syncManager: SyncManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(UnlockUiState())
@@ -26,11 +31,19 @@ class UnlockViewModel @Inject constructor(
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             val result = unlockUseCase.unlock(_uiState.value.password)
             result.fold(
-                onSuccess = {
+                onSuccess = { userKey ->
+                    // 设置 VaultSession 的 userKey，用于解密凭据
+                    vaultSession.unlock(userKey)
+                    Timber.i("Vault unlocked, userKey set")
                     _uiState.value = _uiState.value.copy(isLoading = false)
+
+                    // 在独立作用域中触发同步，不受 ViewModel 生命周期影响
+                    syncManager.launchFullSync()
+
                     onSuccess()
                 },
                 onFailure = { e ->
+                    Timber.e(e, "Unlock failed")
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
                         error = e.message ?: "解锁失败"

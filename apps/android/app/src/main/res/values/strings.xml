@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Password Book</string>
+    <string name="login_title">登录</string>
+    <string name="register_title">注册</string>
     <string name="unlock_title">解锁保险库</string>
     <string name="unlock_hint">输入主密码</string>
     <string name="unlock_button">解锁</string>
@@ -27,4 +29,9 @@
     <string name="favorites">收藏</string>
     <string name="all_items">全部</string>
     <string name="lock">锁定</string>
+    <string name="logout">退出登录</string>
+    <string name="server_url">服务器地址</string>
+    <string name="vault_timeout">自动锁定时间 (分钟)</string>
+    <string name="totp_key">TOTP 密钥</string>
+    <string name="favorite">收藏</string>
 </resources>

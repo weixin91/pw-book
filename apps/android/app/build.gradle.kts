@@ -54,10 +54,6 @@ android {
         buildConfig = true
     }
 
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.15"
-    }
-
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -104,6 +100,7 @@ dependencies {
     implementation("io.ktor:ktor-client-websockets:3.1.0")
     implementation("io.ktor:ktor-serialization-kotlinx-json:3.1.0")
     implementation("io.ktor:ktor-client-logging:3.1.0")
+    implementation("io.ktor:ktor-client-auth:3.1.0")
 
     // Serialization
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.0")

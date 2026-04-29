@@ -10,6 +10,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
@@ -30,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.pwbook.R
+import com.pwbook.domain.DecryptedCipher
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -37,6 +40,7 @@ fun VaultListScreen(
     viewModel: VaultListViewModel = androidx.hilt.navigation.compose.hiltViewModel(),
     onNavigateToEdit: (String?) -> Unit,
     onNavigateToGenerator: () -> Unit,
+    onNavigateToSettings: () -> Unit,
     onLock: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -48,6 +52,9 @@ fun VaultListScreen(
                 actions = {
                     IconButton(onClick = onNavigateToGenerator) {
                         Text("🔐")
+                    }
+                    IconButton(onClick = onNavigateToSettings) {
+                        Icon(Icons.Default.Settings, contentDescription = stringResource(R.string.settings))
                     }
                     IconButton(onClick = onLock) {
                         Icon(Icons.Default.Lock, contentDescription = stringResource(R.string.lock))
@@ -95,7 +102,7 @@ fun VaultListScreen(
 
 @Composable
 private fun CipherListItem(
-    cipher: com.pwbook.data.local.entity.CipherEntity,
+    cipher: DecryptedCipher,
     onClick: () -> Unit
 ) {
     Card(
@@ -104,9 +111,16 @@ private fun CipherListItem(
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
-                text = cipher.id.take(8),
+                text = cipher.name,
                 style = MaterialTheme.typography.titleMedium
             )
+            if (cipher.username != null) {
+                Text(
+                    text = cipher.username,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
             Text(
                 text = "修改于 ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date(cipher.modifiedAt))}",
                 style = MaterialTheme.typography.bodySmall,

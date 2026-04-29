@@ -3,17 +3,29 @@ package com.pwbook.ui.screens.edit
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -23,9 +35,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.pwbook.R
 
@@ -46,22 +61,23 @@ fun CipherEditScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Text(
-                        if (uiState.isNew) stringResource(R.string.add_cipher)
-                        else stringResource(R.string.edit_cipher)
-                    )
+                    Text(if (uiState.isNew) stringResource(R.string.add_cipher) else stringResource(R.string.edit_cipher))
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
                     }
                 },
                 actions = {
+                    IconButton(onClick = { viewModel.updateFavorite(!uiState.favorite) }) {
+                        Icon(
+                            if (uiState.favorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                            contentDescription = "收藏"
+                        )
+                    }
                     if (!uiState.isNew) {
-                        TextButton(onClick = {
-                            viewModel.delete(onBack)
-                        }) {
-                            Text(stringResource(R.string.delete))
+                        IconButton(onClick = { viewModel.delete(onBack) }) {
+                            Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.delete))
                         }
                     }
                 }
@@ -76,51 +92,132 @@ fun CipherEditScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            // 名称
             OutlinedTextField(
                 value = uiState.name,
                 onValueChange = viewModel::updateName,
-                label = { Text(stringResource(R.string.name)) },
+                label = { Text("名称") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true
             )
+
+            // 用户名
             OutlinedTextField(
                 value = uiState.username,
                 onValueChange = viewModel::updateUsername,
-                label = { Text(stringResource(R.string.username)) },
+                label = { Text("用户名") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true
             )
+
+            // 密码（带显示/隐藏按钮和生成按钮）
             OutlinedTextField(
                 value = uiState.password,
                 onValueChange = viewModel::updatePassword,
-                label = { Text(stringResource(R.string.password)) },
+                label = { Text("密码") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
-                visualTransformation = PasswordVisualTransformation()
+                visualTransformation = if (uiState.showPassword) VisualTransformation.None else PasswordVisualTransformation(),
+                trailingIcon = {
+                    Row {
+                        IconButton(onClick = { viewModel.togglePasswordVisibility() }) {
+                            Icon(
+                                if (uiState.showPassword) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                                contentDescription = if (uiState.showPassword) "隐藏密码" else "显示密码"
+                            )
+                        }
+                    }
+                }
             )
-            OutlinedTextField(
-                value = uiState.uri,
-                onValueChange = viewModel::updateUri,
-                label = { Text(stringResource(R.string.uri)) },
+
+            // 自动填充选项（URI列表）
+            Text(
+                text = "自动填充选项（网站或 APP）",
+                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            uiState.uris.forEachIndexed { index, uri ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val kindLabel = if (uri.startsWith("androidapp://")) "APP" else if (uri.startsWith("http")) "网站" else "URI"
+                    Text(
+                        text = kindLabel,
+                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                        color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.width(40.dp)
+                    )
+                    OutlinedTextField(
+                        value = uri,
+                        onValueChange = { viewModel.updateUri(index, it) },
+                        placeholder = { Text("https://example.com 或 androidapp://com.example") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true
+                    )
+                    IconButton(onClick = { viewModel.removeUri(index) }) {
+                        Text("×")
+                    }
+                }
+            }
+
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedButton(onClick = { viewModel.addUri("https://") }) {
+                    Text("+ 网站")
+                }
+                OutlinedButton(onClick = { viewModel.addUri("androidapp://") }) {
+                    Text("+ APP")
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // 备注
             OutlinedTextField(
                 value = uiState.notes,
                 onValueChange = viewModel::updateNotes,
-                label = { Text(stringResource(R.string.notes)) },
+                label = { Text("备注") },
                 modifier = Modifier.fillMaxWidth(),
-                minLines = 3
+                minLines = 3,
+                maxLines = 5
             )
-            Row(
+
+            // TOTP 密钥
+            OutlinedTextField(
+                value = uiState.totp,
+                onValueChange = viewModel::updateTotp,
+                label = { Text("TOTP 密钥 (otpauth:// URI 或 Base32)") },
+                placeholder = { Text("otpauth://totp/Issuer:account?secret=...") },
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End
-            ) {
-                Button(onClick = {
-                    viewModel.save("userId", onBack)
-                }) {
-                    Text(stringResource(R.string.save))
+                singleLine = true,
+                visualTransformation = if (uiState.showTotp) VisualTransformation.None else PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                trailingIcon = {
+                    IconButton(onClick = { viewModel.toggleTotpVisibility() }) {
+                        Icon(
+                            if (uiState.showTotp) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                            contentDescription = if (uiState.showTotp) "隐藏密钥" else "显示密钥"
+                        )
+                    }
                 }
+            )
+
+            // Passkey 显示区域（预留，Phase 3 实现）
+            // TODO: 显示 passkey 信息
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // 保存按钮
+            Button(
+                onClick = { viewModel.save(onBack) },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(stringResource(R.string.save))
             }
         }
     }

@@ -22,6 +22,9 @@ class SettingsRepository @Inject constructor(
     suspend fun remove(key: String) = settingDao.delete(key)
 
     // Secure prefs helpers
+    fun getServerUrl(): String? = securePrefs.getString(SecurePrefs.KEY_SERVER_URL)
+    fun setServerUrl(url: String?) = securePrefs.putString(SecurePrefs.KEY_SERVER_URL, url)
+
     fun getAccessToken(): String? = securePrefs.getString(SecurePrefs.KEY_ACCESS_TOKEN)
     fun setAccessToken(token: String?) = securePrefs.putString(SecurePrefs.KEY_ACCESS_TOKEN, token)
 

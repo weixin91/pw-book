@@ -3,6 +3,7 @@ package com.pwbook.di
 import com.pwbook.crypto.AesGcmEngine
 import com.pwbook.crypto.KdfEngine
 import com.pwbook.crypto.KeyDerivation
+import com.pwbook.crypto.RsaKeyGenerator
 import com.pwbook.crypto.VaultEncryption
 import dagger.Module
 import dagger.Provides
@@ -29,4 +30,8 @@ object CryptoModule {
     @Provides
     @Singleton
     fun provideVaultEncryption(aesGcmEngine: AesGcmEngine): VaultEncryption = VaultEncryption(aesGcmEngine)
+
+    @Provides
+    @Singleton
+    fun provideRsaKeyGenerator(): RsaKeyGenerator = RsaKeyGenerator()
 }

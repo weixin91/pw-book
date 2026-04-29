@@ -132,6 +132,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     });
 
     return reply.send({
+      id: user.id,
       token,
       refreshToken,
       protectedKey: user.protectedKey,
