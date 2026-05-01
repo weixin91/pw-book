@@ -230,7 +230,7 @@ private fun CipherListItem(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = cipher.name,
+                    text = if (cipher.passkey != null) "${cipher.name} 🔐" else cipher.name,
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.weight(1f)
                 )

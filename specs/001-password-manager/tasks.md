@@ -236,21 +236,21 @@ description: "密码管理应用功能实现的任务列表"
 
 ### Phase 3: 增强安全与 Passkey
 
-- [ ] T055 实现自动锁定和生物识别解锁于 `apps/android/app/service/biometric/`（BiometricUnlockManager、KeystoreHelper、BiometricPrompt + CryptoObject，遵循 FR-016）
-- [ ] T104 [P] 实现剪贴板安全管理于 `apps/android/app/domain/usecase/CopyPasswordUseCase.kt`（10 秒自动清空、计时器重置，遵循 FR-017/FR-023）
-- [ ] T065 [P] 实现 TOTP 生成和显示于 `apps/android/app/crypto/TotpGenerator.kt` 和 `apps/android/app/ui/components/TotpDisplay.kt`（RFC 6238、环形倒计时进度条）
-- [ ] T105 [P] 实现 ZXing 二维码扫描于 `apps/android/app/ui/screens/scan/TotpScanScreen.kt`（解析 otpauth:// URI）
-- [ ] T066 实现 `CredentialProviderService` 于 `apps/android/app/service/credential/PwBookCredentialProviderService.kt`（Passkey，遵循 FR-008）
-- [ ] T106 [P] 实现 Passkey 创建处理于 `apps/android/app/service/credential/PasskeyCreateHandler.kt`（两阶段流程、保存到现有凭据/新建、EC P-256 密钥对生成）
-- [ ] T107 [P] 实现 Passkey 认证处理于 `apps/android/app/service/credential/PasskeyGetHandler.kt`（查询阶段返回候选、选择阶段签名 WebAuthn 断言）
-- [ ] T108 实现 Passkey 创建/认证 Activity 于 `apps/android/app/service/credential/PasskeyCreateActivity.kt` 和 `PasskeyGetActivity.kt`（PendingIntent 处理、生物识别认证、返回 WebAuthn 响应）
-- [ ] T059 实现域名关联管理 UI 于 `apps/android/app/ui/screens/settings/DomainAssocScreen.kt`
+- [X] T055 实现自动锁定和生物识别解锁于 `apps/android/app/service/biometric/`（BiometricUnlockManager、KeystoreHelper、BiometricPrompt + CryptoObject，遵循 FR-016）
+- [X] T104 [P] 实现剪贴板安全管理于 `apps/android/app/domain/usecase/CopyPasswordUseCase.kt`（10 秒自动清空、计时器重置，遵循 FR-017/FR-023）
+- [X] T065 [P] 实现 TOTP 生成和显示于 `apps/android/app/crypto/TotpGenerator.kt` 和 `apps/android/app/ui/components/TotpDisplay.kt`（RFC 6238、环形倒计时进度条）
+- [X] T105 [P] 实现 ZXing 二维码扫描于 `apps/android/app/ui/screens/scan/TotpScanScreen.kt`（解析 otpauth:// URI）
+- [X] T066 实现 `CredentialProviderService` 于 `apps/android/app/service/credential/PwBookCredentialProviderService.kt`（Passkey，遵循 FR-008）
+- [X] T106 [P] 实现 Passkey 创建处理于 `apps/android/app/service/credential/PasskeyCreateHandler.kt`（两阶段流程、保存到现有凭据/新建、EC P-256 密钥对生成）
+- [X] T107 [P] 实现 Passkey 认证处理于 `apps/android/app/service/credential/PasskeyGetHandler.kt`（查询阶段返回候选、选择阶段签名 WebAuthn 断言）
+- [X] T108 实现 Passkey 创建/认证 Activity 于 `apps/android/app/service/credential/PasskeyCreateActivity.kt` 和 `PasskeyGetActivity.kt`（PendingIntent 处理、生物识别认证、返回 WebAuthn 响应）
+- [X] T059 实现域名关联管理 UI 于 `apps/android/app/ui/screens/settings/DomainAssocScreen.kt`
 
 ### Phase 4: 打磨
 
-- [ ] T109 [P] 实现加密兼容性测试（共享测试向量，验证 Android 加密结果与 Edge 端可互解密）
-- [ ] T110 [P] 添加单元测试覆盖（Crypto、URI Matcher、Password Generator、TOTP、Sync Conflict Resolver，目标 >80%）
-- [ ] T111 性能优化（Room 索引、LazyColumn 缓存、加密缓存、数据库查询优化）
+- [X] T109 [P] 实现加密兼容性测试（共享测试向量，验证 Android 加密结果与 Edge 端可互解密）
+- [X] T110 [P] 添加单元测试覆盖（Crypto、URI Matcher、Password Generator、TOTP、Sync Conflict Resolver，目标 >80%）
+- [X] T111 性能优化（Room 索引、LazyColumn 缓存、加密缓存、数据库查询优化）
 
 **检查点**：Android 应用所有功能可用，可与 Edge 和后端完成端到端测试
 

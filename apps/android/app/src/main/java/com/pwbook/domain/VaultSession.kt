@@ -71,6 +71,7 @@ class VaultSession @Inject constructor(
                 password = cipherData.login?.password,
                 uris = cipherData.login?.uris?.map { it.uri } ?: emptyList(),
                 totp = cipherData.login?.totp,
+                passkey = cipherData.login?.passkey,
                 modifiedAt = entity.modifiedAt
             )
         } catch (e: Exception) {
@@ -92,7 +93,21 @@ data class LoginDataJson(
     val username: String? = null,
     val password: String? = null,
     val uris: List<LoginUriJson> = emptyList(),
-    val totp: String? = null
+    val totp: String? = null,
+    val passkey: PasskeyDataJson? = null
+)
+
+@Serializable
+data class PasskeyDataJson(
+    val credentialId: String,
+    val rpId: String,
+    val rpName: String? = null,
+    val userHandle: String,
+    val userName: String? = null,
+    val privateKeyEncrypted: String,
+    val publicKey: String,
+    val counter: Long = 0,
+    val createdAt: Long = System.currentTimeMillis()
 )
 
 @Serializable
@@ -111,5 +126,6 @@ data class DecryptedCipher(
     val password: String?,
     val uris: List<String>,
     val totp: String?,
+    val passkey: PasskeyDataJson?,
     val modifiedAt: Long
 )

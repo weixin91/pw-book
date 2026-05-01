@@ -18,6 +18,8 @@ import com.pwbook.ui.screens.VaultListScreen
 import com.pwbook.ui.screens.VaultListViewModel
 import com.pwbook.ui.screens.edit.CipherEditScreen
 import com.pwbook.ui.generator.PasswordGeneratorScreen
+import com.pwbook.ui.screens.scan.TotpScanScreen
+import com.pwbook.ui.screens.settings.DomainAssocScreen
 import com.pwbook.ui.settings.SettingsScreen
 import com.pwbook.ui.unlock.UnlockScreen
 import javax.inject.Inject
@@ -140,6 +142,19 @@ fun AppNavHost(
             PasswordGeneratorScreen(
                 viewModel = hiltViewModel(),
                 onBack = { navController.popBackStack() }
+            )
+        }
+        composable(NavRoutes.DomainAssoc.route) {
+            DomainAssocScreen(
+                onBack = { navController.popBackStack() }
+            )
+        }
+        composable(NavRoutes.TotpScan.route) {
+            TotpScanScreen(
+                onBack = { navController.popBackStack() },
+                onTotpScanned = { secret, account, issuer ->
+                    navController.popBackStack()
+                }
             )
         }
     }

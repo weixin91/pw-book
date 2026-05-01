@@ -41,6 +41,16 @@
             </intent-filter>
         </service>
 
+        <activity
+            android:name=".service.credential.PasskeyCreateActivity"
+            android:exported="false"
+            android:theme="@style/Theme.PwBook" />
+
+        <activity
+            android:name=".service.credential.PasskeyGetActivity"
+            android:exported="false"
+            android:theme="@style/Theme.PwBook" />
+
         <service
             android:name=".service.credential.PwBookCredentialProviderService"
             android:exported="true"

@@ -1,16 +1,14 @@
 package com.pwbook.crypto
 
-import android.util.Base64
-
 class VaultEncryption(private val aesGcmEngine: AesGcmEngine) {
 
     fun encryptString(plaintext: String, key: ByteArray): String {
         val encrypted = aesGcmEngine.encrypt(plaintext.toByteArray(Charsets.UTF_8), key)
-        return Base64.encodeToString(encrypted, Base64.NO_WRAP)
+        return java.util.Base64.getEncoder().encodeToString(encrypted)
     }
 
     fun decryptString(ciphertext: String, key: ByteArray): String {
-        val encrypted = Base64.decode(ciphertext, Base64.NO_WRAP)
+        val encrypted = java.util.Base64.getDecoder().decode(ciphertext)
         val decrypted = aesGcmEngine.decrypt(encrypted, key)
         return String(decrypted, Charsets.UTF_8)
     }

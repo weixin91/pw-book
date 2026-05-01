@@ -11,16 +11,36 @@ import android.service.credentials.BeginGetCredentialRequest
 import android.service.credentials.BeginGetCredentialResponse
 import android.service.credentials.ClearCredentialStateRequest
 import android.service.credentials.CredentialProviderService
+import dagger.hilt.android.AndroidEntryPoint
+import timber.log.Timber
+import javax.inject.Inject
 
+@AndroidEntryPoint
 class PwBookCredentialProviderService : CredentialProviderService() {
+
+    @Inject
+    lateinit var createHandler: PasskeyCreateHandler
+
+    @Inject
+    lateinit var getHandler: PasskeyGetHandler
 
     override fun onBeginCreateCredential(
         request: BeginCreateCredentialRequest,
         cancellationSignal: CancellationSignal,
         callback: OutcomeReceiver<BeginCreateCredentialResponse, CreateCredentialException>
     ) {
-        // Phase 3 实现
-        callback.onError(CreateCredentialException(CreateCredentialException.TYPE_UNKNOWN))
+        val caller = request.callingAppInfo?.packageName ?: "unknown"
+        Timber.i("onBeginCreateCredential: caller=$caller")
+        try {
+            val response = createHandler.handleCreateCredential(request)
+            callback.onResult(response)
+        } catch (e: CreateCredentialException) {
+            Timber.e(e, "Create credential failed")
+            callback.onError(e)
+        } catch (e: Exception) {
+            Timber.e(e, "Unexpected error in create credential")
+            callback.onError(CreateCredentialException(CreateCredentialException.TYPE_UNKNOWN))
+        }
     }
 
     override fun onBeginGetCredential(
@@ -28,8 +48,18 @@ class PwBookCredentialProviderService : CredentialProviderService() {
         cancellationSignal: CancellationSignal,
         callback: OutcomeReceiver<BeginGetCredentialResponse, GetCredentialException>
     ) {
-        // Phase 3 实现
-        callback.onError(GetCredentialException(GetCredentialException.TYPE_UNKNOWN))
+        val caller = request.callingAppInfo?.packageName ?: "unknown"
+        Timber.i("onBeginGetCredential: caller=$caller")
+        try {
+            val response = getHandler.handleGetCredential(request)
+            callback.onResult(response)
+        } catch (e: GetCredentialException) {
+            Timber.e(e, "Get credential failed")
+            callback.onError(e)
+        } catch (e: Exception) {
+            Timber.e(e, "Unexpected error in get credential")
+            callback.onError(GetCredentialException(GetCredentialException.TYPE_UNKNOWN))
+        }
     }
 
     override fun onClearCredentialState(
@@ -37,7 +67,7 @@ class PwBookCredentialProviderService : CredentialProviderService() {
         cancellationSignal: CancellationSignal,
         callback: OutcomeReceiver<Void, ClearCredentialStateException>
     ) {
-        // Phase 3 实现
+        Timber.i("onClearCredentialState")
         callback.onResult(null)
     }
 }

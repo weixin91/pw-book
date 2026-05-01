@@ -49,6 +49,13 @@ class SecurePrefs @Inject constructor(
     fun getLong(key: String, default: Long = 0L): Long =
         prefs.getLong(key, default)
 
+    fun putInt(key: String, value: Int) {
+        prefs.edit().putInt(key, value).apply()
+    }
+
+    fun getInt(key: String, default: Int = 0): Int =
+        prefs.getInt(key, default)
+
     fun remove(key: String) {
         prefs.edit().remove(key).apply()
     }

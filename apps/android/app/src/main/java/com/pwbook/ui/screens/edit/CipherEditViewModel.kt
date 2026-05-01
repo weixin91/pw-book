@@ -56,7 +56,13 @@ class CipherEditViewModel @Inject constructor(
                         totp = decrypted.totp ?: "",
                         favorite = entity.favorite,
                         isNew = false,
-                        createdAt = entity.createdAt
+                        createdAt = entity.createdAt,
+                        hasPasskey = decrypted.passkey != null,
+                        passkeyRpId = decrypted.passkey?.rpId,
+                        passkeyCreatedAt = decrypted.passkey?.createdAt?.let {
+                            java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
+                                .format(java.util.Date(it))
+                        } ?: ""
                     )
                 } else {
                     Timber.e("Failed to decrypt cipher $cipherId")
@@ -100,6 +106,45 @@ class CipherEditViewModel @Inject constructor(
         }
     }
 
+    fun removePasskey() {
+        viewModelScope.launch {
+            val userKey = vaultSession.getUserKey() ?: return@launch
+            val cipherKey = userKey.copyOfRange(0, 32)
+
+            val entity = cipherRepository.getCipher(_uiState.value.id) ?: return@launch
+            val decrypted = vaultSession.decryptCipher(entity) ?: return@launch
+
+            val updatedData = CipherDataJson(
+                name = decrypted.name,
+                notes = decrypted.notes,
+                login = LoginDataJson(
+                    username = decrypted.username,
+                    password = decrypted.password,
+                    uris = decrypted.uris.map { LoginUriJson(uri = it) },
+                    totp = decrypted.totp
+                )
+            )
+            val encryptedData = vaultEncryption.encryptString(
+                json.encodeToString(updatedData),
+                cipherKey
+            )
+            val updatedEntity = entity.copy(
+                data = encryptedData,
+                modifiedAt = System.currentTimeMillis()
+            )
+            cipherRepository.saveCipher(updatedEntity)
+            pendingChangesQueue.enqueue(
+                entity.id,
+                PendingChangesQueue.Operation.UPDATE,
+                encryptedData,
+                System.currentTimeMillis()
+            )
+            syncManager.launchSyncAll()
+            _uiState.value = _uiState.value.copy(hasPasskey = false, passkeyRpId = null)
+            Timber.i("Passkey removed from cipher ${entity.id}")
+        }
+    }
+
     fun save(onSuccess: () -> Unit) {
         viewModelScope.launch {
             val userKey = vaultSession.getUserKey()
@@ -115,6 +160,13 @@ class CipherEditViewModel @Inject constructor(
             val state = _uiState.value
             val now = System.currentTimeMillis()
 
+            // 保留原有 passkey 字段
+            var existingPasskey: com.pwbook.domain.PasskeyDataJson? = null
+            if (!state.isNew) {
+                val existingEntity = cipherRepository.getCipher(state.id)
+                existingPasskey = existingEntity?.let { vaultSession.decryptCipher(it)?.passkey }
+            }
+
             // 构建凭据数据 JSON
             val cleanUris = state.uris
                 .map { it.trim() }
@@ -129,7 +181,8 @@ class CipherEditViewModel @Inject constructor(
                     username = state.username.ifEmpty { null },
                     password = state.password.ifEmpty { null },
                     uris = cleanUris,
-                    totp = state.totp.trim().ifEmpty { null }
+                    totp = state.totp.trim().ifEmpty { null },
+                    passkey = existingPasskey
                 )
             )
 
@@ -198,5 +251,8 @@ data class CipherEditUiState(
     val isNew: Boolean = true,
     val createdAt: Long = 0L,
     val showPassword: Boolean = false,
-    val showTotp: Boolean = false
+    val showTotp: Boolean = false,
+    val hasPasskey: Boolean = false,
+    val passkeyRpId: String? = null,
+    val passkeyCreatedAt: String = ""
 )

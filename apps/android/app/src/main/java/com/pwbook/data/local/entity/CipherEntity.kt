@@ -1,9 +1,16 @@
 package com.pwbook.data.local.entity
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
-@Entity(tableName = "cipher")
+@Entity(
+    tableName = "cipher",
+    indices = [
+        Index(value = ["userId", "modifiedAt"]),
+        Index(value = ["userId"])
+    ]
+)
 data class CipherEntity(
     @PrimaryKey
     val id: String,

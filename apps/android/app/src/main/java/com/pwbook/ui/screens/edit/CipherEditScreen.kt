@@ -27,6 +27,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -225,10 +226,35 @@ fun CipherEditScreen(
                 }
             )
 
-            // Passkey 显示区域（预留，Phase 3 实现）
-            // TODO: 显示 passkey 信息
-
-            Spacer(modifier = Modifier.height(16.dp))
+            // Passkey 显示区域
+            if (!uiState.isNew && uiState.hasPasskey) {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            text = "通行密钥 (Passkey)",
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        Text(
+                            text = "RP ID: ${uiState.passkeyRpId ?: "未知"}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = "添加时间: ${uiState.passkeyCreatedAt}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = { viewModel.removePasskey() },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("删除通行密钥", color = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+            }
 
             // 保存按钮
             Button(
