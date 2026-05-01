@@ -16,6 +16,7 @@ import com.pwbook.data.datasource.SecurePrefs
 import com.pwbook.data.repository.CipherRepository
 import com.pwbook.data.repository.DomainAssocRepository
 import com.pwbook.data.repository.RejectedSiteRepository
+import com.pwbook.data.repository.SettingsRepository
 import com.pwbook.domain.VaultSession
 import com.pwbook.domain.matcher.UriMatcher
 import com.pwbook.sync.PendingChangesQueue
@@ -41,6 +42,9 @@ class PwBookAutofillService : AutofillService() {
 
     @Inject
     lateinit var rejectedSiteRepository: RejectedSiteRepository
+
+    @Inject
+    lateinit var settingsRepository: SettingsRepository
 
     @Inject
     lateinit var vaultSession: VaultSession
@@ -75,6 +79,15 @@ class PwBookAutofillService : AutofillService() {
         if (parsed.usernameId == null && parsed.passwordId == null) {
             Timber.d("onFillRequest: no username/password fields found")
             callback.onSuccess(null)
+            return
+        }
+
+        // 检查是否超时
+        val timeoutMinutes = settingsRepository.getVaultTimeoutMinutes()
+        if (vaultSession.checkAndLockIfTimeout(timeoutMinutes)) {
+            Timber.d("onFillRequest: vault auto-locked due to timeout")
+            val response = buildUnlockResponse(parsed)
+            callback.onSuccess(response)
             return
         }
 
@@ -114,19 +127,18 @@ class PwBookAutofillService : AutofillService() {
 
                     Timber.d("onFillRequest: matched ${decrypted.size} ciphers")
 
-                    if (decrypted.isNotEmpty()) {
-                        response = FillResponseBuilder.build(
-                            context = this@PwBookAutofillService,
-                            parsed = parsed,
-                            ciphers = decrypted.take(5)
-                        )
-                        Timber.d("onFillRequest: built response with ${decrypted.take(5).size} datasets")
-                    }
+                    response = FillResponseBuilder.build(
+                        context = this@PwBookAutofillService,
+                        parsed = parsed,
+                        ciphers = decrypted.take(5)
+                    )
+                    Timber.d("onFillRequest: built response with ${decrypted.take(5).size} cipher datasets + vault option")
                 }
             } catch (e: Exception) {
                 Timber.e(e, "onFillRequest failed")
             }
         }
+        vaultSession.recordActivity()
         callback.onSuccess(response)
     }
 

@@ -10,10 +10,12 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.fragment.app.FragmentActivity
+import com.pwbook.data.repository.SettingsRepository
 import com.pwbook.domain.VaultSession
 import com.pwbook.ui.navigation.AppNavHost
 import com.pwbook.ui.theme.PwBookTheme
 import dagger.hilt.android.AndroidEntryPoint
+import timber.log.Timber
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -21,6 +23,9 @@ class MainActivity : FragmentActivity() {
 
     @Inject
     lateinit var vaultSession: VaultSession
+
+    @Inject
+    lateinit var settingsRepository: SettingsRepository
 
     private val autofillState = mutableStateOf(AutofillState())
 
@@ -77,6 +82,14 @@ class MainActivity : FragmentActivity() {
                 uri = intent.getStringExtra("autofill_uri"),
                 requestId = intent.getStringExtra("autofill_request_id")
             )
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        val timeoutMinutes = settingsRepository.getVaultTimeoutMinutes()
+        if (vaultSession.checkAndLockIfTimeout(timeoutMinutes)) {
+            Timber.d("MainActivity: vault auto-locked due to timeout")
         }
     }
 

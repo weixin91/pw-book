@@ -9,6 +9,7 @@ import android.service.autofill.Field
 import android.service.autofill.FillResponse
 import android.view.autofill.AutofillValue
 import android.widget.RemoteViews
+import com.pwbook.R
 import com.pwbook.domain.DecryptedCipher
 import timber.log.Timber
 
@@ -51,7 +52,7 @@ object FillResponseBuilder {
         cipher: DecryptedCipher
     ): Dataset {
         val displayName = cipher.name.ifEmpty { cipher.username ?: "未命名凭据" }
-        val remoteViews = RemoteViews(context.packageName, android.R.layout.simple_list_item_1).apply {
+        val remoteViews = RemoteViews(context.packageName, R.layout.autofill_item_cipher).apply {
             setTextViewText(android.R.id.text1, displayName)
         }
 
@@ -97,8 +98,12 @@ object FillResponseBuilder {
             .putString("last_autofill_request_id", requestId)
             .apply()
 
-        val remoteViews = RemoteViews(context.packageName, android.R.layout.simple_list_item_1).apply {
+        val accentColor = resolveAccentColor(context)
+        val remoteViews = RemoteViews(context.packageName, R.layout.autofill_item_vault).apply {
             setTextViewText(android.R.id.text1, "打开密码库")
+            if (accentColor != null) {
+                setTextColor(android.R.id.text1, accentColor)
+            }
         }
 
         val intent = Intent(context, com.pwbook.ui.MainActivity::class.java).apply {
@@ -124,5 +129,18 @@ object FillResponseBuilder {
         }
 
         return datasetBuilder.build()
+    }
+
+    private fun resolveAccentColor(context: Context): Int? {
+        return try {
+            val typedValue = android.util.TypedValue()
+            if (context.theme.resolveAttribute(android.R.attr.colorAccent, typedValue, true)) {
+                typedValue.data
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            null
+        }
     }
 }

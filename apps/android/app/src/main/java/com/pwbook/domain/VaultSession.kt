@@ -16,6 +16,7 @@ class VaultSession @Inject constructor(
     private val json: Json
 ) {
     private var userKey: ByteArray? = null
+    private var lastActiveTime: Long = 0
 
     private val _isUnlocked = MutableStateFlow(false)
     val isUnlocked: StateFlow<Boolean> = _isUnlocked
@@ -23,6 +24,7 @@ class VaultSession @Inject constructor(
     fun unlock(key: ByteArray) {
         userKey = key
         _isUnlocked.value = true
+        lastActiveTime = System.currentTimeMillis()
         Timber.i("VaultSession unlocked")
     }
 
@@ -30,7 +32,24 @@ class VaultSession @Inject constructor(
         userKey?.fill(0)
         userKey = null
         _isUnlocked.value = false
+        lastActiveTime = 0
         Timber.i("VaultSession locked")
+    }
+
+    fun recordActivity() {
+        lastActiveTime = System.currentTimeMillis()
+    }
+
+    fun checkAndLockIfTimeout(timeoutMinutes: Int): Boolean {
+        if (userKey == null || timeoutMinutes <= 0) return false
+        val elapsed = System.currentTimeMillis() - lastActiveTime
+        val timeoutMs = timeoutMinutes * 60_000L
+        return if (elapsed > timeoutMs) {
+            lock()
+            true
+        } else {
+            false
+        }
     }
 
     fun getUserKey(): ByteArray? = userKey

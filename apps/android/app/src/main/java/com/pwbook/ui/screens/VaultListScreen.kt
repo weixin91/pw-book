@@ -118,44 +118,95 @@ fun VaultListScreen(
                 .padding(padding)
                 .padding(horizontal = 16.dp)
         ) {
-            if (!isAutofillMode) {
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = {
-                        searchQuery = it
-                        viewModel.onSearchQueryChange(it)
-                    },
-                    placeholder = { Text(stringResource(R.string.search)) },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 8.dp),
-                    singleLine = true
-                )
-            }
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = {
+                    searchQuery = it
+                    viewModel.onSearchQueryChange(it)
+                },
+                placeholder = { Text(stringResource(R.string.search)) },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                singleLine = true
+            )
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(uiState.ciphers, key = { it.id }) { cipher ->
-                    val isMatch = targetUri != null && cipher.uris.any { uri ->
-                        uri == targetUri || uri.contains(targetUri) || targetUri.contains(uri)
+                if (isAutofillMode && searchQuery.isBlank() && targetUri != null) {
+                    val matched = uiState.ciphers.filter { cipher ->
+                        cipher.uris.any { uri -> uri == targetUri || uri.contains(targetUri) || targetUri.contains(uri) }
                     }
-                    CipherListItem(
-                        cipher = cipher,
-                        isMatch = isMatch,
-                        onClick = {
-                            if (isAutofillMode) {
-                                scope.launch {
-                                    viewModel.selectCipherForAutofill(cipher.id, targetUri)
-                                    onCipherSelected?.invoke(cipher.id)
-                                }
-                            } else {
-                                onNavigateToEdit(cipher.id)
-                            }
+                    val others = uiState.ciphers.filter { cipher ->
+                        cipher.uris.none { uri -> uri == targetUri || uri.contains(targetUri) || targetUri.contains(uri) }
+                    }
+                    if (matched.isNotEmpty()) {
+                        item {
+                            Text(
+                                text = "匹配该网站的凭据",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
                         }
-                    )
+                        items(matched, key = { it.id }) { cipher ->
+                            CipherListItem(
+                                cipher = cipher,
+                                isMatch = true,
+                                onClick = {
+                                    scope.launch {
+                                        viewModel.selectCipherForAutofill(cipher.id, targetUri)
+                                        onCipherSelected?.invoke(cipher.id)
+                                    }
+                                }
+                            )
+                        }
+                    }
+                    if (others.isNotEmpty()) {
+                        item {
+                            Text(
+                                text = "其他凭据",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                        items(others, key = { it.id }) { cipher ->
+                            CipherListItem(
+                                cipher = cipher,
+                                isMatch = false,
+                                onClick = {
+                                    scope.launch {
+                                        viewModel.selectCipherForAutofill(cipher.id, targetUri)
+                                        onCipherSelected?.invoke(cipher.id)
+                                    }
+                                }
+                            )
+                        }
+                    }
+                } else {
+                    items(uiState.ciphers, key = { it.id }) { cipher ->
+                        val isMatch = targetUri != null && cipher.uris.any { uri ->
+                            uri == targetUri || uri.contains(targetUri) || targetUri.contains(uri)
+                        }
+                        CipherListItem(
+                            cipher = cipher,
+                            isMatch = isMatch,
+                            onClick = {
+                                if (isAutofillMode) {
+                                    scope.launch {
+                                        viewModel.selectCipherForAutofill(cipher.id, targetUri)
+                                        onCipherSelected?.invoke(cipher.id)
+                                    }
+                                } else {
+                                    onNavigateToEdit(cipher.id)
+                                }
+                            }
+                        )
+                    }
                 }
             }
         }

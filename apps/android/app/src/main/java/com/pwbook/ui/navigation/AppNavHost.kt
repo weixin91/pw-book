@@ -1,6 +1,7 @@
 package com.pwbook.ui.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -42,6 +43,14 @@ fun AppNavHost(
         !hasToken -> NavRoutes.Login.route
         isUnlocked -> NavRoutes.VaultList.route
         else -> NavRoutes.Unlock.route
+    }
+
+    LaunchedEffect(isUnlocked) {
+        if (!isUnlocked && hasToken && navController.currentDestination?.route != NavRoutes.Unlock.route) {
+            navController.navigate(NavRoutes.Unlock.route) {
+                popUpTo(0) { inclusive = true }
+            }
+        }
     }
 
     NavHost(
