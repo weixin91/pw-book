@@ -16,7 +16,6 @@ COPY --from=builder /app/apps/backend/dist ./dist
 COPY --from=builder /app/apps/backend/prisma ./prisma
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/apps/backend/node_modules ./apps/backend/node_modules
-RUN npm install -g prisma
-RUN prisma generate
+RUN npm install -g prisma@^6.0.0
 EXPOSE 3000
 CMD ["sh", "-c", "prisma migrate deploy && node dist/index.js"]
