@@ -17,6 +17,9 @@ keystore.properties
 secrets.properties
 google-services.json
 
+# Claude Code local settings
+.claude/settings.local.json
+
 # ----------------------------------------------------------------------------
 # Node.js / TypeScript
 # ----------------------------------------------------------------------------
