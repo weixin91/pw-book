@@ -26,7 +26,9 @@ object DatabaseModule {
             context,
             AppDatabase::class.java,
             "pwbook.db"
-        ).build()
+        )
+            .fallbackToDestructiveMigration()
+            .build()
     }
 
     @Provides

@@ -41,6 +41,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.pwbook.R
 import com.pwbook.domain.DecryptedCipher
+import com.pwbook.ui.components.TotpDisplay
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -249,6 +250,9 @@ private fun CipherListItem(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+            if (!cipher.totp.isNullOrBlank()) {
+                TotpDisplay(secret = cipher.totp)
             }
             Text(
                 text = "修改于 ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date(cipher.modifiedAt))}",

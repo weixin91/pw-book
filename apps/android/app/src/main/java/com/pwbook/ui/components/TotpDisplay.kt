@@ -33,13 +33,17 @@ fun TotpDisplay(
     algorithm: String = "SHA1",
     modifier: Modifier = Modifier
 ) {
-    var code by remember { mutableStateOf(TotpGenerator.generate(secret, period, digits, algorithm)) }
-    var remaining by remember { mutableIntStateOf(TotpGenerator.remainingSeconds(period)) }
+    val (actualSecret, actualAlgorithm, actualDigits, actualPeriod) = remember(secret) {
+        parseOtpauthUri(secret, algorithm, digits, period)
+    }
+
+    var code by remember { mutableStateOf(TotpGenerator.generate(actualSecret, actualPeriod, actualDigits, actualAlgorithm)) }
+    var remaining by remember { mutableIntStateOf(TotpGenerator.remainingSeconds(actualPeriod)) }
 
     LaunchedEffect(secret) {
         while (true) {
-            code = TotpGenerator.generate(secret, period, digits, algorithm)
-            remaining = TotpGenerator.remainingSeconds(period)
+            code = TotpGenerator.generate(actualSecret, actualPeriod, actualDigits, actualAlgorithm)
+            remaining = TotpGenerator.remainingSeconds(actualPeriod)
             delay(1000)
         }
     }
@@ -61,6 +65,34 @@ fun TotpDisplay(
         )
     }
 }
+
+private fun parseOtpauthUri(
+    input: String,
+    defaultAlgorithm: String,
+    defaultDigits: Int,
+    defaultPeriod: Int
+): TotpParams {
+    if (!input.startsWith("otpauth://totp/")) {
+        return TotpParams(input, defaultAlgorithm, defaultDigits, defaultPeriod)
+    }
+    val query = input.substringAfter("?", "")
+    val params = query.split("&").associate { pair ->
+        val parts = pair.split("=", limit = 2)
+        parts[0] to (parts.getOrNull(1)?.let { java.net.URLDecoder.decode(it, "UTF-8") } ?: "")
+    }
+    val secret = params["secret"] ?: input
+    val algorithm = params["algorithm"] ?: defaultAlgorithm
+    val digits = params["digits"]?.toIntOrNull() ?: defaultDigits
+    val period = params["period"]?.toIntOrNull() ?: defaultPeriod
+    return TotpParams(secret, algorithm, digits, period)
+}
+
+private data class TotpParams(
+    val secret: String,
+    val algorithm: String,
+    val digits: Int,
+    val period: Int
+)
 
 @Composable
 private fun CircularCountdown(

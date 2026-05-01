@@ -21,7 +21,7 @@ import com.pwbook.data.local.entity.SyncQueueEntity
         SettingEntity::class,
         RejectedSiteEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

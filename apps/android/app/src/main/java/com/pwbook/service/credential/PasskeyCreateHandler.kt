@@ -48,22 +48,20 @@ class PasskeyCreateHandler @Inject constructor(
             android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        // Android 14 CredentialProvider API: 使用 CreateEntry
-        // 注意：这里使用反射或简化方式创建响应，因为具体 API 签名可能因 SDK 版本而异
+        // Android 14 CredentialProvider API: 使用 CreateEntry + Builder
         return try {
             val createEntryClass = Class.forName("android.service.credentials.CreateEntry")
             val entry = createEntryClass.getConstructor(String::class.java, android.app.PendingIntent::class.java)
                 .newInstance(accountName, pendingIntent)
 
-            val responseClass = Class.forName("android.service.credentials.BeginCreateCredentialResponse")
-            val response = responseClass.getDeclaredConstructor().newInstance()
-
-            // 尝试设置 entry
-            val setMethod = responseClass.getMethod("setCreateEntry", String::class.java, createEntryClass)
-            setMethod.invoke(response, "passkey", entry)
+            val builderClass = Class.forName("android.service.credentials.BeginCreateCredentialResponse\$Builder")
+            val builder = builderClass.getDeclaredConstructor().newInstance()
+            val setMethod = builderClass.getMethod("setCreateEntries", List::class.java)
+            setMethod.invoke(builder, listOf(entry))
+            val buildMethod = builderClass.getMethod("build")
 
             @Suppress("UNCHECKED_CAST")
-            response as BeginCreateCredentialResponse
+            buildMethod.invoke(builder) as BeginCreateCredentialResponse
         } catch (e: Exception) {
             Timber.e(e, "Failed to construct BeginCreateCredentialResponse, returning empty response")
             BeginCreateCredentialResponse()

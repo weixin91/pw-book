@@ -51,6 +51,7 @@ import com.pwbook.R
 fun CipherEditScreen(
     cipherId: String?,
     viewModel: CipherEditViewModel = androidx.hilt.navigation.compose.hiltViewModel(),
+    onScanTotp: () -> Unit = {},
     onBack: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -225,6 +226,12 @@ fun CipherEditScreen(
                     }
                 }
             )
+            OutlinedButton(
+                onClick = onScanTotp,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("扫描二维码录入 TOTP")
+            }
 
             // Passkey 显示区域
             if (!uiState.isNew && uiState.hasPasskey) {

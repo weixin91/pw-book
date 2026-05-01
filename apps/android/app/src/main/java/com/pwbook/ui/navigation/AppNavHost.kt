@@ -132,9 +132,24 @@ fun AppNavHost(
         }
         composable(NavRoutes.CipherEdit.route) { backStackEntry ->
             val cipherId = backStackEntry.arguments?.getString("cipherId")
+            val viewModel = hiltViewModel<com.pwbook.ui.screens.edit.CipherEditViewModel>()
+
+            val totpUri = navController.currentBackStackEntry
+                ?.savedStateHandle
+                ?.getStateFlow<String?>("totp_uri", null)
+                ?.collectAsState()
+
+            LaunchedEffect(totpUri?.value) {
+                totpUri?.value?.let {
+                    viewModel.updateTotp(it)
+                    navController.currentBackStackEntry?.savedStateHandle?.set("totp_uri", null)
+                }
+            }
+
             CipherEditScreen(
                 cipherId = cipherId.takeIf { it != "new" },
-                viewModel = hiltViewModel(),
+                viewModel = viewModel,
+                onScanTotp = { navController.navigate(NavRoutes.TotpScan.route) },
                 onBack = { navController.popBackStack() }
             )
         }
@@ -152,7 +167,10 @@ fun AppNavHost(
         composable(NavRoutes.TotpScan.route) {
             TotpScanScreen(
                 onBack = { navController.popBackStack() },
-                onTotpScanned = { secret, account, issuer ->
+                onTotpScanned = { uri ->
+                    navController.previousBackStackEntry
+                        ?.savedStateHandle
+                        ?.set("totp_uri", uri)
                     navController.popBackStack()
                 }
             )

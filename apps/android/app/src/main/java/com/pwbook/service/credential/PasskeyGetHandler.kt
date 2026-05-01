@@ -44,11 +44,12 @@ class PasskeyGetHandler @Inject constructor(
 
         return try {
             val credentialEntryClass = Class.forName("android.service.credentials.CredentialEntry")
-            val responseClass = Class.forName("android.service.credentials.BeginGetCredentialResponse")
-            val response = responseClass.getDeclaredConstructor().newInstance()
+            val builderClass = Class.forName("android.service.credentials.BeginGetCredentialResponse\$Builder")
+            val builder = builderClass.getDeclaredConstructor().newInstance()
+            val setMethod = builderClass.getMethod("setCredentialEntries", List::class.java)
 
             // 单匹配直接自动选用，多匹配则弹窗让用户选择
-            if (matchingCiphers.size == 1) {
+            val entries = if (matchingCiphers.size == 1) {
                 val cipher = matchingCiphers.first()
                 val intent = Intent(context, PasskeyGetActivity::class.java).apply {
                     putExtra("cipher_id", cipher.id)
@@ -62,10 +63,10 @@ class PasskeyGetHandler @Inject constructor(
                     intent,
                     android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT
                 )
-                val entry = credentialEntryClass.getConstructor(String::class.java, android.app.PendingIntent::class.java)
-                    .newInstance(cipher.name, pendingIntent)
-                val addMethod = responseClass.getMethod("addCredentialEntry", credentialEntryClass)
-                addMethod.invoke(response, entry)
+                listOf(
+                    credentialEntryClass.getConstructor(String::class.java, android.app.PendingIntent::class.java)
+                        .newInstance(cipher.name, pendingIntent)
+                )
             } else {
                 val intent = Intent(context, PasskeyGetActivity::class.java).apply {
                     putExtra("rp_id", origin)
@@ -79,14 +80,16 @@ class PasskeyGetHandler @Inject constructor(
                     intent,
                     android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT
                 )
-                val entry = credentialEntryClass.getConstructor(String::class.java, android.app.PendingIntent::class.java)
-                    .newInstance(origin, pendingIntent)
-                val addMethod = responseClass.getMethod("addCredentialEntry", credentialEntryClass)
-                addMethod.invoke(response, entry)
+                listOf(
+                    credentialEntryClass.getConstructor(String::class.java, android.app.PendingIntent::class.java)
+                        .newInstance(origin, pendingIntent)
+                )
             }
+            setMethod.invoke(builder, entries)
+            val buildMethod = builderClass.getMethod("build")
 
             @Suppress("UNCHECKED_CAST")
-            response as BeginGetCredentialResponse
+            buildMethod.invoke(builder) as BeginGetCredentialResponse
         } catch (e: Exception) {
             Timber.e(e, "Failed to construct BeginGetCredentialResponse, returning empty response")
             BeginGetCredentialResponse()

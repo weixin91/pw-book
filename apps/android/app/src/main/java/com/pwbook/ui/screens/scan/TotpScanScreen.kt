@@ -49,7 +49,7 @@ import timber.log.Timber
 @Composable
 fun TotpScanScreen(
     onBack: () -> Unit,
-    onTotpScanned: (secret: String, account: String?, issuer: String?) -> Unit
+    onTotpScanned: (otpauthUri: String) -> Unit
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -140,7 +140,7 @@ fun TotpScanScreen(
                                         Timber.i("QR code scanned: $text")
                                         val parsed = parseOtpauthUri(text)
                                         if (parsed != null) {
-                                            onTotpScanned(parsed.secret, parsed.account, parsed.issuer)
+                                            onTotpScanned(text)
                                         }
                                     }
                                 } catch (_: Exception) {
