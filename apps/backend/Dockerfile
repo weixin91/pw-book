@@ -5,6 +5,7 @@ COPY apps/backend/package.json apps/backend/
 COPY packages/shared-types/package.json packages/shared-types/
 RUN npm install -g pnpm && pnpm install
 COPY . .
+ENV PRISMA_ENGINES_MIRROR=https://registry.npmmirror.com/-/binary/prisma
 RUN pnpm --filter backend exec prisma generate
 RUN pnpm --filter @pwbook/shared-types build
 RUN pnpm --filter backend build
