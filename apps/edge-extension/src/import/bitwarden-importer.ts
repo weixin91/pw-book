@@ -210,6 +210,7 @@ export async function convertBitwardenItems(
     const dedupKey = buildDedupKey(name, username, uri);
     if (existingKeys.has(dedupKey)) {
       skipped++;
+      console.log(`[BitwardenImport] skip duplicate: name="${name}" username="${username}" uri="${uri}"`);
       continue;
     }
     // 将新条目也加入去重键，防止同一次导入出现重复

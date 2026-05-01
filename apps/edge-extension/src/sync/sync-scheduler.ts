@@ -111,6 +111,13 @@ export class SyncScheduler {
       lastSyncToken,
     });
 
+    console.log(
+      `[SyncScheduler] push result: accepted=${result.accepted.length}, rejected=${result.rejected.length}, conflicts=${result.conflicts.length}`
+    );
+    if (result.rejected.length > 0) {
+      console.warn(`[SyncScheduler] rejected cipherIds:`, result.rejected);
+    }
+
     for (const acceptedId of result.accepted) {
       const change = changes.find((c) => c.cipherId === acceptedId);
       if (change) {

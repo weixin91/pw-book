@@ -144,7 +144,8 @@ export async function syncRoutes(app: FastifyInstance): Promise<void> {
         } else {
           conflicts.push(change.id);
         }
-      } catch {
+      } catch (e) {
+        console.error(`[SyncPush] rejected change ${change.id} (cipher=${change.cipher.id}):`, e);
         rejected.push(change.id);
       }
     }
