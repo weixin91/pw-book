@@ -23,6 +23,7 @@ object FillResponseBuilder {
 
         Timber.d("FillResponseBuilder: usernameId=${parsed.usernameId}, passwordId=${parsed.passwordId}")
         val responseBuilder = FillResponse.Builder()
+        val requestId = java.util.UUID.randomUUID().toString()
 
         ciphers.forEach { cipher ->
             Timber.d("FillResponseBuilder: cipher ${cipher.name}, username=${cipher.username}, password=${cipher.password?.take(3)}...")
@@ -30,10 +31,9 @@ object FillResponseBuilder {
             responseBuilder.addDataset(dataset)
         }
 
-        if (ciphers.isEmpty()) {
-            val unlockDataset = buildUnlockDataset(context, parsed)
-            responseBuilder.addDataset(unlockDataset)
-        }
+        // 始终添加"打开密码库"选项
+        val vaultDataset = buildVaultDataset(context, parsed, requestId)
+        responseBuilder.addDataset(vaultDataset)
 
         val clientState = Bundle().apply {
             putString("uri", parsed.uriString)
@@ -86,24 +86,43 @@ object FillResponseBuilder {
         return datasetBuilder.build()
     }
 
-    private fun buildUnlockDataset(
+    private fun buildVaultDataset(
         context: Context,
-        parsed: ParsedStructure
+        parsed: ParsedStructure,
+        requestId: String
     ): Dataset {
+        // 保存最后一次请求 ID，用于返回后匹配选择结果
+        context.getSharedPreferences("pwbook_autofill", Context.MODE_PRIVATE)
+            .edit()
+            .putString("last_autofill_request_id", requestId)
+            .apply()
+
         val remoteViews = RemoteViews(context.packageName, android.R.layout.simple_list_item_1).apply {
-            setTextViewText(android.R.id.text1, "解锁 Password Book 以自动填充")
+            setTextViewText(android.R.id.text1, "打开密码库")
         }
 
         val intent = Intent(context, com.pwbook.ui.MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra("autofill_mode", "select")
+            putExtra("autofill_uri", parsed.uriString)
+            putExtra("autofill_request_id", requestId)
         }
         val pendingIntent = PendingIntent.getActivity(
             context, 0, intent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        return Dataset.Builder(remoteViews)
+        val datasetBuilder = Dataset.Builder(remoteViews)
             .setAuthentication(pendingIntent.intentSender)
-            .build()
+
+        // 必须至少设置一个 field，否则 build() 会抛 IllegalStateException
+        parsed.usernameId?.let { id ->
+            datasetBuilder.setValue(id, AutofillValue.forText(""))
+        }
+        parsed.passwordId?.let { id ->
+            datasetBuilder.setValue(id, AutofillValue.forText(""))
+        }
+
+        return datasetBuilder.build()
     }
 }

@@ -17,6 +17,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
@@ -143,22 +144,33 @@ fun CipherEditScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    val kindLabel = if (uri.startsWith("androidapp://")) "APP" else if (uri.startsWith("http")) "网站" else "URI"
+                    val kindLabel = when {
+                        uri.startsWith("androidapp://") -> "APP"
+                        uri.startsWith("http") -> "网站"
+                        else -> "URI"
+                    }
                     Text(
                         text = kindLabel,
-                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                        style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
                         color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.width(40.dp)
+                        modifier = Modifier.width(36.dp)
                     )
                     OutlinedTextField(
                         value = uri,
                         onValueChange = { viewModel.updateUri(index, it) },
-                        placeholder = { Text("https://example.com 或 androidapp://com.example") },
+                        placeholder = { Text("网址或 App 包名") },
                         modifier = Modifier.weight(1f),
                         singleLine = true
                     )
-                    IconButton(onClick = { viewModel.removeUri(index) }) {
-                        Text("×")
+                    IconButton(
+                        onClick = { viewModel.removeUri(index) },
+                        modifier = Modifier.padding(top = 4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "删除",
+                            tint = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }
@@ -167,10 +179,16 @@ fun CipherEditScreen(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                OutlinedButton(onClick = { viewModel.addUri("https://") }) {
+                OutlinedButton(
+                    onClick = { viewModel.addUri("https://") },
+                    modifier = Modifier.weight(1f)
+                ) {
                     Text("+ 网站")
                 }
-                OutlinedButton(onClick = { viewModel.addUri("androidapp://") }) {
+                OutlinedButton(
+                    onClick = { viewModel.addUri("androidapp://") },
+                    modifier = Modifier.weight(1f)
+                ) {
                     Text("+ APP")
                 }
             }

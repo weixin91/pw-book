@@ -2,6 +2,7 @@ package com.pwbook.ui.unlock
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.pwbook.data.datasource.BiometricUnlockManager
 import com.pwbook.domain.VaultSession
 import com.pwbook.domain.usecase.UnlockVaultUseCase
 import com.pwbook.sync.SyncManager
@@ -16,11 +17,16 @@ import javax.inject.Inject
 class UnlockViewModel @Inject constructor(
     private val unlockUseCase: UnlockVaultUseCase,
     private val vaultSession: VaultSession,
-    private val syncManager: SyncManager
+    private val syncManager: SyncManager,
+    private val biometricUnlockManager: BiometricUnlockManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(UnlockUiState())
     val uiState: StateFlow<UnlockUiState> = _uiState
+    val isUnlocked: StateFlow<Boolean> = vaultSession.isUnlocked
+
+    val isBiometricAvailable: Boolean
+        get() = biometricUnlockManager.canAuthenticate() && biometricUnlockManager.isBiometricEnabled()
 
     fun onPasswordChange(password: String) {
         _uiState.value = _uiState.value.copy(password = password, error = null)
@@ -48,6 +54,37 @@ class UnlockViewModel @Inject constructor(
                         isLoading = false,
                         error = e.message ?: "解锁失败"
                     )
+                }
+            )
+        }
+    }
+
+    fun biometricUnlock(
+        activity: androidx.fragment.app.FragmentActivity,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            val result = biometricUnlockManager.authenticateAndUnlock(activity)
+            result.fold(
+                onSuccess = {
+                    Timber.i("Vault unlocked via biometric")
+                    _uiState.value = _uiState.value.copy(isLoading = false)
+                    syncManager.launchFullSync()
+                    onSuccess()
+                },
+                onFailure = { e ->
+                    if (e is android.os.OperationCanceledException) {
+                        _uiState.value = _uiState.value.copy(isLoading = false)
+                    } else {
+                        Timber.e(e, "Biometric unlock failed")
+                        _uiState.value = _uiState.value.copy(
+                            isLoading = false,
+                            error = e.message ?: "生物识别解锁失败"
+                        )
+                        onError(e.message ?: "生物识别解锁失败")
+                    }
                 }
             )
         }

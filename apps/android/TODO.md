@@ -1,59 +1,64 @@
 # Android App 待修复问题
 
-## 问题 1：修改凭据后未同步到后端
+## 问题 1：跳转回 App 后凭据选择与自动关联 ✅
 
-**描述**：在 Android app 中修改凭据（编辑、添加、删除）后，变更没有同步到后端服务器。
+**状态**：已实现
 
-**原因分析**：
-- CipherEditViewModel 保存后调用 `pendingChangesQueue.enqueue()`，但可能 push 逻辑未正确触发
-- SyncManager.pushPendingChanges() 的请求格式可能与后端不匹配
-- 需要检查 PendingChangesQueue 和同步触发时机
-
----
-
-## 问题 2：登录成功后应直接解锁
-
-**描述**：用户登录成功后，跳转到解锁界面需要再次输入主密码。登录成功后应该直接进入解锁状态，无需二次输入。
-
-**原因分析**：
-- 登录时用户已经输入了主密码，可以直接用于解锁
-- LoginViewModel 登录成功后应该设置 VaultSession 的 userKey
-- 需要在登录流程中调用 VaultSession.unlock()
+- 跳转到密码库后凭据列表已按 `targetUri` 匹配度排序（匹配的凭据置顶）
+- 自动填充模式下凭据卡片显示「匹配」标签，便于区分
+- 选择不匹配凭据时自动调用 `selectCipherForAutofill()` 添加 URI 并触发同步
+- 保存完成后自动返回原 App 填充
 
 ---
 
-## 问题 3：自动填充交互流程优化
+## 问题 2：缺少生物识别解锁 ✅
 
-**描述**：当前自动填充的跳转逻辑不够完善，需要改进：
+**状态**：已实现
 
-### 场景 A：未解锁状态
-1. 用户在其他 app 登录页面触发自动填充
-2. 弹出提示："去解锁 Password Book"
-3. 用户点击 -> 跳转到本 app 的解锁界面
-4. 解锁成功后 -> 在本 app 展示匹配的凭据列表
-5. 用户选择凭据 -> 返回原 app 并自动填充
+- 新增 `BiometricUnlockManager` 封装 BiometricPrompt 调用
+- 使用 Android Keystore + AES/GCM 安全加密/解密 userKey
+- 解锁界面新增「使用生物识别解锁」按钮（仅当设备支持且已开启时显示）
+- 设置页面生物识别开关已接入实际逻辑：开启时验证并加密存储密钥，关闭时清除密钥
 
-### 场景 B：已解锁状态
-1. 用户在其他 app 登录页面触发自动填充
-2. 弹出匹配的凭据列表供选择
-3. 同时提供"跳转到密码库"选项
-4. 用户点击凭据 -> 直接填充到原 app
-5. 用户点击"密码库" -> 跳转到本 app，显示匹配当前 app 的凭据列表
-6. 用户可选择其他凭据（非当前 app 关联的）
-7. 选择其他凭据时，自动将该凭据关联到当前待登录的 app（添加 URI）
+---
 
-**关键改动**：
-- AutofillService 需要传递待填充的 URI 到 app
-- VaultListScreen 需要支持"选择模式"和"关联模式"
-- 选择凭据后需要更新 cipher 的 uris 字段并同步
+## 问题 3：解锁速度较慢 ✅
+
+**状态**：已优化
+
+- `UnlockVaultUseCase.unlock()` 中 KDF（PBKDF2）计算已切换到 `Dispatchers.Default`
+- `LoginViewModel.login()` 中 KDF 计算同样切换到后台线程
+- 避免 CPU 密集型密钥派生阻塞主线程导致的 UI 卡顿
+
+---
+
+## 问题 4：添加凭据页面 UI 优化 ✅
+
+**状态**：已优化
+
+- URI 输入框 placeholder 缩短为「网址或 App 包名」
+- 删除按钮由文本「×」替换为标准 `Icons.Default.Close`
+- 类型标签使用 `labelSmall` 样式，宽度缩小为 36.dp
+- 「+ 网站」「+ APP」按钮增加 `weight(1f)` 均匀分布
+
+---
+
+## 问题 5：右上角锁定图标未生效 ✅
+
+**状态**：已修复
+
+- `AppNavHost` 中 `onLock` 回调先调用 `viewModel.lock()` 清除 VaultSession 密钥和 accessToken
+- 再导航到解锁界面，确保密码库真正被锁定
 
 ---
 
 ## TODO 列表
 
-- [ ] 修复凭据修改后的同步逻辑
-- [ ] 登录成功后直接解锁保险库
-- [ ] 未解锁时的自动填充跳转解锁界面
-- [ ] 已解锁时的凭据列表弹窗 + 填充逻辑
-- [ ] 跳转到密码库后显示匹配凭据列表
-- [ ] 选择凭据时自动关联当前 app URI
+- [x] 跳转后置顶展示匹配的凭据列表
+- [x] 支持选择不匹配凭据并自动关联当前 App URI
+- [x] 选择不匹配凭据后保存并返回原 App 填充
+- [x] 接入 Android BiometricPrompt 生物识别解锁
+- [x] 实现生物识别密钥的安全存储
+- [x] 优化 VaultSession.unlock() 性能，减少解锁耗时
+- [x] 优化添加凭据页面 URI 区域布局与提示文字
+- [x] 修复右上角锁定图标点击后未锁定密码库的问题

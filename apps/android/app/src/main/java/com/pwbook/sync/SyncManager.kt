@@ -52,6 +52,15 @@ class SyncManager @Inject constructor(
         }
     }
 
+    /**
+     * 在独立作用域中启动完整的 push + pull 同步
+     */
+    fun launchSyncAll() {
+        syncScope.launch {
+            syncAll()
+        }
+    }
+
     suspend fun fullSync(): Result<SyncResult> = runCatching {
         _syncState.value = SyncState.SYNCING
         val userId = getUserIdOrThrow()

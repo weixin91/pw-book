@@ -1,5 +1,6 @@
 package com.pwbook.service.autofill
 
+import android.content.Context
 import android.os.CancellationSignal
 import android.service.autofill.AutofillService
 import android.service.autofill.Dataset
@@ -8,6 +9,7 @@ import android.service.autofill.FillRequest
 import android.service.autofill.FillResponse
 import android.service.autofill.SaveCallback
 import android.service.autofill.SaveRequest
+import android.view.autofill.AutofillValue
 import android.widget.RemoteViews
 import com.pwbook.crypto.VaultEncryption
 import com.pwbook.data.datasource.SecurePrefs
@@ -25,6 +27,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import timber.log.Timber
+import java.util.UUID
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -176,8 +179,20 @@ class PwBookAutofillService : AutofillService() {
     private fun buildUnlockResponse(parsed: ParsedStructure): FillResponse? {
         if (parsed.usernameId == null && parsed.passwordId == null) return null
 
+        val requestId = UUID.randomUUID().toString()
+        // 保存最后一次请求 ID，用于返回后匹配选择结果
+        getSharedPreferences("pwbook_autofill", Context.MODE_PRIVATE)
+            .edit()
+            .putString("last_autofill_request_id", requestId)
+            .apply()
+
         val intent = packageManager.getLaunchIntentForPackage(packageName)
             ?.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            ?.apply {
+                putExtra("autofill_mode", "unlock")
+                putExtra("autofill_uri", parsed.uriString)
+                putExtra("autofill_request_id", requestId)
+            }
             ?: return null
 
         val pendingIntent = android.app.PendingIntent.getActivity(
@@ -191,12 +206,19 @@ class PwBookAutofillService : AutofillService() {
             setTextViewText(android.R.id.text1, "解锁 Password Book")
         }
 
-        val dataset = Dataset.Builder(remoteViews)
+        val datasetBuilder = Dataset.Builder(remoteViews)
             .setAuthentication(pendingIntent.intentSender)
-            .build()
+
+        // 必须至少设置一个 field，否则 build() 会抛 IllegalStateException
+        parsed.usernameId?.let { id ->
+            datasetBuilder.setValue(id, AutofillValue.forText(""))
+        }
+        parsed.passwordId?.let { id ->
+            datasetBuilder.setValue(id, AutofillValue.forText(""))
+        }
 
         return FillResponse.Builder()
-            .addDataset(dataset)
+            .addDataset(datasetBuilder.build())
             .build()
     }
 }

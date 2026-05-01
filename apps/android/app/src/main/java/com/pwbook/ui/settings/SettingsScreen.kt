@@ -1,5 +1,6 @@
 package com.pwbook.ui.settings
 
+import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -29,9 +30,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.fragment.app.FragmentActivity
 import com.pwbook.R
+import com.pwbook.data.datasource.BiometricUnlockManager
 import com.pwbook.data.repository.SettingsRepository
 import com.pwbook.ui.screens.VaultListViewModel
 import kotlinx.coroutines.launch
@@ -41,14 +45,17 @@ import kotlinx.coroutines.launch
 fun SettingsScreen(
     viewModel: VaultListViewModel,
     settingsRepository: SettingsRepository,
+    biometricUnlockManager: BiometricUnlockManager,
     onBack: () -> Unit,
     onLogout: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     var serverUrl by remember { mutableStateOf(settingsRepository.getServerUrl() ?: "") }
     var vaultTimeout by remember { mutableStateOf(settingsRepository.getVaultTimeoutMinutes().toString()) }
     val biometricEnabled by settingsRepository.observeString("biometric_enabled")
         .collectAsState(initial = "false")
+    var isBiometricSwitching by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -120,12 +127,48 @@ fun SettingsScreen(
             ) {
                 Text("生物识别解锁", modifier = Modifier.weight(1f))
                 Switch(
-                    checked = biometricEnabled == "true",
+                    checked = biometricEnabled == "true" && !isBiometricSwitching,
+                    enabled = !isBiometricSwitching && biometricUnlockManager.canAuthenticate(),
                     onCheckedChange = { enabled ->
+                        val activity = context as? FragmentActivity
+                        if (activity == null) {
+                            Toast.makeText(context, "无法获取 Activity", Toast.LENGTH_SHORT).show()
+                            return@Switch
+                        }
                         scope.launch {
-                            settingsRepository.setString("biometric_enabled", enabled.toString())
+                            isBiometricSwitching = true
+                            try {
+                                if (enabled) {
+                                    // 开启生物识别：需要当前已解锁，并用生物识别验证
+                                    val result = biometricUnlockManager.setupBiometricUnlock(activity)
+                                    result.fold(
+                                        onSuccess = {
+                                            settingsRepository.setString("biometric_enabled", "true")
+                                            Toast.makeText(context, "生物识别解锁已开启", Toast.LENGTH_SHORT).show()
+                                        },
+                                        onFailure = { e ->
+                                            settingsRepository.setString("biometric_enabled", "false")
+                                            Toast.makeText(context, e.message ?: "开启失败", Toast.LENGTH_SHORT).show()
+                                        }
+                                    )
+                                } else {
+                                    // 关闭生物识别
+                                    biometricUnlockManager.disableBiometricUnlock()
+                                    settingsRepository.setString("biometric_enabled", "false")
+                                    Toast.makeText(context, "生物识别解锁已关闭", Toast.LENGTH_SHORT).show()
+                                }
+                            } finally {
+                                isBiometricSwitching = false
+                            }
                         }
                     }
+                )
+            }
+            if (!biometricUnlockManager.canAuthenticate()) {
+                Text(
+                    text = "设备不支持生物识别或未录入指纹/面部数据",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
                 )
             }
 

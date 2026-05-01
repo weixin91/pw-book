@@ -3,6 +3,8 @@ package com.pwbook.domain.usecase
 import com.pwbook.crypto.KeyDerivation
 import com.pwbook.crypto.VaultEncryption
 import com.pwbook.data.datasource.SecurePrefs
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 import javax.inject.Inject
 
@@ -36,17 +38,22 @@ class UnlockVaultUseCase @Inject constructor(
             val parallelism = securePrefs.getString(SecurePrefs.KEY_KDF_PARALLELISM)?.toInt()
             Timber.d("memory: $memory, parallelism: $parallelism")
 
-            val masterKey = keyDerivation.deriveMasterKey(
-                password = password,
-                email = email,
-                kdfType = com.pwbook.crypto.KdfType.valueOf(kdfType),
-                iterations = iterations,
-                memoryKb = memory,
-                parallelism = parallelism
-            )
+            // KDF 计算是 CPU 密集型操作，切换到 Default 调度器避免阻塞主线程
+            val masterKey = withContext(Dispatchers.Default) {
+                keyDerivation.deriveMasterKey(
+                    password = password,
+                    email = email,
+                    kdfType = com.pwbook.crypto.KdfType.valueOf(kdfType),
+                    iterations = iterations,
+                    memoryKb = memory,
+                    parallelism = parallelism
+                )
+            }
             Timber.d("masterKey derived, length: ${masterKey.size}, hex: ${masterKey.joinToString("") { "%02x".format(it) }}")
 
-            val (encKey, macKey) = keyDerivation.stretchMasterKey(masterKey)
+            val (encKey, macKey) = withContext(Dispatchers.Default) {
+                keyDerivation.stretchMasterKey(masterKey)
+            }
             Timber.d("encKey derived, length: ${encKey.size}, hex: ${encKey.joinToString("") { "%02x".format(it) }}")
             Timber.d("macKey derived, length: ${macKey.size}, hex: ${macKey.joinToString("") { "%02x".format(it) }}")
 

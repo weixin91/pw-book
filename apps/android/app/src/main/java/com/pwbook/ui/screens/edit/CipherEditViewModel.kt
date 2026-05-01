@@ -11,6 +11,7 @@ import com.pwbook.domain.LoginDataJson
 import com.pwbook.domain.LoginUriJson
 import com.pwbook.domain.VaultSession
 import com.pwbook.sync.PendingChangesQueue
+import com.pwbook.sync.SyncManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -28,6 +29,7 @@ class CipherEditViewModel @Inject constructor(
     private val vaultEncryption: VaultEncryption,
     private val pendingChangesQueue: PendingChangesQueue,
     private val securePrefs: SecurePrefs,
+    private val syncManager: SyncManager,
     private val json: Json
 ) : ViewModel() {
 
@@ -157,6 +159,9 @@ class CipherEditViewModel @Inject constructor(
                 now
             )
 
+            // 触发后台同步，将变更推送到后端
+            syncManager.launchSyncAll()
+
             Timber.i("Cipher saved: ${entity.id}")
             onSuccess()
         }
@@ -172,6 +177,9 @@ class CipherEditViewModel @Inject constructor(
                 "",
                 System.currentTimeMillis()
             )
+            // 触发后台同步
+            syncManager.launchSyncAll()
+
             Timber.i("Cipher deleted: ${state.id}")
             onSuccess()
         }

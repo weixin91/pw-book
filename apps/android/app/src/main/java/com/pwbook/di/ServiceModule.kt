@@ -2,8 +2,10 @@ package com.pwbook.di
 
 import android.content.Context
 import androidx.biometric.BiometricManager
+import com.pwbook.data.datasource.BiometricUnlockManager
 import com.pwbook.data.datasource.KeystoreManager
 import com.pwbook.data.datasource.SecurePrefs
+import com.pwbook.domain.VaultSession
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -27,4 +29,20 @@ object ServiceModule {
     @Singleton
     fun provideBiometricManager(@ApplicationContext context: Context): BiometricManager =
         BiometricManager.from(context)
+
+    @Provides
+    @Singleton
+    fun provideBiometricUnlockManager(
+        @ApplicationContext context: Context,
+        biometricManager: BiometricManager,
+        keystoreManager: KeystoreManager,
+        securePrefs: SecurePrefs,
+        vaultSession: VaultSession
+    ): BiometricUnlockManager = BiometricUnlockManager(
+        context = context,
+        biometricManager = biometricManager,
+        keystoreManager = keystoreManager,
+        securePrefs = securePrefs,
+        vaultSession = vaultSession
+    )
 }

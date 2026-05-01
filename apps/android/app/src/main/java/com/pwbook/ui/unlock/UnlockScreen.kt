@@ -9,20 +9,27 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.fragment.app.FragmentActivity
 import com.pwbook.R
 
 @Composable
@@ -31,6 +38,15 @@ fun UnlockScreen(
     onUnlockSuccess: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val isUnlocked by viewModel.isUnlocked.collectAsState()
+    val context = LocalContext.current
+
+    // 如果已经解锁，自动进入下一界面
+    LaunchedEffect(isUnlocked) {
+        if (isUnlocked) {
+            onUnlockSuccess()
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -68,6 +84,31 @@ fun UnlockScreen(
                 CircularProgressIndicator(color = MaterialTheme.colorScheme.onPrimary)
             } else {
                 Text(stringResource(R.string.unlock_button))
+            }
+        }
+
+        // 生物识别解锁按钮
+        if (viewModel.isBiometricAvailable && !uiState.isLoading) {
+            Spacer(modifier = Modifier.height(12.dp))
+            OutlinedButton(
+                onClick = {
+                    val activity = context as? FragmentActivity
+                    if (activity != null) {
+                        viewModel.biometricUnlock(
+                            activity = activity,
+                            onSuccess = onUnlockSuccess,
+                            onError = {}
+                        )
+                    }
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Fingerprint,
+                    contentDescription = "生物识别解锁",
+                    modifier = Modifier.padding(end = 8.dp)
+                )
+                Text("使用生物识别解锁")
             }
         }
     }

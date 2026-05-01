@@ -2,20 +2,27 @@ package com.pwbook.ui.screens
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.pwbook.crypto.VaultEncryption
 import com.pwbook.data.datasource.SecurePrefs
-import com.pwbook.data.local.entity.CipherEntity
 import com.pwbook.data.repository.CipherRepository
+import com.pwbook.domain.CipherDataJson
 import com.pwbook.domain.DecryptedCipher
+import com.pwbook.domain.LoginDataJson
+import com.pwbook.domain.LoginUriJson
 import com.pwbook.domain.VaultSession
+import com.pwbook.sync.PendingChangesQueue
 import com.pwbook.sync.SyncManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import timber.log.Timber
 import javax.inject.Inject
 
@@ -24,20 +31,27 @@ class VaultListViewModel @Inject constructor(
     private val cipherRepository: CipherRepository,
     private val securePrefs: SecurePrefs,
     private val vaultSession: VaultSession,
-    private val syncManager: SyncManager
+    private val syncManager: SyncManager,
+    private val vaultEncryption: VaultEncryption,
+    private val pendingChangesQueue: PendingChangesQueue,
+    private val json: Json
 ) : ViewModel() {
 
     private val _searchQuery = MutableStateFlow("")
+    private val _targetUri = MutableStateFlow<String?>(null)
     private val userId: String?
         get() = securePrefs.getString(SecurePrefs.KEY_USER_ID)
 
     val uiState: StateFlow<VaultListUiState> = combine(
         _searchQuery,
+        _targetUri,
         cipherRepository.observeCiphers(userId ?: "")
-    ) { query, ciphers ->
-        // 解密 cipher data 用于显示
-        val decryptedCiphers = ciphers.mapNotNull { entity ->
-            vaultSession.decryptCipher(entity)
+    ) { query, targetUri, ciphers ->
+        // 在后台线程解密 cipher data，避免阻塞主线程
+        val decryptedCiphers = withContext(Dispatchers.Default) {
+            ciphers.mapNotNull { entity ->
+                vaultSession.decryptCipher(entity)
+            }
         }
 
         val filtered = if (query.isBlank()) decryptedCiphers else {
@@ -47,9 +61,21 @@ class VaultListViewModel @Inject constructor(
                 it.uris.any { uri -> uri.contains(query, ignoreCase = true) }
             }
         }
+
+        // 按 targetUri 匹配排序：匹配的凭据置顶
+        val sorted = if (targetUri.isNullOrBlank()) {
+            filtered.sortedByDescending { it.modifiedAt }
+        } else {
+            filtered.sortedWith(
+                compareByDescending<DecryptedCipher> { cipher ->
+                    cipher.uris.any { uri -> uri == targetUri || uri.contains(targetUri) || targetUri.contains(uri) }
+                }.thenByDescending { it.modifiedAt }
+            )
+        }
+
         VaultListUiState(
             searchQuery = query,
-            ciphers = filtered,
+            ciphers = sorted,
             isLoading = false
         )
     }.stateIn(
@@ -60,6 +86,10 @@ class VaultListViewModel @Inject constructor(
 
     fun onSearchQueryChange(query: String) {
         _searchQuery.value = query
+    }
+
+    fun setTargetUri(uri: String?) {
+        _targetUri.value = uri
     }
 
     fun deleteCipher(id: String) {
@@ -78,7 +108,52 @@ class VaultListViewModel @Inject constructor(
 
     fun lock() {
         vaultSession.lock()
-        securePrefs.putString(SecurePrefs.KEY_ACCESS_TOKEN, null)
+    }
+
+    /**
+     * 为自动填充选择凭据，如目标 URI 未关联则自动添加
+     */
+    suspend fun selectCipherForAutofill(cipherId: String, targetUri: String?): String {
+        if (targetUri.isNullOrBlank()) return cipherId
+
+        val entity = cipherRepository.getCipher(cipherId) ?: return cipherId
+        val decrypted = vaultSession.decryptCipher(entity) ?: return cipherId
+
+        // 已包含目标 URI，无需修改
+        if (decrypted.uris.contains(targetUri)) return cipherId
+
+        val userKey = vaultSession.getUserKey() ?: return cipherId
+        val cipherKey = userKey.copyOfRange(0, 32)
+
+        val newUris = decrypted.uris + targetUri
+        val cipherData = CipherDataJson(
+            name = decrypted.name,
+            notes = decrypted.notes,
+            login = LoginDataJson(
+                username = decrypted.username,
+                password = decrypted.password,
+                uris = newUris.map { LoginUriJson(uri = it) },
+                totp = decrypted.totp
+            )
+        )
+        val encryptedData = vaultEncryption.encryptString(
+            json.encodeToString(cipherData),
+            cipherKey
+        )
+        val updatedEntity = entity.copy(
+            data = encryptedData,
+            modifiedAt = System.currentTimeMillis()
+        )
+        cipherRepository.saveCipher(updatedEntity)
+        pendingChangesQueue.enqueue(
+            cipherId,
+            PendingChangesQueue.Operation.UPDATE,
+            encryptedData,
+            System.currentTimeMillis()
+        )
+        syncManager.launchSyncAll()
+        Timber.i("Associated URI $targetUri with cipher $cipherId")
+        return cipherId
     }
 }
 

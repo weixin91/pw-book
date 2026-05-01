@@ -9,11 +9,16 @@ import com.pwbook.data.remote.api.AuthApi
 import com.pwbook.data.remote.api.LoginRequest
 import com.pwbook.data.remote.api.PreloginRequest
 import com.pwbook.data.repository.SettingsRepository
+import com.pwbook.domain.VaultSession
+import com.pwbook.domain.usecase.UnlockVaultUseCase
+import com.pwbook.sync.SyncManager
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 import java.util.UUID
 import javax.inject.Inject
@@ -23,7 +28,10 @@ class LoginViewModel @Inject constructor(
     private val authApi: AuthApi,
     private val keyDerivation: KeyDerivation,
     private val settingsRepository: SettingsRepository,
-    private val securePrefs: SecurePrefs
+    private val securePrefs: SecurePrefs,
+    private val unlockVaultUseCase: UnlockVaultUseCase,
+    private val vaultSession: VaultSession,
+    private val syncManager: SyncManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(LoginUiState())
@@ -97,18 +105,23 @@ class LoginViewModel @Inject constructor(
                 Timber.d("kdfType: ${kdfType.name}")
                 Timber.d("iterations: $iterations")
 
-                val masterKey = keyDerivation.deriveMasterKey(
-                    password = password,
-                    email = email,
-                    kdfType = kdfType,
-                    iterations = iterations,
-                    memoryKb = _uiState.value.kdfMemory,
-                    parallelism = _uiState.value.kdfParallelism
-                )
+                // KDF 计算是 CPU 密集型操作，切换到 Default 调度器避免阻塞主线程
+                val masterKey = withContext(Dispatchers.Default) {
+                    keyDerivation.deriveMasterKey(
+                        password = password,
+                        email = email,
+                        kdfType = kdfType,
+                        iterations = iterations,
+                        memoryKb = _uiState.value.kdfMemory,
+                        parallelism = _uiState.value.kdfParallelism
+                    )
+                }
                 Timber.d("masterKey (hex): ${masterKey.joinToString("") { "%02x".format(it) }}")
 
                 // 使用与 Edge 一致的密码哈希计算方式
-                val hash = keyDerivation.deriveMasterPasswordHash(masterKey, password)
+                val hash = withContext(Dispatchers.Default) {
+                    keyDerivation.deriveMasterPasswordHash(masterKey, password)
+                }
                 val masterPasswordHash = keyDerivation.hashToBase64(hash)
                 Timber.d("masterPasswordHash (base64): $masterPasswordHash")
 
@@ -134,8 +147,23 @@ class LoginViewModel @Inject constructor(
                 _uiState.value.kdfMemory?.let { securePrefs.putString(SecurePrefs.KEY_KDF_MEMORY, it.toString()) }
                 _uiState.value.kdfParallelism?.let { securePrefs.putString(SecurePrefs.KEY_KDF_PARALLELISM, it.toString()) }
 
-                _uiState.value = _uiState.value.copy(isLoading = false)
-                onSuccess()
+                // 登录成功后直接用密码解锁保险库，无需再次输入
+                val unlockResult = unlockVaultUseCase.unlock(password)
+                unlockResult.fold(
+                    onSuccess = { userKey ->
+                        vaultSession.unlock(userKey)
+                        syncManager.launchFullSync()
+                        _uiState.value = _uiState.value.copy(isLoading = false)
+                        onSuccess()
+                    },
+                    onFailure = { e ->
+                        Timber.e(e, "Auto-unlock after login failed")
+                        _uiState.value = _uiState.value.copy(
+                            isLoading = false,
+                            error = e.message ?: "登录成功但解锁失败，请手动解锁"
+                        )
+                    }
+                )
             } catch (e: Exception) {
                 Timber.e(e, "Login failed for email: $email")
                 _uiState.value = _uiState.value.copy(

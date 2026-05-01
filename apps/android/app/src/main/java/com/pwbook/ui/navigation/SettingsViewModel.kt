@@ -2,6 +2,7 @@ package com.pwbook.ui.navigation
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.pwbook.data.datasource.BiometricUnlockManager
 import com.pwbook.data.repository.SettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -11,7 +12,8 @@ import javax.inject.Inject
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
-    val settingsRepository: SettingsRepository
+    val settingsRepository: SettingsRepository,
+    val biometricUnlockManager: BiometricUnlockManager
 ) : ViewModel() {
 
     private val _serverUrl = MutableStateFlow(settingsRepository.getServerUrl() ?: "")

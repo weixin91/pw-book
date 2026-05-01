@@ -1,12 +1,16 @@
 package com.pwbook.ui.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.pwbook.data.datasource.BiometricUnlockManager
 import com.pwbook.data.repository.SettingsRepository
+import com.pwbook.domain.VaultSession
 import com.pwbook.ui.login.LoginScreen
 import com.pwbook.ui.login.RegisterScreen
 import com.pwbook.ui.screens.VaultListScreen
@@ -15,17 +19,30 @@ import com.pwbook.ui.screens.edit.CipherEditScreen
 import com.pwbook.ui.generator.PasswordGeneratorScreen
 import com.pwbook.ui.settings.SettingsScreen
 import com.pwbook.ui.unlock.UnlockScreen
+import javax.inject.Inject
 
 @Composable
 fun AppNavHost(
     navController: NavHostController = rememberNavController(),
-    settingsViewModel: SettingsViewModel = hiltViewModel()
+    settingsViewModel: SettingsViewModel = hiltViewModel(),
+    vaultSession: VaultSession,
+    autofillMode: String? = null,
+    autofillUri: String? = null,
+    autofillRequestId: String? = null,
+    onCipherSelected: ((String) -> Unit)? = null,
+    onCancel: (() -> Unit)? = null
 ) {
     val settingsRepository = settingsViewModel.settingsRepository
+    val biometricUnlockManager = settingsViewModel.biometricUnlockManager
+    val isUnlocked by vaultSession.isUnlocked.collectAsState()
     // accessToken 存储在 SecurePrefs 中，不通过 Room Flow 观察
     val hasToken = settingsRepository.getAccessToken() != null
 
-    val startDestination = if (hasToken) NavRoutes.Unlock.route else NavRoutes.Login.route
+    val startDestination = when {
+        !hasToken -> NavRoutes.Login.route
+        isUnlocked -> NavRoutes.VaultList.route
+        else -> NavRoutes.Unlock.route
+    }
 
     NavHost(
         navController = navController,
@@ -34,7 +51,7 @@ fun AppNavHost(
         composable(NavRoutes.Login.route) {
             LoginScreen(
                 onLoginSuccess = {
-                    navController.navigate(NavRoutes.Unlock.route) {
+                    navController.navigate(NavRoutes.VaultList.route) {
                         popUpTo(NavRoutes.Login.route) { inclusive = true }
                     }
                 },
@@ -46,7 +63,7 @@ fun AppNavHost(
         composable(NavRoutes.Register.route) {
             RegisterScreen(
                 onRegisterSuccess = {
-                    navController.navigate(NavRoutes.Unlock.route) {
+                    navController.navigate(NavRoutes.VaultList.route) {
                         popUpTo(NavRoutes.Register.route) { inclusive = true }
                     }
                 },
@@ -65,8 +82,11 @@ fun AppNavHost(
             )
         }
         composable(NavRoutes.VaultList.route) {
+            val viewModel = hiltViewModel<VaultListViewModel>()
             VaultListScreen(
-                viewModel = hiltViewModel(),
+                viewModel = viewModel,
+                isAutofillMode = autofillMode != null,
+                targetUri = autofillUri,
                 onNavigateToEdit = { cipherId ->
                     navController.navigate(NavRoutes.CipherEdit.createRoute(cipherId))
                 },
@@ -77,16 +97,20 @@ fun AppNavHost(
                     navController.navigate(NavRoutes.Settings.route)
                 },
                 onLock = {
+                    viewModel.lock()
                     navController.navigate(NavRoutes.Unlock.route) {
                         popUpTo(0) { inclusive = true }
                     }
-                }
+                },
+                onCipherSelected = onCipherSelected,
+                onCancel = onCancel
             )
         }
         composable(NavRoutes.Settings.route) {
             SettingsScreen(
                 viewModel = hiltViewModel<VaultListViewModel>(),
                 settingsRepository = settingsRepository,
+                biometricUnlockManager = biometricUnlockManager,
                 onBack = { navController.popBackStack() },
                 onLogout = {
                     navController.navigate(NavRoutes.Login.route) {
