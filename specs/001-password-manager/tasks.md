@@ -223,16 +223,16 @@ description: "密码管理应用功能实现的任务列表"
 
 ### Phase 2: 同步与自动填充
 
-- [ ] T042 [P] 实现 Ktor Client 和 API 服务层于 `apps/android/app/data/remote/api/`（AuthApi、SyncApi、CipherApi、DomainAssocApi，含 DTO 和 kotlinx.serialization）
-- [ ] T098 [P] 实现 WebSocket 同步客户端于 `apps/android/app/data/remote/websocket/SyncWebSocketClient.kt`
-- [ ] T043 实现 Android 同步管理器于 `apps/android/app/sync/SyncManager.kt`（全量/增量同步、last-write-wins 冲突解决）
-- [ ] T044 实现离线待处理变更队列于 `apps/android/app/sync/PendingChangesQueue.kt` 和 SyncQueueDao
-- [ ] T099 实现 WorkManager 定时同步任务于 `apps/android/app/sync/SyncWorker.kt`（15 分钟周期、网络恢复触发、前台触发）
-- [ ] T100 实现 `AutofillService` 于 `apps/android/app/service/autofill/PwBookAutofillService.kt`
-- [ ] T101 [P] 实现 AssistStructure 解析器于 `apps/android/app/service/autofill/StructureParser.kt`（用户名/密码字段识别、webDomain/packageName 提取）
-- [ ] T102 [P] 实现 FillResponse 构建和账号选择数据集于 `apps/android/app/service/autofill/FillResponseBuilder.kt`
-- [ ] T103 实现 `onSaveRequest` 保存密码逻辑于 `apps/android/app/service/autofill/SaveRequestHandler.kt`（结合拒绝列表 FR-020）
-- [ ] T060 实现 AutofillService 域名匹配于 `apps/android/app/domain/matcher/UriMatcher.kt`（与 Edge 端对齐的基础域名提取、包名匹配、DomainAssociation 规则应用）
+- [X] T042 [P] 实现 Ktor Client 和 API 服务层于 `apps/android/app/data/remote/api/`（AuthApi、SyncApi、CipherApi、DomainAssocApi,含 DTO 和 kotlinx.serialization）
+- [X] T098 [P] 实现 WebSocket 同步客户端于 `apps/android/app/data/remote/websocket/SyncWebSocketClient.kt`
+- [X] T043 实现 Android 同步管理器于 `apps/android/app/sync/SyncManager.kt`（全量/增量同步、last-write-wins 冲突解决）
+- [X] T044 实现离线待处理变更队列于 `apps/android/app/sync/PendingChangesQueue.kt` 和 SyncQueueDao
+- [X] T099 实现 WorkManager 定时同步任务于 `apps/android/app/sync/SyncWorker.kt`（15 分钟周期、网络恢复触发、前台触发）
+- [X] T100 实现 `AutofillService` 于 `apps/android/app/service/autofill/PwBookAutofillService.kt`
+- [X] T101 [P] 实现 AssistStructure 解析器于 `apps/android/app/service/autofill/StructureParser.kt`（用户名/密码字段识别、webDomain/packageName 提取）
+- [X] T102 [P] 实现 FillResponse 构建和账号选择数据集于 `apps/android/app/service/autofill/FillResponseBuilder.kt`
+- [X] T103 实现 `onSaveRequest` 保存密码逻辑于 `apps/android/app/service/autofill/SaveRequestHandler.kt`（结合拒绝列表 FR-020）
+- [X] T060 实现 AutofillService 域名匹配于 `apps/android/app/domain/matcher/UriMatcher.kt`（与 Edge 端对齐的基础域名提取、包名匹配、DomainAssociation 规则应用）
 
 ### Phase 3: 增强安全与 Passkey
 
