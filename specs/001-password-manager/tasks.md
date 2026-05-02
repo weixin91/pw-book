@@ -240,10 +240,48 @@ description: "密码管理应用功能实现的任务列表"
 - [X] T104 [P] 实现剪贴板安全管理于 `apps/android/app/domain/usecase/CopyPasswordUseCase.kt`（10 秒自动清空、计时器重置，遵循 FR-017/FR-023）
 - [X] T065 [P] 实现 TOTP 生成和显示于 `apps/android/app/crypto/TotpGenerator.kt` 和 `apps/android/app/ui/components/TotpDisplay.kt`（RFC 6238、环形倒计时进度条）
 - [X] T105 [P] 实现 ZXing 二维码扫描于 `apps/android/app/ui/screens/scan/TotpScanScreen.kt`（解析 otpauth:// URI）
-- [ ] T066 实现 `CredentialProviderService` 于 `apps/android/app/service/credential/PwBookCredentialProviderService.kt`（Passkey，遵循 FR-008）
-- [ ] T106 [P] 实现 Passkey 创建处理于 `apps/android/app/service/credential/PasskeyCreateHandler.kt`（两阶段流程、保存到现有凭据/新建、EC P-256 密钥对生成）
-- [ ] T107 [P] 实现 Passkey 认证处理于 `apps/android/app/service/credential/PasskeyGetHandler.kt`（查询阶段返回候选、选择阶段签名 WebAuthn 断言）
-- [ ] T108 实现 Passkey 创建/认证 Activity 于 `apps/android/app/service/credential/PasskeyCreateActivity.kt` 和 `PasskeyGetActivity.kt`（PendingIntent 处理、生物识别认证、返回 WebAuthn 响应）
+
+#### Passkey 实现（基于 plan.md 重新规划，与 Edge 端 `passkey-storage.ts` 完全互通）
+
+##### 项目配置
+
+- [ ] T066 配置 Passkey 依赖与构建参数于 `apps/android/app/build.gradle.kts`（添加 `androidx.credentials:credentials:1.6.0` 依赖；将 `defaultConfig.minSdk` 从 28 提升至 34，理由：CredentialProviderService 仅 Android 14+ 可用）
+- [ ] T112 [P] 添加 CredentialProviderService 与 Activity 声明于 `apps/android/app/src/main/AndroidManifest.xml`（service 使用 `BIND_CREDENTIAL_PROVIDER_SERVICE` 权限并声明 `androidx.credentials.provider.CredentialProviderService` intent-filter；新增 `PasskeyCreateActivity`、`PasskeyGetActivity`、`CredentialProviderUnlockActivity` 三个透明 Activity，均 `exported=false`）
+- [ ] T113 [P] 添加 Theme.Transparent 样式于 `apps/android/app/src/main/res/values/themes.xml`（透明背景 + windowIsFloating=false，用于 Credential Provider PendingIntent 启动的 Activity）
+
+##### 数据模型
+
+- [ ] T114 [P] 实现 Passkey 数据模型于 `apps/android/app/src/main/java/com/pwbook/domain/model/PasskeyData.kt`（字段：credentialId/privateKey/publicKey/rpId/rpName/userHandle/userName/userDisplayName/counter/createdAt；编码约定：credentialId 与 userHandle 使用 Base64Url 无 padding，privateKey 使用标准 Base64 + PKCS#8，publicKey 使用标准 Base64 + SPKI/DER，与 Edge 端 `PasskeyData` 接口逐字段对齐）
+- [ ] T115 [P] 扩展 Cipher 解密负载序列化于 `apps/android/app/src/main/java/com/pwbook/domain/model/Cipher.kt`（为 Cipher 解密 JSON 增加 `passkey: PasskeyData?` 字段；同步更新 `CipherEntity` 解密/加密路径上的 JSON 序列化适配，确保 passkey 字段与 Edge 端 `data.passkey` 共用编码）
+- [ ] T116 [P] 扩展 CipherRepository 查询能力于 `apps/android/app/src/main/java/com/pwbook/data/repository/CipherRepository.kt` 与对应 DAO `apps/android/app/src/main/java/com/pwbook/data/local/dao/CipherDao.kt`（新增 `findByRpId(rpId): List<Cipher>`、`findByCredentialId(credentialId): Cipher?`，用于 Credential Provider 查询匹配 Passkey）
+
+##### 加密与签名核心
+
+- [ ] T117 [P] 实现 CBOR 编码工具于 `apps/android/app/src/main/java/com/pwbook/crypto/CborEncoder.kt`（`pushCborTextString` / `pushCborByteString` / `pushCborMapHeader` / `pushCborInt`，仅覆盖 attestationObject 与 COSE_Key 编码所需的最小子集，输出与 Edge 端 `passkey-storage.ts` 中 CBOR 字节级一致）
+- [ ] T118 [P] 实现 Passkey 加密核心于 `apps/android/app/src/main/java/com/pwbook/crypto/PasskeyCrypto.kt`（包含 `importPrivateKey(pkcs8Base64)` / `importPublicKey(spkiBase64)` / `signAssertion(privateKey, authenticatorData, clientDataHash) -> DER` / `encodeCoseKeyEs256(ECPublicKey)` / `buildAuthenticatorData(rpId, signCount, includeAttestedCredentialData, credentialId?, publicKeyCose?)` / `encodeAttestationObjectNone(authData)` / `buildClientDataJSON(type, challenge, origin)`；create flags=0x41，get flags=0x05；与 Edge 端 `passkey-storage.ts` 输出格式逐字节对齐）
+
+##### Credential Provider Service 与 Activity
+
+- [ ] T106 实现 `PwBookCredentialProviderService` 于 `apps/android/app/src/main/java/com/pwbook/service/credential/PwBookCredentialProviderService.kt`（实现 `onBeginCreateCredentialRequest` 返回 CreateEntry；`onBeginGetCredentialRequest` 检查 `vaultSession.isUnlocked`，未解锁则返回 `AuthenticationAction` 跳转到解锁 Activity；解锁后从 `requestJson` 解析 `rpId` / `allowCredentials`，调用 `cipherRepository.findByRpId` 与 `PasskeyMatcher` 过滤候选，构建 `PublicKeyCredentialEntry`）
+- [ ] T119 实现 `CredentialProviderUnlockActivity` 于 `apps/android/app/src/main/java/com/pwbook/service/credential/CredentialProviderUnlockActivity.kt`（透明 Activity；调用 `BiometricUnlockManager` 或主密码解锁；解锁成功后通过 `setResult(RESULT_OK)` + `finish()` 让系统重发原 BeginGetCredentialRequest）
+- [ ] T107 实现 `PasskeyCreateActivity` 于 `apps/android/app/src/main/java/com/pwbook/service/credential/PasskeyCreateActivity.kt`（`PendingIntentHandler.retrieveProviderCreateCredentialRequest` 取出 `CreatePublicKeyCredentialRequest`；调用 `BiometricPrompt` 强制生物识别；通过 `KeyPairGenerator("EC")` + `ECGenParameterSpec("secp256r1")` 生成 EC P-256 密钥对并导出 PKCS#8/SPKI；调用 `PasskeyCrypto.encodeCoseKeyEs256`、`buildAuthenticatorData(includeAttestedCredentialData=true)`、`encodeAttestationObjectNone` 构建 attestationObject；调用 `PasskeyVaultWriter.savePasskey` 持久化；构建 `CreatePublicKeyCredentialResponse` JSON 并 `PendingIntentHandler.setCreateCredentialResponse`）
+- [ ] T108 实现 `PasskeyGetActivity` 于 `apps/android/app/src/main/java/com/pwbook/service/credential/PasskeyGetActivity.kt`（从 intent extras 取出 `credential_id`；`PendingIntentHandler.retrieveProviderGetCredentialRequest` 解析 challenge/origin；生物识别后通过 `cipherRepository.findByCredentialId` 解密获取 `PasskeyData`；用 `PasskeyCrypto.importPrivateKey` 导入 PKCS#8 私钥并 `signAssertion` 输出 DER；递增 `counter` 写回密码库并通过 `SyncManager.enqueueUpdate` 同步；构建 `GetCredentialResponse` 并 `PendingIntentHandler.setGetCredentialResponse`）
+
+##### 凭据匹配与保存
+
+- [ ] T120 [P] 实现 Passkey 匹配工具于 `apps/android/app/src/main/java/com/pwbook/service/credential/PasskeyMatcher.kt`（`isRpIdMatch(passkeyRpId, requestedRpId, callingPackage)`：直接相等 + 子域后缀匹配 + 通过 `DomainAssociation` 校验 callingPackage 与 rpId 关联；`isCredentialAllowed(credentialId, allowCredentialsJson)`：Base64Url 字符串相等比较）
+- [ ] T121 实现 Passkey 保存策略于 `apps/android/app/src/main/java/com/pwbook/service/credential/PasskeyVaultWriter.kt`（`savePasskey(passkeyData, rpId, userName)`：通过 `cipherRepository.findByRpId` 查找同 rpId 的 LOGIN 凭据，若存在则附加 `passkey` 字段并 `SyncManager.enqueueUpdate`，若不存在则新建 `CipherEntity(type=LOGIN)` 并 `SyncManager.enqueueCreate`，遵循 FR-008）
+
+##### DI 与 UI
+
+- [ ] T122 [P] 更新 Hilt DI 模块于 `apps/android/app/src/main/java/com/pwbook/di/ServiceModule.kt`（为 `PwBookCredentialProviderService`、`PasskeyCreateActivity`、`PasskeyGetActivity`、`CredentialProviderUnlockActivity` 提供 `VaultSession`、`VaultEncryption`、`CipherRepository`、`SyncManager`、`BiometricUnlockManager` 注入；Service 与 Activity 均使用 `@AndroidEntryPoint`）
+- [ ] T123 [P] 实现凭据编辑页 Passkey 展示与删除于 `apps/android/app/src/main/java/com/pwbook/ui/screens/edit/CipherEditScreen.kt` 与对应 ViewModel（新增 `PasskeySection` Composable，展示 `rpId` / `rpName` / `createdAt`；提供「删除通行密钥」按钮，确认后仅清空 `passkey` 字段，保留 `login` 等其他数据；保存时保留原有 `passkey` 字段防止意外丢失）
+- [ ] T124 [P] 实现凭据列表 Passkey 图标指示于 `apps/android/app/src/main/java/com/pwbook/ui/screens/VaultListScreen.kt`（列表项若 `Cipher.passkey != null`，名称右侧显示 🔐 图标，与 Edge 端 `VaultList.tsx` 视觉一致）
+
+##### 兼容性测试
+
+- [ ] T125 [P] 实现 Passkey 加密兼容性测试于 `apps/android/app/src/test/java/com/pwbook/crypto/PasskeyCryptoTest.kt`（与 Edge 端 `passkey-storage.test.ts` 共享测试向量；用例包含：1) `importPrivateKey(pkcs8)` 解析 Edge 导出的 PKCS#8 成功；2) `signAssertion` 输出符合 DER 结构（0x30 起始）且可被 `importPublicKey` 解析的公钥验证通过；3) `encodeCoseKeyEs256` 对 (x=fill(0x01), y=fill(0x02)) 输出与 Edge 端字节级一致；4) `buildAuthenticatorData(create)` flags=0x41 且包含 attestedCredentialData，`buildAuthenticatorData(get)` flags=0x05 且不含 attestedCredentialData；5) `encodeAttestationObjectNone` CBOR 输出与 Edge 端字节级一致）
+
 - [X] T059 实现域名关联管理 UI 于 `apps/android/app/ui/screens/settings/DomainAssocScreen.kt`
 
 ### Phase 4: 打磨
@@ -312,6 +350,46 @@ Task: "实现登录成功检测引擎"
 Task: "实现保存密码提示 UI"
 Task: "实现行内菜单 / 账号选择器"
 Task: "实现 Popup 基础框架"
+```
+
+---
+
+## 并行示例：Android Passkey（Phase 3）
+
+```bash
+# 第 1 批：T066 必须先完成（升级 minSdk + 添加依赖）
+Task: "T066 配置 Passkey 依赖与构建参数 apps/android/app/build.gradle.kts"
+
+# 第 2 批：基础设施（依赖 T066，相互之间无依赖，可并行）
+Task: "T112 添加 CredentialProviderService 与 Activity 声明 AndroidManifest.xml"
+Task: "T113 添加 Theme.Transparent 样式 themes.xml"
+Task: "T114 实现 PasskeyData 数据模型 domain/model/PasskeyData.kt"
+Task: "T117 实现 CBOR 编码工具 crypto/CborEncoder.kt"
+Task: "T120 实现 Passkey 匹配工具 service/credential/PasskeyMatcher.kt"
+
+# 第 3 批：依赖 T114（PasskeyData）
+Task: "T115 扩展 Cipher 解密负载序列化 domain/model/Cipher.kt"
+
+# 第 4 批：依赖 T115（Cipher）
+Task: "T116 扩展 CipherRepository 查询能力"
+
+# 第 5 批：依赖 T117（CBOR）
+Task: "T118 实现 PasskeyCrypto 加密核心"
+Task: "T125 实现 PasskeyCryptoTest 兼容性测试"
+
+# 第 6 批：依赖 T116/T118/T120
+Task: "T106 实现 PwBookCredentialProviderService"
+Task: "T119 实现 CredentialProviderUnlockActivity"
+Task: "T121 实现 PasskeyVaultWriter 保存策略"
+
+# 第 7 批：依赖 T118/T121
+Task: "T107 实现 PasskeyCreateActivity"
+Task: "T108 实现 PasskeyGetActivity"
+
+# 第 8 批：依赖前序所有任务，UI 与 DI（可并行）
+Task: "T122 更新 Hilt DI 模块 di/ServiceModule.kt"
+Task: "T123 实现凭据编辑页 Passkey 展示与删除 ui/screens/edit/CipherEditScreen.kt"
+Task: "T124 实现凭据列表 Passkey 图标指示 ui/screens/VaultListScreen.kt"
 ```
 
 ---
