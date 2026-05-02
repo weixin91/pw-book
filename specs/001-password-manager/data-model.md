@@ -130,15 +130,15 @@ interface CipherData {
 
   // Passkey（作为 LOGIN 的可选附加字段，或独立 PASSKEY 类型）
   passkey?: {
-    credentialId: string;     // Base64Url
-    privateKey: string;       // Base64Url（JWK 或 SPKI 导出）
-    publicKey: string;        // Base64Url（SPKI 格式公钥）
+    credentialId: string;     // Base64Url（无 padding），WebAuthn 标准
+    privateKey: string;       // 标准 Base64（带 padding），PKCS#8 格式 EC P-256 私钥
+    publicKey: string;        // 标准 Base64（带 padding），SPKI/DER 格式 EC P-256 公钥
     rpId: string;             // Relying Party ID
     rpName?: string;          // RP 显示名称
-    userHandle: string;       // Base64Url
+    userHandle: string;       // Base64Url（无 padding），WebAuthn 标准
     userName?: string;        // 用户名称
     userDisplayName?: string; // 用户显示名称
-    counter: number;          // 签名计数器（防重放）
+    counter: number;          // 签名计数器（防重放），初始为 0，每次使用后递增
     createdAt: string;        // ISO 8601
   };
 

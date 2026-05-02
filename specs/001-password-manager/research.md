@@ -565,3 +565,183 @@ for (const cookie of cookieDetails) {
 4. **Passkey 复杂度**：WebAuthn/FIDO2 协议复杂，CTAP2 通信涉及多个抽象层。建议分阶段实现，先支持 TOTP，再支持 Passkey。
 5. **端到端加密的正确性**：加密实现必须经过安全审计。建议使用经过验证的库（Web Crypto API / Tink / BouncyCastle），避免自行实现加密原语。
 6. **Cookie 同步的边界**：Cookie 同步受浏览器安全策略限制（SameSite、HttpOnly、Partitioned、Secure），无法保证 100% 的跨设备可用性。应在功能说明中明确告知用户此限制，并提供「仅密码管理，不启用 Cookie 同步」的选项。
+
+---
+
+## 11. Android Credential Provider 与 Passkey 跨端互通调研
+
+**调研日期**: 2026/05/03
+**调研目标**: 基于 `C:\projects\passkey-demo` 验证过的实现，设计 Android 端 Passkey 方案，确保与 Edge 插件端互通
+
+### 11.1 参考实现（passkey-demo）核心架构
+
+passkey-demo 是一个经过 webauthn.io 实测验证的 Android Credential Provider 实现：
+
+| 组件 | 职责 |
+|------|------|
+| `MyCredentialProviderService` | 扩展 `CredentialProviderService`，处理系统的 `onBeginCreateCredentialRequest` 和 `onBeginGetCredentialRequest` |
+| `CreateCredentialActivity` | 处理 Passkey/密码创建，生物识别认证后生成 WebAuthn 响应 |
+| `GetCredentialActivity` | 处理 Passkey/密码获取，生物识别认证后签名 WebAuthn 断言 |
+| `UnlockActivity` | 保险库解锁的生物识别弹窗 |
+| `CredentialsRepo` | 内存存储，密码用 AES-256-GCM（Android Keystore）加密 |
+
+**两阶段流程**：
+1. **Begin/Query 阶段**：System 绑定到 Service → Service 返回 `PendingIntent` 包装的 credential entries
+2. **Selection 阶段**：用户选择 entry → `PendingIntent` 启动对应 Activity → Activity 执行操作并返回结果
+
+### 11.2 关键互通决策
+
+#### 11.2.1 私钥存储：统一使用加密保险库（而非 Android Keystore 硬件绑定）
+
+**问题**：Android Keystore 生成的私钥通常不可导出，无法同步到 Edge 端。
+
+**决策**：
+- Passkey 私钥以 PKCS#8 格式存储在 CipherData 中（与 Edge 端一致），用 User Key 加密
+- Android 端从加密保险库解密私钥后，在内存中加载为 `ECPrivateKey` 进行签名
+- 不依赖 Android Keystore 的硬件绑定特性，以换取跨端互通能力
+
+**理由**：
+1. 私钥已用 User Key（512-bit，仅解锁后的内存中存在）加密，安全级别足够
+2. 与 Edge 端实现完全一致，简化同步逻辑
+3. passkey-demo 的 `setUserAuthenticationRequired(false)` 也表明 demo 级实现不强制硬件绑定
+
+**Android 私钥导入**：
+```kotlin
+val keySpec = PKCS8EncodedKeySpec(pkcs8Bytes)
+val keyFactory = KeyFactory.getInstance("EC")
+val privateKey = keyFactory.generatePrivate(keySpec) as ECPrivateKey
+```
+
+#### 11.2.2 私钥格式：PKCS#8（Base64）
+
+Edge 端 `passkey-storage.ts` 使用 `crypto.subtle.exportKey("pkcs8", ...)` 导出私钥为 PKCS#8。
+
+Android 端使用 `PKCS8EncodedKeySpec` 即可导入，无需格式转换。
+
+#### 11.2.3 公钥格式：SPKI（Base64）+ 运行时生成 COSE_Key
+
+Edge 端存储：
+- `publicKey`: SPKI/DER 格式（Base64）—— 用于签名验证和导入
+- 运行时从公钥导出 raw 坐标 (x, y)，编码为 COSE_Key（CBOR）用于 WebAuthn 注册响应
+
+Android 端：
+- 从 CipherData 读取 SPKI 公钥，用 `X509EncodedKeySpec` 导入为 `ECPublicKey`
+- 从 `ECPublicKey.w` 获取 (x, y) 坐标，编码为 COSE_Key
+- 签名时使用 `Signature.getInstance("SHA256withECDSA")`
+
+#### 11.2.4 Base64 编码约定
+
+| 字段 | 编码方式 | 理由 |
+|------|---------|------|
+| `privateKey` | 标准 Base64（带 padding） | 与现有加密协议一致，Android `java.util.Base64` 默认 |
+| `publicKey` | 标准 Base64（带 padding） | 同上 |
+| `credentialId` | Base64Url（无 padding） | WebAuthn 标准要求 |
+| `userHandle` | Base64Url（无 padding） | WebAuthn 标准要求 |
+
+Android 端解码时需要区分：标准 Base64 用 `java.util.Base64.getDecoder()`，Base64Url 用 `android.util.Base64.URL_SAFE | NO_WRAP | NO_PADDING`。
+
+#### 11.2.5 签名格式：DER 编码的 ECDSA
+
+- Edge 端：Web Crypto API 输出 IEEE-P1363（r||s 各 32 字节），然后手动 `p1363ToDer()` 转换
+- Android 端：`Signature.getInstance("SHA256withECDSA")` 直接输出 DER 格式
+- **结论**：两端最终都输出 DER 格式，与 WebAuthn 规范兼容，无需额外转换
+
+#### 11.2.6 签名计数器
+
+- 初始值为 0
+- 每次使用后递增（`counter++`）
+- Edge 端和 Android 端都需要在签名后更新 counter 并重新加密保存凭据
+- 多设备并发使用可能导致计数器回退（last-write-wins），但大多数 RP 不严格验证计数器递增
+- **决策**：接受此限制，在当前版本不引入复杂的计数器同步机制
+
+#### 11.2.7 WebAuthn 响应格式一致性
+
+两端必须生成完全一致的响应结构：
+
+**Create（注册）响应**：
+```json
+{
+  "id": "<credentialId base64url>",
+  "rawId": "<credentialId bytes base64url>",
+  "type": "public-key",
+  "authenticatorAttachment": "platform",
+  "response": {
+    "clientDataJSON": "<base64url>",
+    "attestationObject": "<base64url>",
+    "authenticatorData": "<base64url>",
+    "publicKeyAlgorithm": -7,
+    "publicKey": "<SPKI base64url>",
+    "transports": ["internal"]
+  },
+  "clientExtensionResults": { "credProps": { "rk": false } }
+}
+```
+
+**Get（认证）响应**：
+```json
+{
+  "id": "<credentialId base64url>",
+  "rawId": "<credentialId bytes base64url>",
+  "type": "public-key",
+  "response": {
+    "clientDataJSON": "<base64url>",
+    "authenticatorData": "<base64url>",
+    "signature": "<DER signature base64url>",
+    "userHandle": "<base64url>"
+  },
+  "clientExtensionResults": {}
+}
+```
+
+**关键字段**：
+- `clientDataJSON`：JSON 字符串 `{"type":"webauthn.create|get","challenge":"...","origin":"https://<rpId>","crossOrigin":false}`
+- `authenticatorData`：`rpIdHash(32) || flags(1) || signCount(4) || [attestedCredentialData]`
+  - flags: `0x41` (AT+UP) for create, `0x05` (UP+UV) for get
+  - signCount: 4 字节大端序
+- `attestationObject`：CBOR 编码 `{"fmt":"none","attStmt":{},"authData":<bytes>}`
+
+### 11.3 Android Credential Provider API 约束
+
+**API 级别**：
+- `CredentialProviderService` 需要 **Android 14+ (API 34)**
+- 当前 `minSdk = 28`，需要提升到 `minSdk = 34` 或做运行时检查（API < 34 不启用 Credential Provider）
+- **决策**：将 `minSdk` 提升至 34。理由：Passkey 是 P3 优先级功能，且 Android 14 已广泛普及（2026 年），为简化实现不保留兼容性代码。
+
+**依赖**：
+```kotlin
+implementation("androidx.credentials:credentials:1.6.0")
+```
+
+**Manifest 声明**：
+```xml
+<service
+    android:name=".service.credential.PwBookCredentialProviderService"
+    android:exported="true"
+    android:permission="android.permission.BIND_CREDENTIAL_PROVIDER_SERVICE">
+    <intent-filter>
+        <action android:name="androidx.credentials.provider.CredentialProviderService" />
+    </intent-filter>
+</service>
+```
+
+### 11.4 与现有 Android 代码的集成点
+
+| 现有模块 | 复用方式 |
+|---------|---------|
+| `VaultEncryption` / `AesGcmEngine` | 解密 Cipher 数据获取 Passkey 信息 |
+| `BiometricUnlockManager` | Credential Provider Activity 中的生物识别确认 |
+| `CipherRepository` | 查询/更新包含 Passkey 的 LOGIN 凭据 |
+| `SyncManager` / `PendingChangesQueue` | 创建/使用 Passkey 后 enqueue 同步变更 |
+| `UriMatcher` | 凭据匹配逻辑（rpId ↔ 域名） |
+| `VaultSession` | 检查保险库是否解锁，未解锁时返回 AuthenticationAction |
+
+### 11.5 Edge 端无需修改的确认
+
+经对比，Edge 端 `passkey-storage.ts` 的实现已与 Android 端需求对齐：
+- 私钥格式：PKCS#8 ✓
+- 公钥格式：SPKI ✓
+- 加密算法：ECDSA P-256 ✓
+- 响应格式：完整的 WebAuthn create/get 响应 ✓
+- Counter 递增逻辑 ✓
+
+**无需修改 Edge 端代码**。
