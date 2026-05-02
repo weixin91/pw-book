@@ -13,7 +13,7 @@ android {
 
     defaultConfig {
         applicationId = "com.pwbook"
-        minSdk = 28
+        minSdk = 34
         targetSdk = 35
         versionCode = 1
         versionName = "1.0"
@@ -125,6 +125,9 @@ dependencies {
 
     // BouncyCastle (Argon2id)
     implementation("org.bouncycastle:bcprov-jdk18on:1.79")
+
+    // AndroidX Credentials (Passkey Credential Provider)
+    implementation("androidx.credentials:credentials:1.6.0")
 
     // ZXing (QR code scanning for TOTP)
     implementation("com.google.zxing:core:3.5.3")

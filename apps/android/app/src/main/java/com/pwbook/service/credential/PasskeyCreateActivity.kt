@@ -1,0 +1,215 @@
+package com.pwbook.service.credential
+
+import android.content.Intent
+import android.os.Bundle
+import android.os.CancellationSignal
+import android.os.OutcomeReceiver
+import androidx.fragment.app.FragmentActivity
+import androidx.biometric.BiometricManager
+import androidx.biometric.BiometricPrompt
+import androidx.core.content.ContextCompat
+import androidx.credentials.CreatePublicKeyCredentialRequest
+import androidx.credentials.provider.PendingIntentHandler
+import androidx.lifecycle.lifecycleScope
+import com.pwbook.crypto.PasskeyCrypto
+import com.pwbook.domain.model.PasskeyData
+import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
+import timber.log.Timber
+import java.security.SecureRandom
+import java.security.interfaces.ECPublicKey
+import java.time.Instant
+import javax.inject.Inject
+import kotlin.coroutines.resume
+
+/**
+ * Passkey 创建 Activity。
+ *
+ * 从 Credential Provider PendingIntent 启动，处理 WebAuthn create 请求。
+ */
+@AndroidEntryPoint
+class PasskeyCreateActivity : FragmentActivity() {
+
+    @Inject lateinit var passkeyVaultWriter: PasskeyVaultWriter
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        Timber.d("PasskeyCreateActivity onCreate")
+        val request = PendingIntentHandler.retrieveProviderCreateCredentialRequest(intent)
+        Timber.d("retrieveProviderCreateCredentialRequest request=$request")
+        val callingRequest = request?.callingRequest as? CreatePublicKeyCredentialRequest
+            ?: run { finishWithCancel("无效请求"); return }
+
+        val requestJson = callingRequest.requestJson
+        val callingAppInfo = request.callingAppInfo
+        Timber.d("requestJson=$requestJson callingPackage=${callingAppInfo?.packageName}")
+
+        lifecycleScope.launch {
+            val biometricSuccess = authenticateWithBiometric()
+            if (!biometricSuccess) {
+                finishWithCancel("生物识别验证失败")
+                return@launch
+            }
+
+            try {
+                val response = createPasskey(requestJson, callingAppInfo?.packageName)
+                Timber.d("createPasskey response length=${response.length}")
+
+                val result = Intent()
+                PendingIntentHandler.setCreateCredentialResponse(
+                    result,
+                    androidx.credentials.CreatePublicKeyCredentialResponse(response)
+                )
+                setResult(RESULT_OK, result)
+                Timber.d("setResult RESULT_OK")
+            } catch (e: Exception) {
+                Timber.e(e, "Passkey create failed")
+                setResult(RESULT_CANCELED)
+            }
+            finish()
+        }
+    }
+
+    private suspend fun createPasskey(
+        requestJson: String,
+        callingPackage: String?
+    ): String {
+        Timber.d("createPasskey callingPackage=$callingPackage")
+        val request = org.json.JSONObject(requestJson)
+        val rp = request.getJSONObject("rp")
+        val rpId = rp.optString("id", "")
+        val rpName = rp.optString("name", "")
+        val user = request.getJSONObject("user")
+        val userId = user.getString("id") // Base64Url
+        val userName = user.optString("name", "")
+        val displayName = user.optString("displayName", userName)
+        val challenge = request.getString("challenge")
+        Timber.d("createPasskey rpId=$rpId userName=$userName")
+
+        // 生成 EC P-256 密钥对
+        val keyPair = PasskeyCrypto.generateEcKeyPair()
+        val credentialIdBytes = ByteArray(32).apply { SecureRandom().nextBytes(this) }
+        val credentialId = PasskeyCrypto.base64UrlEncode(credentialIdBytes)
+        Timber.d("createPasskey credentialId=$credentialId")
+
+        // 导出密钥格式
+        val privateKeyPkcs8 = PasskeyCrypto.base64Encode(keyPair.private.encoded)
+        val publicKeySpki = PasskeyCrypto.base64Encode(keyPair.public.encoded)
+
+        // 构建 WebAuthn 响应
+        val origin = "https://$rpId"
+        val clientDataJSON = PasskeyCrypto.buildClientDataJSON("webauthn.create", challenge, origin)
+        val clientDataHash = PasskeyCrypto.rpIdHash(clientDataJSON)
+
+        val coseKey = PasskeyCrypto.encodeCoseKeyEs256(keyPair.public as ECPublicKey)
+        val authData = PasskeyCrypto.buildAuthenticatorData(
+            rpId = rpId,
+            signCount = 0,
+            includeAttestedCredentialData = true,
+            credentialId = credentialIdBytes,
+            publicKeyCose = coseKey
+        )
+        Timber.d("createPasskey authData size=${authData.size}")
+
+        val attestationObject = PasskeyCrypto.encodeAttestationObjectNone(authData)
+        Timber.d("createPasskey attestationObject size=${attestationObject.size}")
+
+        // 构建响应 JSON
+        val responseJson = org.json.JSONObject().apply {
+            put("id", credentialId)
+            put("rawId", credentialId)
+            put("type", "public-key")
+            put("authenticatorAttachment", "platform")
+            put("response", org.json.JSONObject().apply {
+                put("clientDataJSON", PasskeyCrypto.base64UrlEncode(clientDataJSON.toByteArray(Charsets.UTF_8)))
+                put("attestationObject", PasskeyCrypto.base64UrlEncode(attestationObject))
+                put("authenticatorData", PasskeyCrypto.base64UrlEncode(authData))
+                put("publicKeyAlgorithm", -7)
+                put("publicKey", PasskeyCrypto.base64UrlEncode(keyPair.public.encoded))
+                put("transports", org.json.JSONArray().put("internal"))
+            })
+            put("clientExtensionResults", org.json.JSONObject().apply {
+                put("credProps", org.json.JSONObject().apply { put("rk", false) })
+            })
+        }.toString()
+        Timber.d("createPasskey responseJson prepared")
+
+        // 保存到密码库
+        Timber.d("createPasskey saving to vault...")
+        passkeyVaultWriter.savePasskey(
+            passkeyData = PasskeyData(
+                credentialId = credentialId,
+                privateKey = privateKeyPkcs8,
+                publicKey = publicKeySpki,
+                rpId = rpId,
+                rpName = rpName,
+                userHandle = userId,
+                userName = userName,
+                userDisplayName = displayName,
+                counter = 0,
+                createdAt = Instant.now().toString()
+            ),
+            rpId = rpId,
+            userName = userName
+        )
+        Timber.i("Passkey created for rpId=$rpId, credentialId=$credentialId")
+        return responseJson
+    }
+
+    private suspend fun authenticateWithBiometric(): Boolean {
+        val biometricManager = BiometricManager.from(this)
+        val canAuth = biometricManager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG)
+        if (canAuth != BiometricManager.BIOMETRIC_SUCCESS) {
+            // 设备不支持生物识别，跳过验证继续（生产环境可改为拒绝）
+            Timber.w("Biometric not available, skipping: $canAuth")
+            return true
+        }
+
+        return suspendCancellableCoroutine { continuation ->
+            val executor = ContextCompat.getMainExecutor(this)
+            val prompt = BiometricPrompt(
+                this,
+                executor,
+                object : BiometricPrompt.AuthenticationCallback() {
+                    override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                        continuation.resume(true)
+                    }
+                    override fun onAuthenticationFailed() {
+                        continuation.resume(false)
+                    }
+                    override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                        if (errorCode == BiometricPrompt.ERROR_USER_CANCELED ||
+                            errorCode == BiometricPrompt.ERROR_NEGATIVE_BUTTON
+                        ) {
+                            continuation.resume(false)
+                        } else {
+                            Timber.e("Biometric error: $errString")
+                            continuation.resume(false)
+                        }
+                    }
+                }
+            )
+
+            val promptInfo = BiometricPrompt.PromptInfo.Builder()
+                .setTitle("Password Book")
+                .setSubtitle("使用生物识别创建通行密钥")
+                .setNegativeButtonText("取消")
+                .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
+                .build()
+
+            prompt.authenticate(promptInfo)
+
+            continuation.invokeOnCancellation {
+                prompt.cancelAuthentication()
+            }
+        }
+    }
+
+    private fun finishWithCancel(reason: String) {
+        Timber.w("Passkey create cancelled: $reason")
+        setResult(RESULT_CANCELED)
+        finish()
+    }
+}

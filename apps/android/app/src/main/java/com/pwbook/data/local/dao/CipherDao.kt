@@ -38,4 +38,7 @@ interface CipherDao {
 
     @Query("DELETE FROM cipher WHERE userId = :userId")
     suspend fun deleteAllByUser(userId: String)
+
+    @Query("SELECT * FROM cipher WHERE userId = :userId AND type = :type ORDER BY modifiedAt DESC")
+    suspend fun getAllByType(userId: String, type: Int): List<CipherEntity>
 }

@@ -85,7 +85,9 @@ class VaultSession @Inject constructor(
 data class CipherDataJson(
     val name: String = "",
     val notes: String? = null,
-    val login: LoginDataJson? = null
+    val login: LoginDataJson? = null,
+    val lastUsedAt: String? = null,
+    val fields: List<CustomFieldJson> = emptyList()
 )
 
 @Serializable
@@ -100,20 +102,28 @@ data class LoginDataJson(
 @Serializable
 data class PasskeyDataJson(
     val credentialId: String,
+    val privateKey: String,
+    val publicKey: String,
     val rpId: String,
     val rpName: String? = null,
     val userHandle: String,
     val userName: String? = null,
-    val privateKeyEncrypted: String,
-    val publicKey: String,
-    val counter: Long = 0,
-    val createdAt: Long = System.currentTimeMillis()
+    val userDisplayName: String? = null,
+    val counter: Int = 0,
+    val createdAt: String = java.time.Instant.now().toString()
 )
 
 @Serializable
 data class LoginUriJson(
     val uri: String,
     val match: Int? = null
+)
+
+@Serializable
+data class CustomFieldJson(
+    val name: String,
+    val value: String,
+    val type: Int
 )
 
 data class DecryptedCipher(

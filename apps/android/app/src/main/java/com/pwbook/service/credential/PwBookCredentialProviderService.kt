@@ -1,0 +1,282 @@
+package com.pwbook.service.credential
+
+import android.app.PendingIntent
+import android.content.Intent
+import android.os.CancellationSignal
+import android.os.OutcomeReceiver
+import androidx.credentials.provider.AuthenticationAction
+import androidx.credentials.provider.BeginCreateCredentialRequest
+import androidx.credentials.provider.BeginCreateCredentialResponse
+import androidx.credentials.provider.BeginCreatePublicKeyCredentialRequest
+import androidx.credentials.provider.BeginGetCredentialRequest
+import androidx.credentials.provider.BeginGetCredentialResponse
+import androidx.credentials.provider.BeginGetPasswordOption
+import androidx.credentials.provider.BeginGetPublicKeyCredentialOption
+import androidx.credentials.provider.CredentialEntry
+import androidx.credentials.provider.CredentialProviderService
+import androidx.credentials.provider.PublicKeyCredentialEntry
+import androidx.credentials.exceptions.ClearCredentialException
+import androidx.credentials.exceptions.CreateCredentialException
+import androidx.credentials.exceptions.GetCredentialException
+import com.pwbook.data.datasource.SecurePrefs
+import com.pwbook.data.repository.CipherRepository
+import com.pwbook.data.repository.DomainAssocRepository
+import com.pwbook.domain.VaultSession
+import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import timber.log.Timber
+import javax.inject.Inject
+
+/**
+ * Credential Provider Service，为系统提供 Passkey 创建和认证能力。
+ */
+@AndroidEntryPoint
+class PwBookCredentialProviderService : CredentialProviderService() {
+
+    companion object {
+        private const val PACKAGE_NAME = "com.pwbook"
+        private const val EXTRA_CREATE_REQUEST_JSON = "create_request_json"
+        private const val EXTRA_CALLING_PACKAGE = "calling_package"
+        private const val EXTRA_CREDENTIAL_ID = "credential_id"
+    }
+
+    @Inject lateinit var cipherRepository: CipherRepository
+    @Inject lateinit var domainAssocRepository: DomainAssocRepository
+    @Inject lateinit var vaultSession: VaultSession
+    @Inject lateinit var securePrefs: SecurePrefs
+
+    override fun onBeginCreateCredentialRequest(
+        request: BeginCreateCredentialRequest,
+        cancellationSignal: CancellationSignal,
+        callback: OutcomeReceiver<BeginCreateCredentialResponse, CreateCredentialException>
+    ) {
+        Timber.d("onBeginCreateCredentialRequest type=${request::class.java.simpleName}")
+        val response = when (request) {
+            is BeginCreatePublicKeyCredentialRequest -> handleCreatePasskeyQuery(request)
+            else -> {
+                Timber.w("Unknown create request type: ${request::class.java.simpleName}")
+                BeginCreateCredentialResponse(emptyList())
+            }
+        }
+        Timber.d("CreateCredentialResponse entries=${response.createEntries.size}")
+        callback.onResult(response)
+    }
+
+    private fun handleCreatePasskeyQuery(
+        request: BeginCreatePublicKeyCredentialRequest
+    ): BeginCreateCredentialResponse {
+        Timber.d("handleCreatePasskeyQuery requestJson=${request.requestJson}")
+
+        val intent = Intent(
+            applicationContext,
+            PasskeyCreateActivity::class.java
+        ).apply {
+            putExtra(EXTRA_CREATE_REQUEST_JSON, request.requestJson)
+            val callingPackage = request.callingAppInfo?.packageName.orEmpty()
+            putExtra(EXTRA_CALLING_PACKAGE, callingPackage)
+        }
+
+        val pendingIntent = PendingIntent.getActivity(
+            applicationContext,
+            0,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
+        )
+        Timber.d("handleCreatePasskeyQuery pendingIntent created")
+
+        val accountName = getString(com.pwbook.R.string.app_name)
+        Timber.d("handleCreatePasskeyQuery accountName=$accountName")
+
+        val createEntry = androidx.credentials.provider.CreateEntry.Builder(
+            accountName,
+            pendingIntent
+        ).build()
+        Timber.d("handleCreatePasskeyQuery CreateEntry built")
+
+        return BeginCreateCredentialResponse(listOf(createEntry))
+    }
+
+    override fun onBeginGetCredentialRequest(
+        request: BeginGetCredentialRequest,
+        cancellationSignal: CancellationSignal,
+        callback: OutcomeReceiver<BeginGetCredentialResponse, GetCredentialException>
+    ) {
+        Timber.d("onBeginGetCredentialRequest caller=${request.callingAppInfo?.packageName} options=${request.beginGetCredentialOptions.size}")
+        // 检查保险库是否解锁
+        if (!vaultSession.isUnlocked.value) {
+            val unlockIntent = Intent(
+                applicationContext,
+                CredentialProviderUnlockActivity::class.java
+            ).apply {
+                flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            val unlockPendingIntent = PendingIntent.getActivity(
+                applicationContext,
+                0,
+                unlockIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
+            )
+            callback.onResult(
+                BeginGetCredentialResponse(
+                    authenticationActions = listOf(
+                        AuthenticationAction(
+                            "解锁保险库以继续",
+                            unlockPendingIntent
+                        )
+                    )
+                )
+            )
+            return
+        }
+
+        CoroutineScope(Dispatchers.IO).launch {
+            val response = processGetCredentialRequest(request)
+            callback.onResult(response)
+        }
+    }
+
+    private suspend fun processGetCredentialRequest(
+        request: BeginGetCredentialRequest
+    ): BeginGetCredentialResponse {
+        val callingPackage = request.callingAppInfo?.packageName.orEmpty()
+        Timber.d("processGetCredentialRequest caller=$callingPackage options=${request.beginGetCredentialOptions.size}")
+        val credentialEntries = mutableListOf<CredentialEntry>()
+
+        for (option in request.beginGetCredentialOptions) {
+            when (option) {
+                is BeginGetPasswordOption -> {
+                    // 当前版本暂不通过 Credential Provider 返回密码凭据
+                    // 仅处理 Passkey 请求
+                }
+                is BeginGetPublicKeyCredentialOption -> {
+                    credentialEntries.addAll(
+                        populatePasskeyEntries(callingPackage, option)
+                    )
+                }
+            }
+        }
+
+        Timber.d("processGetCredentialRequest returning ${credentialEntries.size} entries")
+        return BeginGetCredentialResponse(credentialEntries)
+    }
+
+    private suspend fun populatePasskeyEntries(
+        callingPackage: String,
+        option: BeginGetPublicKeyCredentialOption
+    ): List<CredentialEntry> {
+        val requestJsonStr = option.requestJson
+        val rpId = try {
+            val json = org.json.JSONObject(requestJsonStr)
+            json.optString("rpId", "")
+        } catch (e: Exception) {
+            Timber.w(e, "Failed to parse requestJson")
+            return emptyList()
+        }
+
+        val allowCredentials = try {
+            val json = org.json.JSONObject(requestJsonStr)
+            json.optJSONArray("allowCredentials")
+        } catch (e: Exception) {
+            null
+        }
+
+        val allowCredentialsStr = allowCredentials?.let {
+            val list = mutableListOf<String>()
+            for (i in 0 until it.length()) {
+                val item = it.getJSONObject(i)
+                list.add(item.getString("id"))
+            }
+            org.json.JSONArray().apply {
+                for (id in list) {
+                    put(org.json.JSONObject().put("id", id))
+                }
+            }.toString()
+        }
+
+        val userId = getUserId()
+        if (userId.isEmpty()) {
+            Timber.w("User not logged in")
+            return emptyList()
+        }
+
+        val domainRules = try {
+            domainAssocRepository.getRules(userId)
+        } catch (e: Exception) {
+            emptyList()
+        }
+
+        val ciphers = cipherRepository.findByRpId(userId, rpId)
+        Timber.d("populatePasskeyEntries found ${ciphers.size} ciphers for rpId=$rpId")
+        val entries = mutableListOf<CredentialEntry>()
+
+        for (cipher in ciphers) {
+            val decrypted = vaultSession.decryptCipher(cipher) ?: continue
+            val passkey = decrypted.passkey ?: continue
+            Timber.d("populatePasskeyEntries checking credentialId=${passkey.credentialId} rpId=${passkey.rpId}")
+
+            // rpId 匹配
+            if (!PasskeyMatcher.isRpIdMatch(
+                    passkeyRpId = passkey.rpId,
+                    requestedRpId = rpId,
+                    callingPackage = callingPackage,
+                    domainRules = domainRules
+                )
+            ) {
+                Timber.d("populatePasskeyEntries rpId mismatch, skip credentialId=${passkey.credentialId}")
+                continue
+            }
+
+            // allowCredentials 过滤
+            if (!PasskeyMatcher.isCredentialAllowed(
+                    credentialId = passkey.credentialId,
+                    allowCredentials = allowCredentialsStr
+                )
+            ) {
+                Timber.d("populatePasskeyEntries credential not allowed, skip credentialId=${passkey.credentialId}")
+                continue
+            }
+
+            val intent = Intent(
+                applicationContext,
+                PasskeyGetActivity::class.java
+            ).apply {
+                putExtra(EXTRA_CREDENTIAL_ID, passkey.credentialId)
+            }
+
+            val pendingIntent = PendingIntent.getActivity(
+                applicationContext,
+                passkey.credentialId.hashCode(),
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
+            )
+
+            val entry = PublicKeyCredentialEntry(
+                applicationContext,
+                passkey.userName ?: passkey.rpId,
+                pendingIntent,
+                option,
+                passkey.userDisplayName ?: passkey.userName ?: passkey.rpId
+            )
+
+            entries.add(entry)
+            Timber.d("populatePasskeyEntries added entry for credentialId=${passkey.credentialId}")
+        }
+
+        Timber.d("populatePasskeyEntries returning ${entries.size} entries")
+        return entries
+    }
+
+    override fun onClearCredentialStateRequest(
+        request: androidx.credentials.provider.ProviderClearCredentialStateRequest,
+        cancellationSignal: CancellationSignal,
+        callback: OutcomeReceiver<Void?, ClearCredentialException>
+    ) {
+        callback.onResult(null)
+    }
+
+    private fun getUserId(): String {
+        return securePrefs.getString(SecurePrefs.KEY_USER_ID) ?: ""
+    }
+}

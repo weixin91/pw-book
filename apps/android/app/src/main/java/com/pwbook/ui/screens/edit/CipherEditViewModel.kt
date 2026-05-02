@@ -60,8 +60,13 @@ class CipherEditViewModel @Inject constructor(
                         hasPasskey = decrypted.passkey != null,
                         passkeyRpId = decrypted.passkey?.rpId,
                         passkeyCreatedAt = decrypted.passkey?.createdAt?.let {
-                            java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
-                                .format(java.util.Date(it))
+                            try {
+                                val instant = java.time.Instant.parse(it)
+                                java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
+                                    .format(java.util.Date(instant.toEpochMilli()))
+                            } catch (e: Exception) {
+                                it
+                            }
                         } ?: ""
                     )
                 } else {

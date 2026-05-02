@@ -8,6 +8,7 @@ data class Cipher(
     val favorite: Boolean,
     val reprompt: RepromptType,
     val login: LoginData?,
+    val passkey: PasskeyData?,
     val createdAt: Long,
     val modifiedAt: Long
 )
