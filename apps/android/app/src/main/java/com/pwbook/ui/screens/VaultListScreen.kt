@@ -15,7 +15,9 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
@@ -41,7 +43,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.pwbook.R
 import com.pwbook.domain.DecryptedCipher
-import com.pwbook.ui.components.TotpDisplay
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -53,6 +54,7 @@ fun VaultListScreen(
     onNavigateToEdit: (String?) -> Unit,
     onNavigateToGenerator: () -> Unit,
     onNavigateToSettings: () -> Unit,
+    onNavigateToTotp: () -> Unit,
     onLock: () -> Unit,
     onCipherSelected: ((String) -> Unit)? = null,
     onCancel: (() -> Unit)? = null
@@ -93,7 +95,10 @@ fun VaultListScreen(
                         }
                     } else {
                         IconButton(onClick = onNavigateToGenerator) {
-                            Text("🔐")
+                            Icon(Icons.Default.Security, contentDescription = "密码生成器")
+                        }
+                        IconButton(onClick = onNavigateToTotp) {
+                            Icon(Icons.Default.Timer, contentDescription = "TOTP验证码")
                         }
                         IconButton(onClick = onNavigateToSettings) {
                             Icon(Icons.Default.Settings, contentDescription = stringResource(R.string.settings))
@@ -231,10 +236,18 @@ private fun CipherListItem(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = if (cipher.passkey != null) "${cipher.name} 🔐" else cipher.name,
+                    text = cipher.name,
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.weight(1f)
                 )
+                if (cipher.passkey != null) {
+                    Icon(
+                        Icons.Default.Security,
+                        contentDescription = "Passkey",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(start = 4.dp)
+                    )
+                }
                 if (isMatch) {
                     Text(
                         text = "匹配",
@@ -250,9 +263,6 @@ private fun CipherListItem(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-            }
-            if (!cipher.totp.isNullOrBlank()) {
-                TotpDisplay(secret = cipher.totp)
             }
             Text(
                 text = "修改于 ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date(cipher.modifiedAt))}",

@@ -19,6 +19,7 @@ import com.pwbook.ui.screens.VaultListViewModel
 import com.pwbook.ui.screens.edit.CipherEditScreen
 import com.pwbook.ui.generator.PasswordGeneratorScreen
 import com.pwbook.ui.screens.scan.TotpScanScreen
+import com.pwbook.ui.screens.totp.TotpListScreen
 import com.pwbook.ui.screens.settings.DomainAssocScreen
 import com.pwbook.ui.settings.SettingsScreen
 import com.pwbook.ui.unlock.UnlockScreen
@@ -107,6 +108,9 @@ fun AppNavHost(
                 onNavigateToSettings = {
                     navController.navigate(NavRoutes.Settings.route)
                 },
+                onNavigateToTotp = {
+                    navController.navigate(NavRoutes.TotpList.route)
+                },
                 onLock = {
                     viewModel.lock()
                     navController.navigate(NavRoutes.Unlock.route) {
@@ -173,6 +177,11 @@ fun AppNavHost(
                         ?.set("totp_uri", uri)
                     navController.popBackStack()
                 }
+            )
+        }
+        composable(NavRoutes.TotpList.route) {
+            TotpListScreen(
+                onBack = { navController.popBackStack() }
             )
         }
     }

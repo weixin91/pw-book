@@ -13,4 +13,5 @@ sealed class NavRoutes(val route: String) {
     data object PasswordGenerator : NavRoutes("password_generator")
     data object DomainAssoc : NavRoutes("domain_assoc")
     data object TotpScan : NavRoutes("totp_scan")
+    data object TotpList : NavRoutes("totp_list")
 }
