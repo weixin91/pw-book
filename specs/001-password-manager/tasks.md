@@ -240,10 +240,10 @@ description: "密码管理应用功能实现的任务列表"
 - [X] T104 [P] 实现剪贴板安全管理于 `apps/android/app/domain/usecase/CopyPasswordUseCase.kt`（10 秒自动清空、计时器重置，遵循 FR-017/FR-023）
 - [X] T065 [P] 实现 TOTP 生成和显示于 `apps/android/app/crypto/TotpGenerator.kt` 和 `apps/android/app/ui/components/TotpDisplay.kt`（RFC 6238、环形倒计时进度条）
 - [X] T105 [P] 实现 ZXing 二维码扫描于 `apps/android/app/ui/screens/scan/TotpScanScreen.kt`（解析 otpauth:// URI）
-- [X] T066 实现 `CredentialProviderService` 于 `apps/android/app/service/credential/PwBookCredentialProviderService.kt`（Passkey，遵循 FR-008）
-- [X] T106 [P] 实现 Passkey 创建处理于 `apps/android/app/service/credential/PasskeyCreateHandler.kt`（两阶段流程、保存到现有凭据/新建、EC P-256 密钥对生成）
-- [X] T107 [P] 实现 Passkey 认证处理于 `apps/android/app/service/credential/PasskeyGetHandler.kt`（查询阶段返回候选、选择阶段签名 WebAuthn 断言）
-- [X] T108 实现 Passkey 创建/认证 Activity 于 `apps/android/app/service/credential/PasskeyCreateActivity.kt` 和 `PasskeyGetActivity.kt`（PendingIntent 处理、生物识别认证、返回 WebAuthn 响应）
+- [ ] T066 实现 `CredentialProviderService` 于 `apps/android/app/service/credential/PwBookCredentialProviderService.kt`（Passkey，遵循 FR-008）
+- [ ] T106 [P] 实现 Passkey 创建处理于 `apps/android/app/service/credential/PasskeyCreateHandler.kt`（两阶段流程、保存到现有凭据/新建、EC P-256 密钥对生成）
+- [ ] T107 [P] 实现 Passkey 认证处理于 `apps/android/app/service/credential/PasskeyGetHandler.kt`（查询阶段返回候选、选择阶段签名 WebAuthn 断言）
+- [ ] T108 实现 Passkey 创建/认证 Activity 于 `apps/android/app/service/credential/PasskeyCreateActivity.kt` 和 `PasskeyGetActivity.kt`（PendingIntent 处理、生物识别认证、返回 WebAuthn 响应）
 - [X] T059 实现域名关联管理 UI 于 `apps/android/app/ui/screens/settings/DomainAssocScreen.kt`
 
 ### Phase 4: 打磨

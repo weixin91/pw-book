@@ -7,8 +7,6 @@ import com.pwbook.data.datasource.BiometricUnlockManager
 import com.pwbook.data.datasource.KeystoreManager
 import com.pwbook.data.datasource.SecurePrefs
 import com.pwbook.domain.VaultSession
-import com.pwbook.service.credential.PasskeyCreateHandler
-import com.pwbook.service.credential.PasskeyGetHandler
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn

@@ -112,10 +112,6 @@ dependencies {
     // Biometric
     implementation("androidx.biometric:biometric:1.1.0")
 
-    // Credentials (Passkey)
-    implementation("androidx.credentials:credentials:1.3.0")
-    implementation("androidx.credentials:credentials-play-services-auth:1.3.0")
-
     // WorkManager
     implementation("androidx.work:work-runtime-ktx:2.10.0")
     implementation("androidx.hilt:hilt-work:1.2.0")
