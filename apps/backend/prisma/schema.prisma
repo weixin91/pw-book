@@ -36,14 +36,15 @@ model User {
 }
 
 model Cipher {
-  id         String   @id @default(uuid())
+  id         String    @id @default(uuid())
   userId     String
-  type       Int      // 1=LOGIN, 2=CARD, 3=IDENTITY, 4=SECURE_NOTE, 5=PASSKEY
-  data       String   // 加密后的 JSON Base64
-  favorite   Boolean  @default(false)
-  reprompt   Int      @default(0) // 0=NONE, 1=PASSWORD
-  createdAt  DateTime @default(now())
-  modifiedAt DateTime @updatedAt
+  type       Int       // 1=LOGIN, 2=CARD, 3=IDENTITY, 4=SECURE_NOTE, 5=PASSKEY
+  data       String    // 加密后的 JSON Base64
+  favorite   Boolean   @default(false)
+  reprompt   Int       @default(0) // 0=NONE, 1=PASSWORD
+  createdAt  DateTime  @default(now())
+  modifiedAt DateTime  @updatedAt
+  deletedAt  DateTime? // 软删除标记，null 表示未删除
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

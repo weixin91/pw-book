@@ -70,19 +70,27 @@ export class SyncClient {
   }
 
   private async applySyncData(data: SyncResponse): Promise<void> {
-    if (data.ciphers && data.ciphers.length > 0) {
-      const localCiphers = await StorageService.getCiphers();
-      const localMap = new Map(localCiphers.map((c) => [c.id, c]));
+    const localCiphers = await StorageService.getCiphers();
+    const localMap = new Map(localCiphers.map((c) => [c.id, c]));
 
+    // 处理服务器下发的删除
+    if (data.deletedCipherIds && data.deletedCipherIds.length > 0) {
+      for (const id of data.deletedCipherIds) {
+        localMap.delete(id);
+      }
+    }
+
+    // 处理新增/更新
+    if (data.ciphers && data.ciphers.length > 0) {
       for (const serverCipher of data.ciphers) {
         const local = localMap.get(serverCipher.id);
         if (!local || new Date(serverCipher.modifiedAt) >= new Date(local.modifiedAt)) {
           localMap.set(serverCipher.id, serverCipher);
         }
       }
-
-      await StorageService.setCiphers(Array.from(localMap.values()));
     }
+
+    await StorageService.setCiphers(Array.from(localMap.values()));
 
     // 域名关联规则采用服务端权威：每次拉取都覆盖本地缓存
     if (Array.isArray(data.domainAssociations)) {

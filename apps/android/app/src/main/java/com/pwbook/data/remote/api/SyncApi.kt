@@ -25,6 +25,7 @@ class SyncApi @Inject constructor(private val client: HttpClient) {
 data class SyncResponse(
     val profile: ProfileDto? = null,
     val ciphers: List<CipherDto> = emptyList(),
+    val deletedCipherIds: List<String> = emptyList(),
     val domainAssociations: List<DomainAssocDto> = emptyList(),
     val syncToken: String? = null,
     val checksum: String? = null

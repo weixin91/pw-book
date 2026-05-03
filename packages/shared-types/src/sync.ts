@@ -14,6 +14,7 @@ export interface SyncResponse {
     securityStamp: string;
   };
   ciphers: Cipher[];
+  deletedCipherIds?: string[];
   domainAssociations: DomainAssociation[];
   syncToken: string;
 }

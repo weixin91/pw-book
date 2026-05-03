@@ -4,6 +4,7 @@ import { z } from "zod";
 import { authenticate } from "../auth/jwt.js";
 import { ApiError } from "../errors/handler.js";
 import { calculateSyncChecksum } from "./checksum.js";
+import { broadcastSyncRequired } from "../websocket/server.js";
 
 const prisma = new PrismaClient();
 
@@ -58,6 +59,10 @@ export async function syncRoutes(app: FastifyInstance): Promise<void> {
       orderBy: { modifiedAt: "asc" },
     });
 
+    const deletedCipherIds = since
+      ? ciphers.filter((c) => c.deletedAt !== null).map((c) => c.id)
+      : [];
+
     const domainAssociations = await prisma.domainAssociation.findMany({
       where: { userId },
     });
@@ -84,7 +89,8 @@ export async function syncRoutes(app: FastifyInstance): Promise<void> {
 
     return reply.send({
       profile: user,
-      ciphers,
+      ciphers: ciphers.filter((c) => c.deletedAt === null),
+      deletedCipherIds,
       domainAssociations: domainAssociations.map((da) => ({
         ...da,
         domains: JSON.parse(da.domains),
@@ -111,7 +117,10 @@ export async function syncRoutes(app: FastifyInstance): Promise<void> {
 
         if (change.type === "DELETE") {
           if (existing) {
-            await prisma.cipher.delete({ where: { id: change.cipher.id } });
+            await prisma.cipher.update({
+              where: { id: change.cipher.id },
+              data: { deletedAt: new Date(), modifiedAt: new Date() },
+            });
           }
           accepted.push(change.id);
           continue;
@@ -152,8 +161,11 @@ export async function syncRoutes(app: FastifyInstance): Promise<void> {
 
     const newSyncToken = new Date().toISOString();
     const newChecksum = calculateSyncChecksum(
-      await prisma.cipher.findMany({ where: { userId } })
+      await prisma.cipher.findMany({ where: { userId, deletedAt: null } })
     );
+
+    broadcastSyncRequired(userId, request.user!.deviceId || undefined);
+
     return reply.send({ accepted, rejected, conflicts, newSyncToken, checksum: newChecksum });
   });
 }

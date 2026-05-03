@@ -91,6 +91,11 @@ class SyncManager @Inject constructor(
         val lastSyncToken = settingsRepository.getString("last_sync_token")
         val response = syncApi.sync(lastSyncToken)
 
+        // 处理服务器下发的删除
+        response.deletedCipherIds.forEach { id ->
+            cipherRepository.deleteCipher(id)
+        }
+
         response.ciphers.forEach { dto ->
             val local = cipherRepository.getCipher(dto.id)
             if (local == null) {
