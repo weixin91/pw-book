@@ -3,36 +3,32 @@ package com.pwbook.service.credential
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.compose.setContent
-import androidx.fragment.app.FragmentActivity
-import androidx.biometric.BiometricManager
-import androidx.biometric.BiometricPrompt
-import androidx.core.content.ContextCompat
 import androidx.credentials.CreatePublicKeyCredentialRequest
 import androidx.credentials.provider.PendingIntentHandler
+import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import com.pwbook.crypto.PasskeyCrypto
 import com.pwbook.data.datasource.SecurePrefs
 import com.pwbook.data.repository.CipherRepository
 import com.pwbook.domain.VaultSession
+import com.pwbook.domain.VaultUnlockHelper
 import com.pwbook.domain.model.PasskeyData
 import com.pwbook.ui.theme.PwBookTheme
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 import java.security.SecureRandom
 import java.security.interfaces.ECPublicKey
 import java.time.Instant
 import javax.inject.Inject
-import kotlin.coroutines.resume
 
 /**
  * Passkey 创建 Activity。
  *
  * 从 Credential Provider PendingIntent 启动，处理 WebAuthn create 请求。
- * 流程：生物识别认证 → 展示凭据选择界面 → 生成并保存 Passkey → 返回响应。
+ * 流程：解锁保险库（如需） → 展示凭据选择界面 → 生成并保存 Passkey → 返回响应。
  */
 @AndroidEntryPoint
 class PasskeyCreateActivity : FragmentActivity() {
@@ -41,6 +37,7 @@ class PasskeyCreateActivity : FragmentActivity() {
     @Inject lateinit var cipherRepository: CipherRepository
     @Inject lateinit var vaultSession: VaultSession
     @Inject lateinit var securePrefs: SecurePrefs
+    @Inject lateinit var vaultUnlockHelper: VaultUnlockHelper
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -63,10 +60,13 @@ class PasskeyCreateActivity : FragmentActivity() {
         }
 
         lifecycleScope.launch {
-            val biometricSuccess = authenticateWithBiometric()
-            if (!biometricSuccess) {
-                finishWithCancel("生物识别验证失败")
-                return@launch
+            // 确保保险库已解锁（同时完成身份验证）
+            if (!vaultSession.isUnlocked.value) {
+                val unlocked = vaultUnlockHelper.unlock(this@PasskeyCreateActivity)
+                if (!unlocked) {
+                    finishWithCancel("保险库解锁失败")
+                    return@launch
+                }
             }
 
             // IO 线程加载并解密 LOGIN 凭据
@@ -196,55 +196,6 @@ class PasskeyCreateActivity : FragmentActivity() {
         )
         Timber.i("Passkey created for rpId=$rpId, credentialId=$credentialId")
         return responseJson
-    }
-
-    private suspend fun authenticateWithBiometric(): Boolean {
-        val biometricManager = BiometricManager.from(this)
-        val canAuth = biometricManager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG)
-        if (canAuth != BiometricManager.BIOMETRIC_SUCCESS) {
-            // 设备不支持生物识别，跳过验证继续（生产环境可改为拒绝）
-            Timber.w("Biometric not available, skipping: $canAuth")
-            return true
-        }
-
-        return suspendCancellableCoroutine { continuation ->
-            val executor = ContextCompat.getMainExecutor(this)
-            val prompt = BiometricPrompt(
-                this,
-                executor,
-                object : BiometricPrompt.AuthenticationCallback() {
-                    override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
-                        continuation.resume(true)
-                    }
-                    override fun onAuthenticationFailed() {
-                        continuation.resume(false)
-                    }
-                    override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
-                        if (errorCode == BiometricPrompt.ERROR_USER_CANCELED ||
-                            errorCode == BiometricPrompt.ERROR_NEGATIVE_BUTTON
-                        ) {
-                            continuation.resume(false)
-                        } else {
-                            Timber.e("Biometric error: $errString")
-                            continuation.resume(false)
-                        }
-                    }
-                }
-            )
-
-            val promptInfo = BiometricPrompt.PromptInfo.Builder()
-                .setTitle("Password Book")
-                .setSubtitle("使用生物识别创建通行密钥")
-                .setNegativeButtonText("取消")
-                .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
-                .build()
-
-            prompt.authenticate(promptInfo)
-
-            continuation.invokeOnCancellation {
-                prompt.cancelAuthentication()
-            }
-        }
     }
 
     private fun finishWithCancel(reason: String) {

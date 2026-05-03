@@ -61,13 +61,13 @@
             android:name=".service.credential.PasskeyCreateActivity"
             android:exported="false"
             android:excludeFromRecents="true"
-            android:theme="@style/Theme.Transparent" />
+            android:theme="@style/Theme.PwBook" />
 
         <activity
             android:name=".service.credential.PasskeyGetActivity"
             android:exported="false"
             android:excludeFromRecents="true"
-            android:theme="@style/Theme.Transparent" />
+            android:theme="@style/Theme.PwBook" />
 
         <activity
             android:name=".service.credential.CredentialProviderUnlockActivity"

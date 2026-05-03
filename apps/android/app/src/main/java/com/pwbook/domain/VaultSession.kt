@@ -17,6 +17,7 @@ class VaultSession @Inject constructor(
 ) {
     private var userKey: ByteArray? = null
     private var lastActiveTime: Long = 0
+    private var lastUserVerificationTime: Long = 0
 
     private val _isUnlocked = MutableStateFlow(false)
     val isUnlocked: StateFlow<Boolean> = _isUnlocked
@@ -53,6 +54,21 @@ class VaultSession @Inject constructor(
     }
 
     fun getUserKey(): ByteArray? = userKey
+
+    /**
+     * 记录用户验证（生物识别或主密码）时间戳，用于短时免二次验证。
+     */
+    fun recordUserVerification() {
+        lastUserVerificationTime = System.currentTimeMillis()
+    }
+
+    /**
+     * 检查用户在指定时间阈值内是否已验证过。
+     */
+    fun isUserVerifiedRecently(thresholdMs: Long): Boolean {
+        if (lastUserVerificationTime == 0L) return false
+        return System.currentTimeMillis() - lastUserVerificationTime <= thresholdMs
+    }
 
     fun decryptCipher(entity: CipherEntity): DecryptedCipher? {
         val key = userKey ?: return null

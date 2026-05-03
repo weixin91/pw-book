@@ -36,16 +36,21 @@ import androidx.compose.ui.unit.dp
 import com.pwbook.domain.DecryptedCipher
 
 /**
- * Passkey 创建时选择保存位置的界面。
+ * Passkey 凭据选择界面。
  *
  * 默认展示与当前 rpId 匹配的凭据（置顶）及其他 LOGIN 凭据，支持搜索过滤。
- * 已有 passkey 的凭据会标注"将替换现有通行密钥"。
+ *
+ * @param showNewButton 是否显示「新建凭据」按钮，创建场景为 true，登录场景为 false
+ * @param showPasskeyWarning 是否标注已有 passkey 的警告，创建场景为 true，登录场景为 false
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PasskeyCreateSelectScreen(
     rpId: String,
     ciphers: List<DecryptedCipher>,
+    title: String = "选择保存位置",
+    showNewButton: Boolean = true,
+    showPasskeyWarning: Boolean = true,
     onSelect: (cipherId: String?) -> Unit,
     onCancel: () -> Unit
 ) {
@@ -71,7 +76,7 @@ fun PasskeyCreateSelectScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("选择保存位置") },
+                title = { Text(title) },
                 navigationIcon = {
                     IconButton(onClick = onCancel) {
                         Icon(Icons.Default.Close, contentDescription = "取消")
@@ -80,11 +85,13 @@ fun PasskeyCreateSelectScreen(
             )
         },
         floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = { onSelect(null) },
-                icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                text = { Text("新建凭据") }
-            )
+            if (showNewButton) {
+                ExtendedFloatingActionButton(
+                    onClick = { onSelect(null) },
+                    icon = { Icon(Icons.Default.Add, contentDescription = null) },
+                    text = { Text("新建凭据") }
+                )
+            }
         }
     ) { padding ->
         Column(
@@ -119,6 +126,7 @@ fun PasskeyCreateSelectScreen(
                     items(matched, key = { it.id }) { cipher ->
                         CipherSelectItem(
                             cipher = cipher,
+                            showPasskeyWarning = showPasskeyWarning,
                             onClick = { onSelect(cipher.id) }
                         )
                     }
@@ -135,6 +143,7 @@ fun PasskeyCreateSelectScreen(
                     items(others, key = { it.id }) { cipher ->
                         CipherSelectItem(
                             cipher = cipher,
+                            showPasskeyWarning = showPasskeyWarning,
                             onClick = { onSelect(cipher.id) }
                         )
                     }
@@ -143,6 +152,7 @@ fun PasskeyCreateSelectScreen(
                     items(filtered, key = { it.id }) { cipher ->
                         CipherSelectItem(
                             cipher = cipher,
+                            showPasskeyWarning = showPasskeyWarning,
                             onClick = { onSelect(cipher.id) }
                         )
                     }
@@ -160,6 +170,7 @@ private fun isCipherMatchRpId(cipher: DecryptedCipher, rpId: String): Boolean {
 @Composable
 private fun CipherSelectItem(
     cipher: DecryptedCipher,
+    showPasskeyWarning: Boolean = true,
     onClick: () -> Unit
 ) {
     Card(
@@ -178,7 +189,7 @@ private fun CipherSelectItem(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            if (cipher.passkey != null) {
+            if (showPasskeyWarning && cipher.passkey != null) {
                 Text(
                     text = "该凭据已有通行密钥，将替换",
                     style = MaterialTheme.typography.bodySmall,

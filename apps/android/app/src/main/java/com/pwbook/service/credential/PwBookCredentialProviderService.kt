@@ -104,30 +104,34 @@ class PwBookCredentialProviderService : CredentialProviderService() {
         callback: OutcomeReceiver<BeginGetCredentialResponse, GetCredentialException>
     ) {
         Timber.d("onBeginGetCredentialRequest caller=${request.callingAppInfo?.packageName} options=${request.beginGetCredentialOptions.size}")
-        // 检查保险库是否解锁
+
         if (!vaultSession.isUnlocked.value) {
-            val unlockIntent = Intent(
-                applicationContext,
-                CredentialProviderUnlockActivity::class.java
-            ).apply {
-                flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK
-            }
-            val unlockPendingIntent = PendingIntent.getActivity(
-                applicationContext,
-                0,
-                unlockIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
-            )
-            callback.onResult(
-                BeginGetCredentialResponse(
-                    authenticationActions = listOf(
-                        AuthenticationAction(
-                            "解锁保险库以继续",
-                            unlockPendingIntent
+            // 未解锁时返回代理 entry，让用户进入 PasskeyGetActivity 完成解锁和认证
+            val entries = mutableListOf<CredentialEntry>()
+            for (option in request.beginGetCredentialOptions) {
+                when (option) {
+                    is BeginGetPublicKeyCredentialOption -> {
+                        val intent = Intent(applicationContext, PasskeyGetActivity::class.java)
+                        val pendingIntent = PendingIntent.getActivity(
+                            applicationContext,
+                            option.requestJson.hashCode(),
+                            intent,
+                            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
                         )
-                    )
-                )
-            )
+                        val entry = PublicKeyCredentialEntry(
+                            applicationContext,
+                            "解锁 Password Book",
+                            pendingIntent,
+                            option,
+                            null
+                        )
+                        entries.add(entry)
+                    }
+                    else -> { /* 忽略其他类型 */ }
+                }
+            }
+            Timber.d("Returning ${entries.size} proxy entries (vault locked)")
+            callback.onResult(BeginGetCredentialResponse(entries))
             return
         }
 

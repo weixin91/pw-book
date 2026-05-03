@@ -43,6 +43,7 @@ class CredentialProviderUnlockActivity : FragmentActivity() {
                 )
                 result.fold(
                     onSuccess = {
+                        vaultSession.recordUserVerification()
                         setResult(RESULT_OK)
                         finish()
                     },
@@ -77,6 +78,7 @@ class CredentialProviderUnlockActivity : FragmentActivity() {
                         result.fold(
                             onSuccess = { userKey ->
                                 vaultSession.unlock(userKey)
+                                vaultSession.recordUserVerification()
                                 setResult(RESULT_OK)
                                 finish()
                             },

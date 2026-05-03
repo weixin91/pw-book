@@ -2,28 +2,35 @@ package com.pwbook.service.credential
 
 import android.content.Intent
 import android.os.Bundle
-import androidx.fragment.app.FragmentActivity
+import androidx.activity.compose.setContent
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
 import androidx.credentials.GetPublicKeyCredentialOption
 import androidx.credentials.PublicKeyCredential
 import androidx.credentials.provider.PendingIntentHandler
+import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import com.pwbook.crypto.PasskeyCrypto
 import com.pwbook.crypto.VaultEncryption
+import com.pwbook.data.datasource.BiometricUnlockManager
 import com.pwbook.data.datasource.SecurePrefs
 import com.pwbook.data.repository.CipherRepository
 import com.pwbook.domain.CipherDataJson
+import com.pwbook.domain.DecryptedCipher
 import com.pwbook.domain.LoginDataJson
 import com.pwbook.domain.LoginUriJson
 import com.pwbook.domain.PasskeyDataJson
 import com.pwbook.domain.VaultSession
+import com.pwbook.domain.VaultUnlockHelper
 import com.pwbook.sync.PendingChangesQueue
 import com.pwbook.sync.SyncManager
+import com.pwbook.ui.theme.PwBookTheme
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import timber.log.Timber
@@ -35,6 +42,7 @@ import kotlin.coroutines.resume
  * Passkey 认证 Activity。
  *
  * 从 Credential Provider PendingIntent 启动，处理 WebAuthn get/assertion 请求。
+ * 支持保险库未解锁时自动解锁，以及多 passkey 选择。
  */
 @AndroidEntryPoint
 class PasskeyGetActivity : FragmentActivity() {
@@ -46,9 +54,11 @@ class PasskeyGetActivity : FragmentActivity() {
     @Inject lateinit var syncManager: SyncManager
     @Inject lateinit var securePrefs: SecurePrefs
     @Inject lateinit var json: Json
+    @Inject lateinit var vaultUnlockHelper: VaultUnlockHelper
 
     companion object {
         const val EXTRA_CREDENTIAL_ID = "credential_id"
+        private const val BIOMETRIC_GRACE_PERIOD_MS = 60_000L
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -59,30 +69,107 @@ class PasskeyGetActivity : FragmentActivity() {
             ?: run { finishWithCancel("无效请求"); return }
 
         val credentialId = intent.getStringExtra(EXTRA_CREDENTIAL_ID)
-            ?: run { finishWithCancel("缺少 credentialId"); return }
 
         lifecycleScope.launch {
-            val biometricSuccess = authenticateWithBiometric()
-            if (!biometricSuccess) {
-                finishWithCancel("生物识别验证失败")
+            // 1. 确保保险库已解锁
+            if (!vaultSession.isUnlocked.value) {
+                val unlocked = vaultUnlockHelper.unlock(this@PasskeyGetActivity)
+                if (!unlocked) {
+                    finishWithCancel("保险库解锁失败")
+                    return@launch
+                }
+            }
+
+            // 2. 如果指定了 credentialId，直接使用
+            if (credentialId != null) {
+                authenticateAndReturn(credentialId, option)
                 return@launch
             }
 
-            try {
-                val response = authenticateWithPasskey(credentialId, option)
-
-                val result = Intent()
-                val publicKeyCredential = PublicKeyCredential(response)
-                PendingIntentHandler.setGetCredentialResponse(
-                    result,
-                    androidx.credentials.GetCredentialResponse(publicKeyCredential)
-                )
-                setResult(RESULT_OK, result)
+            // 3. 没有指定 credentialId，加载匹配的 passkey
+            val requestJson = option.requestJson
+            val rpId = try {
+                org.json.JSONObject(requestJson).optString("rpId", "")
             } catch (e: Exception) {
-                Timber.e(e, "Passkey get failed")
-                setResult(RESULT_CANCELED)
+                finishWithCancel("无法解析请求")
+                return@launch
             }
-            finish()
+
+            val loginCiphers = withContext(Dispatchers.IO) {
+                val userId = securePrefs.getString(SecurePrefs.KEY_USER_ID) ?: ""
+                cipherRepository.getAllLoginCiphers(userId)
+                    .mapNotNull { vaultSession.decryptCipher(it) }
+                    .filter { it.passkey != null && isCipherMatchRpId(it, rpId) }
+            }
+
+            if (loginCiphers.isEmpty()) {
+                finishWithCancel("未找到匹配的通行密钥")
+                return@launch
+            }
+
+            if (loginCiphers.size == 1) {
+                authenticateAndReturn(loginCiphers.first().passkey!!.credentialId, option)
+            } else {
+                showPasskeySelection(loginCiphers, rpId, option)
+            }
+        }
+    }
+
+    private suspend fun authenticateAndReturn(
+        credentialId: String,
+        option: GetPublicKeyCredentialOption
+    ) {
+        val biometricSuccess = authenticateWithBiometric()
+        if (!biometricSuccess) {
+            finishWithCancel("生物识别验证失败")
+            return
+        }
+
+        try {
+            val response = authenticateWithPasskey(credentialId, option)
+            val result = Intent()
+            val publicKeyCredential = PublicKeyCredential(response)
+            PendingIntentHandler.setGetCredentialResponse(
+                result,
+                androidx.credentials.GetCredentialResponse(publicKeyCredential)
+            )
+            setResult(RESULT_OK, result)
+        } catch (e: Exception) {
+            Timber.e(e, "Passkey get failed")
+            setResult(RESULT_CANCELED)
+        }
+        finish()
+    }
+
+    private fun showPasskeySelection(
+        ciphers: List<DecryptedCipher>,
+        rpId: String,
+        option: GetPublicKeyCredentialOption
+    ) {
+        setContent {
+            PwBookTheme {
+                PasskeyCreateSelectScreen(
+                    rpId = rpId,
+                    ciphers = ciphers,
+                    title = "选择通行密钥",
+                    showNewButton = false,
+                    showPasskeyWarning = false,
+                    onSelect = { cipherId ->
+                        val selected = ciphers.find { it.id == cipherId }
+                        val selectedCredentialId = selected?.passkey?.credentialId
+                        if (selectedCredentialId != null) {
+                            lifecycleScope.launch {
+                                authenticateAndReturn(selectedCredentialId, option)
+                            }
+                        } else {
+                            finishWithCancel("无效选择")
+                        }
+                    },
+                    onCancel = {
+                        finishWithCancel("用户取消选择")
+                    }
+                )
+            }
         }
     }
 
@@ -181,6 +268,12 @@ class PasskeyGetActivity : FragmentActivity() {
     }
 
     private suspend fun authenticateWithBiometric(): Boolean {
+        // 短时间内已通过生物识别/密码解锁，跳过二次验证
+        if (vaultSession.isUserVerifiedRecently(BIOMETRIC_GRACE_PERIOD_MS)) {
+            Timber.d("Skipping biometric: user verified recently")
+            return true
+        }
+
         val biometricManager = BiometricManager.from(this)
         val canAuth = biometricManager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG)
         if (canAuth != BiometricManager.BIOMETRIC_SUCCESS) {
@@ -232,5 +325,10 @@ class PasskeyGetActivity : FragmentActivity() {
         Timber.w("Passkey get cancelled: $reason")
         setResult(RESULT_CANCELED)
         finish()
+    }
+
+    private fun isCipherMatchRpId(cipher: DecryptedCipher, rpId: String): Boolean {
+        if (cipher.passkey?.rpId?.equals(rpId, ignoreCase = true) == true) return true
+        return cipher.uris.any { uri -> uri.contains(rpId, ignoreCase = true) }
     }
 }

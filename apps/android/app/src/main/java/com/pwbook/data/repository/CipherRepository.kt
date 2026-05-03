@@ -43,9 +43,10 @@ class CipherRepository @Inject constructor(
 
     suspend fun findByRpId(userId: String, rpId: String): List<CipherEntity> {
         val ciphers = cipherDao.getAllByType(userId, 1)
+        val rpIdLower = rpId.lowercase()
         return ciphers.filter { entity ->
             val decrypted = vaultSession.decryptCipher(entity)
-            decrypted?.passkey?.rpId == rpId
+            decrypted?.passkey?.rpId?.lowercase() == rpIdLower
         }
     }
 
