@@ -254,10 +254,10 @@ class PwBookCredentialProviderService : CredentialProviderService() {
 
             val entry = PublicKeyCredentialEntry(
                 applicationContext,
-                passkey.userName ?: passkey.rpId,
+                decrypted.name,
                 pendingIntent,
                 option,
-                passkey.userDisplayName ?: passkey.userName ?: passkey.rpId
+                passkey.userName ?: decrypted.username ?: passkey.rpId
             )
 
             entries.add(entry)
