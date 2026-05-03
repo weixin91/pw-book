@@ -13,7 +13,6 @@ import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import com.pwbook.crypto.PasskeyCrypto
 import com.pwbook.crypto.VaultEncryption
-import com.pwbook.data.datasource.BiometricUnlockManager
 import com.pwbook.data.datasource.SecurePrefs
 import com.pwbook.data.repository.CipherRepository
 import com.pwbook.domain.CipherDataJson
@@ -69,6 +68,7 @@ class PasskeyGetActivity : FragmentActivity() {
             ?: run { finishWithCancel("无效请求"); return }
 
         val credentialId = intent.getStringExtra(EXTRA_CREDENTIAL_ID)
+        val origin = getRequest?.callingAppInfo?.resolveAppOrigin()
 
         lifecycleScope.launch {
             // 1. 确保保险库已解锁
@@ -82,7 +82,7 @@ class PasskeyGetActivity : FragmentActivity() {
 
             // 2. 如果指定了 credentialId，直接使用
             if (credentialId != null) {
-                authenticateAndReturn(credentialId, option)
+                authenticateAndReturn(credentialId, option, origin)
                 return@launch
             }
 
@@ -108,16 +108,17 @@ class PasskeyGetActivity : FragmentActivity() {
             }
 
             if (loginCiphers.size == 1) {
-                authenticateAndReturn(loginCiphers.first().passkey!!.credentialId, option)
+                authenticateAndReturn(loginCiphers.first().passkey!!.credentialId, option, origin)
             } else {
-                showPasskeySelection(loginCiphers, rpId, option)
+                showPasskeySelection(loginCiphers, rpId, option, origin)
             }
         }
     }
 
     private suspend fun authenticateAndReturn(
         credentialId: String,
-        option: GetPublicKeyCredentialOption
+        option: GetPublicKeyCredentialOption,
+        origin: String?
     ) {
         val biometricSuccess = authenticateWithBiometric()
         if (!biometricSuccess) {
@@ -126,7 +127,7 @@ class PasskeyGetActivity : FragmentActivity() {
         }
 
         try {
-            val response = authenticateWithPasskey(credentialId, option)
+            val response = authenticateWithPasskey(credentialId, option, origin)
             val result = Intent()
             val publicKeyCredential = PublicKeyCredential(response)
             PendingIntentHandler.setGetCredentialResponse(
@@ -144,7 +145,8 @@ class PasskeyGetActivity : FragmentActivity() {
     private fun showPasskeySelection(
         ciphers: List<DecryptedCipher>,
         rpId: String,
-        option: GetPublicKeyCredentialOption
+        option: GetPublicKeyCredentialOption,
+        origin: String?
     ) {
         setContent {
             PwBookTheme {
@@ -159,7 +161,7 @@ class PasskeyGetActivity : FragmentActivity() {
                         val selectedCredentialId = selected?.passkey?.credentialId
                         if (selectedCredentialId != null) {
                             lifecycleScope.launch {
-                                authenticateAndReturn(selectedCredentialId, option)
+                                authenticateAndReturn(selectedCredentialId, option, origin)
                             }
                         } else {
                             finishWithCancel("无效选择")
@@ -175,7 +177,8 @@ class PasskeyGetActivity : FragmentActivity() {
 
     private suspend fun authenticateWithPasskey(
         credentialId: String,
-        option: GetPublicKeyCredentialOption
+        option: GetPublicKeyCredentialOption,
+        origin: String?
     ): String {
         val userKey = vaultSession.getUserKey()
             ?: throw IllegalStateException("保险库未解锁")
@@ -196,7 +199,7 @@ class PasskeyGetActivity : FragmentActivity() {
         val requestJson = org.json.JSONObject(option.requestJson)
         val challenge = requestJson.getString("challenge")
         val rpId = requestJson.optString("rpId", passkey.rpId)
-        val origin = "https://$rpId"
+        val resolvedOrigin = origin ?: "https://$rpId"
 
         // 导入私钥并签名
         val privateKey = PasskeyCrypto.importPrivateKey(passkey.privateKey)
@@ -208,8 +211,9 @@ class PasskeyGetActivity : FragmentActivity() {
             includeAttestedCredentialData = false
         )
 
-        val clientDataJSON = PasskeyCrypto.buildClientDataJSON("webauthn.get", challenge, origin)
-        val clientDataHash = PasskeyCrypto.rpIdHash(clientDataJSON)
+        val clientDataJSON = PasskeyCrypto.buildClientDataJSON("webauthn.get", challenge, resolvedOrigin)
+        // 浏览器提供 clientDataHash 时直接使用，否则自己计算
+        val clientDataHash = option.clientDataHash ?: PasskeyCrypto.rpIdHash(clientDataJSON)
         val signature = PasskeyCrypto.signAssertion(privateKey, authData, clientDataHash)
 
         // 更新 counter 并保存
@@ -331,4 +335,5 @@ class PasskeyGetActivity : FragmentActivity() {
         if (cipher.passkey?.rpId?.equals(rpId, ignoreCase = true) == true) return true
         return cipher.uris.any { uri -> uri.contains(rpId, ignoreCase = true) }
     }
+
 }

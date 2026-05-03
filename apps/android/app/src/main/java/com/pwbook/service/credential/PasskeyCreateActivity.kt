@@ -50,14 +50,15 @@ class PasskeyCreateActivity : FragmentActivity() {
 
         val requestJson = callingRequest.requestJson
         val callingAppInfo = request.callingAppInfo
-        Timber.d("requestJson=$requestJson callingPackage=${callingAppInfo?.packageName}")
-
         val rpId = try {
             org.json.JSONObject(requestJson).getJSONObject("rp").optString("id", "")
         } catch (e: Exception) {
             finishWithCancel("无法解析请求")
             return
         }
+
+        val origin = callingRequest.origin ?: callingAppInfo?.resolveAppOrigin() ?: "https://$rpId"
+        Timber.d("requestJson=$requestJson callingPackage=${callingAppInfo?.packageName} origin=$origin")
 
         lifecycleScope.launch {
             // 确保保险库已解锁（同时完成身份验证）
@@ -84,7 +85,7 @@ class PasskeyCreateActivity : FragmentActivity() {
                         onSelect = { cipherId ->
                             lifecycleScope.launch {
                                 try {
-                                    val response = createPasskey(requestJson, callingAppInfo?.packageName, cipherId)
+                                    val response = createPasskey(requestJson, callingAppInfo?.packageName, cipherId, origin)
                                     Timber.d("createPasskey response length=${response.length}")
 
                                     val result = Intent()
@@ -113,9 +114,10 @@ class PasskeyCreateActivity : FragmentActivity() {
     private suspend fun createPasskey(
         requestJson: String,
         callingPackage: String?,
-        targetCipherId: String?
+        targetCipherId: String?,
+        origin: String
     ): String {
-        Timber.d("createPasskey callingPackage=$callingPackage targetCipherId=$targetCipherId")
+        Timber.d("createPasskey callingPackage=$callingPackage targetCipherId=$targetCipherId origin=$origin")
         val request = org.json.JSONObject(requestJson)
         val rp = request.getJSONObject("rp")
         val rpId = rp.optString("id", "")
@@ -138,7 +140,6 @@ class PasskeyCreateActivity : FragmentActivity() {
         val publicKeySpki = PasskeyCrypto.base64Encode(keyPair.public.encoded)
 
         // 构建 WebAuthn 响应
-        val origin = "https://$rpId"
         val clientDataJSON = PasskeyCrypto.buildClientDataJSON("webauthn.create", challenge, origin)
         val clientDataHash = PasskeyCrypto.rpIdHash(clientDataJSON)
 
@@ -203,4 +204,5 @@ class PasskeyCreateActivity : FragmentActivity() {
         setResult(RESULT_CANCELED)
         finish()
     }
+
 }
