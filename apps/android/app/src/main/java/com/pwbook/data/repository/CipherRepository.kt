@@ -34,6 +34,13 @@ class CipherRepository @Inject constructor(
      * 查找指定 rpId 的 LOGIN 凭据（含 Passkey）。
      * 因 rpId 存储在加密 JSON 中，需遍历解密后匹配。
      */
+    /**
+     * 获取用户所有 LOGIN 类型凭据。
+     */
+    suspend fun getAllLoginCiphers(userId: String): List<CipherEntity> {
+        return cipherDao.getAllByType(userId, 1)
+    }
+
     suspend fun findByRpId(userId: String, rpId: String): List<CipherEntity> {
         val ciphers = cipherDao.getAllByType(userId, 1)
         return ciphers.filter { entity ->

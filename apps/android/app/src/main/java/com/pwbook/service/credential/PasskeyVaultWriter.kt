@@ -39,22 +39,23 @@ class PasskeyVaultWriter @Inject constructor(
     suspend fun savePasskey(
         passkeyData: PasskeyData,
         rpId: String,
-        userName: String
+        userName: String,
+        targetCipherId: String? = null
     ) {
         val userKey = vaultSession.getUserKey()
             ?: throw IllegalStateException("保险库未解锁")
         val cipherKey = userKey.copyOfRange(0, 32)
         val userId = securePrefs.getString(SecurePrefs.KEY_USER_ID) ?: ""
 
-        val existingCiphers = cipherRepository.findByRpId(userId, rpId)
-        val targetCipher = existingCiphers.firstOrNull()
-
         val now = System.currentTimeMillis()
 
-        if (targetCipher != null) {
-            // 附加到现有凭据
+        if (targetCipherId != null) {
+            // 附加到指定凭据
+            val targetCipher = cipherRepository.getCipher(targetCipherId)
+                ?: throw IllegalStateException("指定凭据不存在")
+
             val decrypted = vaultSession.decryptCipher(targetCipher)
-                ?: throw IllegalStateException("无法解密现有凭据")
+                ?: throw IllegalStateException("无法解密指定凭据")
 
             val updatedData = CipherDataJson(
                 name = decrypted.name,
@@ -85,7 +86,7 @@ class PasskeyVaultWriter @Inject constructor(
                 now
             )
             syncManager.launchSyncAll()
-            Timber.i("Passkey 附加到现有凭据 ${targetCipher.id}")
+            Timber.i("Passkey 附加到指定凭据 ${targetCipher.id}")
         } else {
             // 新建 LOGIN 凭据
             val newData = CipherDataJson(

@@ -2,8 +2,7 @@ package com.pwbook.service.credential
 
 import android.content.Intent
 import android.os.Bundle
-import android.os.CancellationSignal
-import android.os.OutcomeReceiver
+import androidx.activity.compose.setContent
 import androidx.fragment.app.FragmentActivity
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
@@ -12,10 +11,16 @@ import androidx.credentials.CreatePublicKeyCredentialRequest
 import androidx.credentials.provider.PendingIntentHandler
 import androidx.lifecycle.lifecycleScope
 import com.pwbook.crypto.PasskeyCrypto
+import com.pwbook.data.datasource.SecurePrefs
+import com.pwbook.data.repository.CipherRepository
+import com.pwbook.domain.VaultSession
 import com.pwbook.domain.model.PasskeyData
+import com.pwbook.ui.theme.PwBookTheme
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 import java.security.SecureRandom
 import java.security.interfaces.ECPublicKey
@@ -27,11 +32,15 @@ import kotlin.coroutines.resume
  * Passkey 创建 Activity。
  *
  * 从 Credential Provider PendingIntent 启动，处理 WebAuthn create 请求。
+ * 流程：生物识别认证 → 展示凭据选择界面 → 生成并保存 Passkey → 返回响应。
  */
 @AndroidEntryPoint
 class PasskeyCreateActivity : FragmentActivity() {
 
     @Inject lateinit var passkeyVaultWriter: PasskeyVaultWriter
+    @Inject lateinit var cipherRepository: CipherRepository
+    @Inject lateinit var vaultSession: VaultSession
+    @Inject lateinit var securePrefs: SecurePrefs
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -46,6 +55,13 @@ class PasskeyCreateActivity : FragmentActivity() {
         val callingAppInfo = request.callingAppInfo
         Timber.d("requestJson=$requestJson callingPackage=${callingAppInfo?.packageName}")
 
+        val rpId = try {
+            org.json.JSONObject(requestJson).getJSONObject("rp").optString("id", "")
+        } catch (e: Exception) {
+            finishWithCancel("无法解析请求")
+            return
+        }
+
         lifecycleScope.launch {
             val biometricSuccess = authenticateWithBiometric()
             if (!biometricSuccess) {
@@ -53,30 +69,53 @@ class PasskeyCreateActivity : FragmentActivity() {
                 return@launch
             }
 
-            try {
-                val response = createPasskey(requestJson, callingAppInfo?.packageName)
-                Timber.d("createPasskey response length=${response.length}")
-
-                val result = Intent()
-                PendingIntentHandler.setCreateCredentialResponse(
-                    result,
-                    androidx.credentials.CreatePublicKeyCredentialResponse(response)
-                )
-                setResult(RESULT_OK, result)
-                Timber.d("setResult RESULT_OK")
-            } catch (e: Exception) {
-                Timber.e(e, "Passkey create failed")
-                setResult(RESULT_CANCELED)
+            // IO 线程加载并解密 LOGIN 凭据
+            val loginCiphers = withContext(Dispatchers.IO) {
+                val userId = securePrefs.getString(SecurePrefs.KEY_USER_ID) ?: ""
+                cipherRepository.getAllLoginCiphers(userId)
+                    .mapNotNull { vaultSession.decryptCipher(it) }
             }
-            finish()
+
+            setContent {
+                PwBookTheme {
+                    PasskeyCreateSelectScreen(
+                        rpId = rpId,
+                        ciphers = loginCiphers,
+                        onSelect = { cipherId ->
+                            lifecycleScope.launch {
+                                try {
+                                    val response = createPasskey(requestJson, callingAppInfo?.packageName, cipherId)
+                                    Timber.d("createPasskey response length=${response.length}")
+
+                                    val result = Intent()
+                                    PendingIntentHandler.setCreateCredentialResponse(
+                                        result,
+                                        androidx.credentials.CreatePublicKeyCredentialResponse(response)
+                                    )
+                                    setResult(RESULT_OK, result)
+                                    Timber.d("setResult RESULT_OK")
+                                } catch (e: Exception) {
+                                    Timber.e(e, "Passkey create failed")
+                                    setResult(RESULT_CANCELED)
+                                }
+                                finish()
+                            }
+                        },
+                        onCancel = {
+                            finishWithCancel("用户取消选择")
+                        }
+                    )
+                }
+            }
         }
     }
 
     private suspend fun createPasskey(
         requestJson: String,
-        callingPackage: String?
+        callingPackage: String?,
+        targetCipherId: String?
     ): String {
-        Timber.d("createPasskey callingPackage=$callingPackage")
+        Timber.d("createPasskey callingPackage=$callingPackage targetCipherId=$targetCipherId")
         val request = org.json.JSONObject(requestJson)
         val rp = request.getJSONObject("rp")
         val rpId = rp.optString("id", "")
@@ -152,7 +191,8 @@ class PasskeyCreateActivity : FragmentActivity() {
                 createdAt = Instant.now().toString()
             ),
             rpId = rpId,
-            userName = userName
+            userName = userName,
+            targetCipherId = targetCipherId
         )
         Timber.i("Passkey created for rpId=$rpId, credentialId=$credentialId")
         return responseJson
