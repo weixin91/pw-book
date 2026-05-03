@@ -52,13 +52,14 @@ object PasskeyMatcher {
 
     /**
      * 检查 credentialId 是否在 allowCredentials 列表中。
-     * allowCredentials 为 null 或空时表示允许所有凭据。
+     * 按 WebAuthn 规范，allowCredentials 缺失或为空数组时表示允许任意凭据
+     * （discoverable credential / passwordless 流程）。
      */
     fun isCredentialAllowed(credentialId: String, allowCredentials: String?): Boolean {
         if (allowCredentials.isNullOrEmpty()) return true
         return try {
-            val json = Json.parseToJsonElement(allowCredentials)
-            val array = json.jsonArray
+            val array = Json.parseToJsonElement(allowCredentials).jsonArray
+            if (array.isEmpty()) return true
             array.any { element ->
                 val id = element.jsonObject["id"]?.jsonPrimitive?.content
                 id == credentialId

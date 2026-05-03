@@ -208,7 +208,7 @@ class PwBookCredentialProviderService : CredentialProviderService() {
         }
 
         val ciphers = cipherRepository.findByRpId(userId, rpId)
-        Timber.d("populatePasskeyEntries found ${ciphers.size} ciphers for rpId=$rpId")
+        Timber.d("populatePasskeyEntries found ${ciphers.size} ciphers for rpId=$rpId allowCredentials=$allowCredentialsStr")
         val entries = mutableListOf<CredentialEntry>()
 
         for (cipher in ciphers) {
