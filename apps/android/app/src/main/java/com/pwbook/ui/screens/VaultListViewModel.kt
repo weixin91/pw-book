@@ -45,8 +45,10 @@ class VaultListViewModel @Inject constructor(
     val uiState: StateFlow<VaultListUiState> = combine(
         _searchQuery,
         _targetUri,
-        cipherRepository.observeCiphers(userId ?: "")
-    ) { query, targetUri, ciphers ->
+        cipherRepository.observeCiphers(userId ?: ""),
+        syncManager.syncState,
+        pendingChangesQueue.observeCount()
+    ) { query, targetUri, ciphers, syncState, pendingCount ->
         // 在后台线程解密 cipher data，避免阻塞主线程
         val decryptedCiphers = withContext(Dispatchers.Default) {
             ciphers.mapNotNull { entity ->
@@ -76,7 +78,10 @@ class VaultListViewModel @Inject constructor(
         VaultListUiState(
             searchQuery = query,
             ciphers = sorted,
-            isLoading = false
+            isLoading = false,
+            syncState = syncState,
+            pendingCount = pendingCount,
+            lastSyncTime = securePrefs.getLong(SecurePrefs.KEY_LAST_SYNC)
         )
     }.stateIn(
         scope = viewModelScope,
@@ -100,8 +105,8 @@ class VaultListViewModel @Inject constructor(
 
     fun sync() {
         viewModelScope.launch {
-            syncManager.fullSync()
-                .onSuccess { Timber.i("Manual sync completed: ${it.cipherCount} ciphers") }
+            syncManager.syncAll()
+                .onSuccess { Timber.i("Manual sync completed: ${it.cipherCount} ciphers, ${it.pendingCount} pushed") }
                 .onFailure { Timber.e(it, "Manual sync failed") }
         }
     }
@@ -160,5 +165,8 @@ class VaultListViewModel @Inject constructor(
 data class VaultListUiState(
     val searchQuery: String = "",
     val ciphers: List<DecryptedCipher> = emptyList(),
-    val isLoading: Boolean = true
+    val isLoading: Boolean = true,
+    val syncState: SyncManager.SyncState = SyncManager.SyncState.IDLE,
+    val pendingCount: Int = 0,
+    val lastSyncTime: Long = 0L
 )

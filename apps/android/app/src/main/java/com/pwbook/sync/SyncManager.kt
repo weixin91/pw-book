@@ -77,6 +77,7 @@ class SyncManager @Inject constructor(
         response.syncToken?.let { settingsRepository.setString("last_sync_token", it) }
 
         _syncState.value = SyncState.IDLE
+        securePrefs.putLong(SecurePrefs.KEY_LAST_SYNC, System.currentTimeMillis())
         Timber.i("Full sync completed, ciphers=${ciphers.size}, rules=${rules.size}")
         SyncResult(ciphers.size, rules.size, 0)
     }.onFailure {
@@ -105,6 +106,7 @@ class SyncManager @Inject constructor(
 
         response.syncToken?.let { settingsRepository.setString("last_sync_token", it) }
 
+        securePrefs.putLong(SecurePrefs.KEY_LAST_SYNC, System.currentTimeMillis())
         _syncState.value = SyncState.IDLE
         Timber.i("Incremental sync completed, changes=${response.ciphers.size}")
         SyncResult(response.ciphers.size, rules.size, 0)
@@ -159,6 +161,7 @@ class SyncManager @Inject constructor(
 
         response.newSyncToken?.let { settingsRepository.setString("last_sync_token", it) }
 
+        securePrefs.putLong(SecurePrefs.KEY_LAST_SYNC, System.currentTimeMillis())
         _syncState.value = SyncState.IDLE
         Timber.i("Push completed, accepted=${response.accepted.size}, conflicts=${response.conflicts.size}")
         PushResult(response.accepted.size, response.rejected.size, response.conflicts)
