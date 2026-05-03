@@ -186,9 +186,9 @@ class CipherEditViewModel @Inject constructor(
                     username = state.username.ifEmpty { null },
                     password = state.password.ifEmpty { null },
                     uris = cleanUris,
-                    totp = state.totp.trim().ifEmpty { null },
-                    passkey = existingPasskey
-                )
+                    totp = state.totp.trim().ifEmpty { null }
+                ),
+                passkey = existingPasskey
             )
 
             val encryptedData = vaultEncryption.encryptString(

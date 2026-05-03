@@ -134,9 +134,9 @@ class PasskeyGetActivity : FragmentActivity() {
                 username = decrypted.username,
                 password = decrypted.password,
                 uris = decrypted.uris.map { LoginUriJson(uri = it) },
-                totp = decrypted.totp,
-                passkey = updatedPasskey
+                totp = decrypted.totp
             ),
+            passkey = updatedPasskey,
             lastUsedAt = Instant.now().toString(),
             fields = emptyList()
         )

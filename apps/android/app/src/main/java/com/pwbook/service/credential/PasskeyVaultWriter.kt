@@ -63,9 +63,9 @@ class PasskeyVaultWriter @Inject constructor(
                     username = decrypted.username,
                     password = decrypted.password,
                     uris = decrypted.uris.map { LoginUriJson(uri = it) },
-                    totp = decrypted.totp,
-                    passkey = passkeyData.toJson()
+                    totp = decrypted.totp
                 ),
+                passkey = passkeyData.toJson(),
                 lastUsedAt = java.time.Instant.now().toString(),
                 fields = emptyList()
             )
@@ -95,9 +95,9 @@ class PasskeyVaultWriter @Inject constructor(
                     username = userName.ifEmpty { null },
                     password = null,
                     uris = listOf(LoginUriJson(uri = "https://$rpId")),
-                    totp = null,
-                    passkey = passkeyData.toJson()
+                    totp = null
                 ),
+                passkey = passkeyData.toJson(),
                 lastUsedAt = java.time.Instant.now().toString(),
                 fields = emptyList()
             )
