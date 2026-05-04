@@ -11,6 +11,7 @@ import { domainAssocRoutes } from "./domain-assoc/routes.js";
 import { cookieRoutes } from "./cookies/routes.js";
 import { cookieConfigRoutes } from "./cookies/config-routes.js";
 import { registerWebSocket } from "./websocket/server.js";
+import { registrationWhitelist } from "./auth/whitelist.js";
 
 dotenv.config();
 
@@ -41,6 +42,12 @@ app.get("/health", async () => ({ status: "ok" }));
 
 const PORT = parseInt(process.env.PORT || "3000", 10);
 const HOST = process.env.HOST || "0.0.0.0";
+
+if (registrationWhitelist) {
+  console.log(`[whitelist] 注册白名单已启用: ${Array.from(registrationWhitelist).join(", ")}`);
+} else {
+  console.log("[whitelist] 注册白名单未配置，允许所有人注册");
+}
 
 // 安全提示：生产环境应在前方部署反向代理（如 Nginx、Caddy、Traefik）以提供 HTTPS/TLS 1.3
 try {

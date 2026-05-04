@@ -3,6 +3,7 @@ import { PrismaClient } from "@prisma/client";
 import { z } from "zod";
 import { createToken, createRefreshToken, verifyToken } from "./jwt.js";
 import { ApiError } from "../errors/handler.js";
+import { isEmailAllowed } from "./whitelist.js";
 
 const prisma = new PrismaClient();
 
@@ -54,6 +55,10 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
 
   app.post("/register", async (request, reply) => {
     const body = registerSchema.parse(request.body);
+
+    if (!isEmailAllowed(body.email)) {
+      throw new ApiError("FORBIDDEN", 403, "该邮箱不在注册白名单中");
+    }
 
     const existing = await prisma.user.findUnique({ where: { email: body.email } });
     if (existing) {
