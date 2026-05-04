@@ -6,12 +6,16 @@ import com.pwbook.crypto.VaultEncryption
 import com.pwbook.data.datasource.SecurePrefs
 import com.pwbook.data.local.entity.CipherEntity
 import com.pwbook.data.repository.CipherRepository
+import com.pwbook.data.repository.SettingsRepository
 import com.pwbook.domain.CipherDataJson
 import com.pwbook.domain.LoginDataJson
 import com.pwbook.domain.LoginUriJson
 import com.pwbook.domain.VaultSession
+import com.pwbook.domain.usecase.GeneratePasswordUseCase
 import com.pwbook.sync.PendingChangesQueue
 import com.pwbook.sync.SyncManager
+import com.pwbook.ui.generator.PasswordGeneratorConfig
+import com.pwbook.ui.generator.PasswordGeneratorViewModel
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -30,6 +34,8 @@ class CipherEditViewModel @Inject constructor(
     private val pendingChangesQueue: PendingChangesQueue,
     private val securePrefs: SecurePrefs,
     private val syncManager: SyncManager,
+    private val generatePasswordUseCase: GeneratePasswordUseCase,
+    private val settingsRepository: SettingsRepository,
     private val json: Json
 ) : ViewModel() {
 
@@ -84,6 +90,30 @@ class CipherEditViewModel @Inject constructor(
     fun updateFavorite(favorite: Boolean) { _uiState.value = _uiState.value.copy(favorite = favorite) }
     fun togglePasswordVisibility() { _uiState.value = _uiState.value.copy(showPassword = !_uiState.value.showPassword) }
     fun toggleTotpVisibility() { _uiState.value = _uiState.value.copy(showTotp = !_uiState.value.showTotp) }
+
+    fun generatePassword() {
+        viewModelScope.launch {
+            val raw = settingsRepository.getString(PasswordGeneratorViewModel.KEY_CONFIG)
+            val config = if (raw != null) {
+                try {
+                    json.decodeFromString<PasswordGeneratorConfig>(raw)
+                } catch (e: Exception) {
+                    PasswordGeneratorConfig()
+                }
+            } else {
+                PasswordGeneratorConfig()
+            }
+            val password = generatePasswordUseCase.execute(
+                length = config.length,
+                uppercase = config.uppercase,
+                lowercase = config.lowercase,
+                numbers = config.numbers,
+                special = config.special,
+                excludeAmbiguous = config.excludeAmbiguous
+            )
+            _uiState.value = _uiState.value.copy(password = password, showPassword = true)
+        }
+    }
 
     fun updateUri(index: Int, uri: String) {
         val currentUris = _uiState.value.uris

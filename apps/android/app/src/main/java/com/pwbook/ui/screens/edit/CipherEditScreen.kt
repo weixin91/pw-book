@@ -14,6 +14,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
@@ -123,6 +124,12 @@ fun CipherEditScreen(
                 visualTransformation = if (uiState.showPassword) VisualTransformation.None else PasswordVisualTransformation(),
                 trailingIcon = {
                     Row {
+                        IconButton(onClick = { viewModel.generatePassword() }) {
+                            Icon(
+                                imageVector = Icons.Default.Casino,
+                                contentDescription = "生成随机密码"
+                            )
+                        }
                         IconButton(onClick = { viewModel.togglePasswordVisibility() }) {
                             Icon(
                                 if (uiState.showPassword) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
@@ -203,16 +210,16 @@ fun CipherEditScreen(
                 onValueChange = viewModel::updateNotes,
                 label = { Text("备注") },
                 modifier = Modifier.fillMaxWidth(),
-                minLines = 3,
-                maxLines = 5
+                minLines = 2,
+                maxLines = 3
             )
 
             // TOTP 密钥
             OutlinedTextField(
                 value = uiState.totp,
                 onValueChange = viewModel::updateTotp,
-                label = { Text("TOTP 密钥 (otpauth:// URI 或 Base32)") },
-                placeholder = { Text("otpauth://totp/Issuer:account?secret=...") },
+                label = { Text("TOTP 密钥") },
+                placeholder = { Text("TOTP 密钥") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 visualTransformation = if (uiState.showTotp) VisualTransformation.None else PasswordVisualTransformation(),
