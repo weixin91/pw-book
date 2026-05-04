@@ -329,7 +329,10 @@ export function VaultList({ onAdd, onEdit, onOpenGenerator, onOpenCookieSync }: 
                 gap: 8,
               }}
             >
-              <div style={{ flex: 1, minWidth: 0 }}>
+              <div
+                style={{ flex: 1, minWidth: 0, cursor: "pointer" }}
+                onClick={() => onEdit(item.cipher.id)}
+              >
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                   <div style={{ fontWeight: 500, fontSize: 14 }}>{item.name}</div>
                   {item.hasPasskey && (
@@ -353,98 +356,67 @@ export function VaultList({ onAdd, onEdit, onOpenGenerator, onOpenCookieSync }: 
                 >
                   填充
                 </button>
-                <button
-                  onClick={() => handleCopy(item.cipher, "password")}
-                  title="复制密码"
-                  style={{
-                    padding: "4px 8px",
-                    borderRadius: 4,
-                    border: "1px solid #ddd",
-                    background: "#fff",
-                    fontSize: 12,
-                    cursor: "pointer",
-                  }}
-                >
-                  复制
-                </button>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (openMenuId === `sugg-${item.cipher.id}`) {
-                      setOpenMenuId(null);
-                      setMenuPos(null);
-                    } else {
-                      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                      setMenuPos({
-                        top: rect.bottom + 4,
-                        right: window.innerWidth - rect.right,
-                      });
-                      setOpenMenuId(`sugg-${item.cipher.id}`);
-                    }
-                  }}
-                  style={{
-                    padding: "4px 8px",
-                    borderRadius: 4,
-                    border: "1px solid #ddd",
-                    background: "#fff",
-                    fontSize: 12,
-                    cursor: "pointer",
-                  }}
-                >
-                  ⋮
-                </button>
-                {openMenuId === `sugg-${item.cipher.id}` && menuPos && (
-                  <div
+                <div data-copy-menu>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (openMenuId === `sugg-${item.cipher.id}`) {
+                        setOpenMenuId(null);
+                        setMenuPos(null);
+                      } else {
+                        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                        setMenuPos({
+                          top: rect.bottom + 4,
+                          right: window.innerWidth - rect.right,
+                        });
+                        setOpenMenuId(`sugg-${item.cipher.id}`);
+                      }
+                    }}
                     style={{
-                      position: "fixed",
-                      top: menuPos.top,
-                      right: menuPos.right,
-                      background: "#fff",
+                      padding: "4px 8px",
+                      borderRadius: 4,
                       border: "1px solid #ddd",
-                      borderRadius: 6,
-                      boxShadow: "0 4px 12px rgba(0,0,0,0.12)",
-                      zIndex: 1000,
-                      minWidth: 110,
-                      overflow: "hidden",
+                      background: "#fff",
+                      fontSize: 12,
+                      cursor: "pointer",
                     }}
                   >
-                    <button
-                      onClick={() => handleCopy(item.cipher, "username")}
-                      disabled={!item.username}
+                    复制
+                  </button>
+                  {openMenuId === `sugg-${item.cipher.id}` && menuPos && (
+                    <div
                       style={{
-                        display: "block",
-                        width: "100%",
-                        padding: "8px 12px",
-                        border: "none",
-                        background: "none",
-                        textAlign: "left",
-                        fontSize: 12,
-                        cursor: item.username ? "pointer" : "not-allowed",
-                        color: item.username ? "#333" : "#bbb",
+                        position: "fixed",
+                        top: menuPos.top,
+                        right: menuPos.right,
+                        background: "#fff",
+                        border: "1px solid #ddd",
+                        borderRadius: 6,
+                        boxShadow: "0 4px 12px rgba(0,0,0,0.12)",
+                        zIndex: 1000,
+                        minWidth: 110,
+                        overflow: "hidden",
                       }}
                     >
-                      复制用户名
-                    </button>
-                    <button
-                      onClick={() => handleCopy(item.cipher, "password")}
-                      style={{
-                        display: "block",
-                        width: "100%",
-                        padding: "8px 12px",
-                        border: "none",
-                        background: "none",
-                        textAlign: "left",
-                        fontSize: 12,
-                        cursor: "pointer",
-                        color: "#333",
-                        borderTop: "1px solid #f0f0f0",
-                      }}
-                    >
-                      复制密码
-                    </button>
-                    {item.hasTotp && (
                       <button
-                        onClick={() => handleCopyTotp(item.cipher)}
+                        onClick={() => handleCopy(item.cipher, "username")}
+                        disabled={!item.username}
+                        style={{
+                          display: "block",
+                          width: "100%",
+                          padding: "8px 12px",
+                          border: "none",
+                          background: "none",
+                          textAlign: "left",
+                          fontSize: 12,
+                          cursor: item.username ? "pointer" : "not-allowed",
+                          color: item.username ? "#333" : "#bbb",
+                        }}
+                      >
+                        复制用户名
+                      </button>
+                      <button
+                        onClick={() => handleCopy(item.cipher, "password")}
                         style={{
                           display: "block",
                           width: "100%",
@@ -458,11 +430,30 @@ export function VaultList({ onAdd, onEdit, onOpenGenerator, onOpenCookieSync }: 
                           borderTop: "1px solid #f0f0f0",
                         }}
                       >
-                        复制验证码
+                        复制密码
                       </button>
-                    )}
-                  </div>
-                )}
+                      {item.hasTotp && (
+                        <button
+                          onClick={() => handleCopyTotp(item.cipher)}
+                          style={{
+                            display: "block",
+                            width: "100%",
+                            padding: "8px 12px",
+                            border: "none",
+                            background: "none",
+                            textAlign: "left",
+                            fontSize: 12,
+                            cursor: "pointer",
+                            color: "#333",
+                            borderTop: "1px solid #f0f0f0",
+                          }}
+                        >
+                          复制验证码
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           ))}

@@ -113,6 +113,19 @@ async function initContentScript(): Promise<void> {
       return false;
     }
 
+    if (msg.type === "EXTRACT_FORM_DATA") {
+      const result = collector.scanPage();
+      if (result) {
+        sendResponse({
+          username: result.usernameField?.value ?? "",
+          password: result.passwordField?.value ?? "",
+        });
+      } else {
+        sendResponse({ username: "", password: "" });
+      }
+      return false;
+    }
+
     return false;
   });
 

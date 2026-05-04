@@ -47,9 +47,32 @@ export function CipherForm({ editId, onBack, onSaved, onDeleted }: Props): React
     if (editId) {
       loadCipher(editId);
     } else {
-      BrowserApi.getActiveBrowserTab().then((tab) => {
+      // 新建凭据：获取当前页面信息
+      BrowserApi.getActiveBrowserTab().then(async (tab) => {
         if (tab?.url && !tab.url.startsWith("chrome-extension://") && !tab.url.startsWith("edge://")) {
+          // 设置 URI
           setUris([{ uri: tab.url }]);
+          // 提取基础域名+端口号作为默认名称
+          try {
+            const urlObj = new URL(tab.url);
+            const id = parseUri(tab.url);
+            if (id?.kind === "web" && id.baseDomain) {
+              const defaultName = urlObj.port ? `${id.baseDomain}:${urlObj.port}` : id.baseDomain;
+              setName(defaultName);
+            }
+          } catch {
+            // URL 解析失败，忽略
+          }
+          // 尝试从页面提取用户名和密码
+          if (tab.id) {
+            try {
+              const response = await BrowserApi.sendMessageToTab(tab.id, { type: "EXTRACT_FORM_DATA" }) as { username?: string; password?: string } | undefined;
+              if (response?.username) setUsername(response.username);
+              if (response?.password) setPassword(response.password);
+            } catch {
+              // 页面可能不支持消息，忽略
+            }
+          }
         }
       });
     }
