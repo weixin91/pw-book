@@ -13,6 +13,24 @@ const recoverSchema = z.object({
   newProtectedKey: z.string().min(1),
 });
 
+async function deriveRecoveryKeyHash(recoveryKey: string, email: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const saltData = encoder.encode(email.toLowerCase().trim());
+  const salt = new Uint8Array(await crypto.subtle.digest("SHA-256", saltData));
+  const keyMaterial = await crypto.subtle.importKey("raw", encoder.encode(recoveryKey.toUpperCase()), "PBKDF2", false, ["deriveBits"]);
+  const derivedBits = await crypto.subtle.deriveBits(
+    { name: "PBKDF2", salt, iterations: 100_000, hash: "SHA-256" },
+    keyMaterial,
+    256
+  );
+  const bytes = new Uint8Array(derivedBits);
+  let binary = "";
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
 export async function recoverRoutes(app: FastifyInstance): Promise<void> {
   app.post("/recover", async (request, reply) => {
     const body = recoverSchema.parse(request.body);
@@ -22,7 +40,8 @@ export async function recoverRoutes(app: FastifyInstance): Promise<void> {
       throw new ApiError("INVALID_CREDENTIALS", 401, "邮箱或恢复密钥无效");
     }
 
-    if (!user.recoveryKeyHash || user.recoveryKeyHash !== body.recoveryKey) {
+    const recoveryKeyHash = await deriveRecoveryKeyHash(body.recoveryKey, body.email);
+    if (!user.recoveryKeyHash || user.recoveryKeyHash !== recoveryKeyHash) {
       throw new ApiError("INVALID_CREDENTIALS", 401, "邮箱或恢复密钥无效");
     }
 
@@ -46,6 +65,6 @@ export async function recoverRoutes(app: FastifyInstance): Promise<void> {
       securityStamp: updated.securityStamp,
     });
 
-    return reply.send({ token, refreshToken });
+    return reply.send({ id: updated.id, token, refreshToken, securityStamp: updated.securityStamp });
   });
 }

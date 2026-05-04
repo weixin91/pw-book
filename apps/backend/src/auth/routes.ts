@@ -48,6 +48,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       kdfIterations: user.kdfIterations,
       kdfMemory: user.kdfMemory,
       kdfParallelism: user.kdfParallelism,
+      encryptedRecoveryKey: user.encryptedRecoveryKey,
     };
   });
 

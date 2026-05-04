@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -23,6 +24,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 
 @Composable
@@ -89,7 +92,7 @@ fun RegisterScreen(
                 keyboardType = KeyboardType.Password,
                 imeAction = ImeAction.Done
             ),
-            keyboardActions = KeyboardActions(onDone = { viewModel.register(onRegisterSuccess) }),
+            keyboardActions = KeyboardActions(onDone = { viewModel.register {} }),
             modifier = Modifier.fillMaxWidth()
         )
 
@@ -101,7 +104,7 @@ fun RegisterScreen(
         Spacer(modifier = Modifier.height(24.dp))
 
         Button(
-            onClick = { viewModel.register(onRegisterSuccess) },
+            onClick = { viewModel.register {} },
             enabled = !uiState.isLoading && uiState.email.isNotBlank() && uiState.password.isNotBlank(),
             modifier = Modifier.fillMaxWidth()
         ) {
@@ -115,6 +118,41 @@ fun RegisterScreen(
         Spacer(modifier = Modifier.height(16.dp))
         TextButton(onClick = onNavigateToLogin) {
             Text("已有账户？点击登录")
+        }
+
+        uiState.recoveryKey?.let { key ->
+            val clipboardManager = LocalClipboardManager.current
+            AlertDialog(
+                onDismissRequest = {},
+                title = { Text("注册成功") },
+                text = {
+                    Column {
+                        Text(
+                            "请妥善保存以下恢复密钥，它是您忘记主密码时唯一的恢复方式。",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            key,
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(onClick = { onRegisterSuccess() }) {
+                        Text("我已保存，去登录")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = {
+                        clipboardManager.setText(AnnotatedString(key))
+                    }) {
+                        Text("复制")
+                    }
+                }
+            )
         }
     }
 }

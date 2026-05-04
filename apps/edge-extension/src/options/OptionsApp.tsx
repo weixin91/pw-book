@@ -11,6 +11,7 @@ import {
   exportPublicKeySpki,
   exportPrivateKeyPkcs8,
   encryptWithKey,
+  decryptWithKey,
   generateRecoveryKey,
   deriveRecoveryKeyHash,
   deriveRecoveryMasterKey,
@@ -18,7 +19,7 @@ import {
 import { LockSettingsService, type LockSettings } from "../background/lock-timer";
 import { ImportPanel } from "./components/ImportPanel";
 
-type Tab = "register" | "login" | "import";
+type Tab = "register" | "login" | "import" | "recover";
 
 const DEFAULT_KDF = {
   kdfType: "PBKDF2_SHA256" as const,
@@ -40,6 +41,9 @@ export function OptionsApp(): React.ReactElement {
   const [loading, setLoading] = useState(false);
   const [recoveryKey, setRecoveryKey] = useState("");
   const [saved, setSaved] = useState(false);
+  const [recoveryKeyInput, setRecoveryKeyInput] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
 
   useEffect(() => {
     StorageService.getServerUrl().then((url) => setServerUrl(url));
@@ -74,6 +78,9 @@ export function OptionsApp(): React.ReactElement {
   function resetForm() {
     setError("");
     setRecoveryKey("");
+    setRecoveryKeyInput("");
+    setNewPassword("");
+    setConfirmNewPassword("");
   }
 
   async function handleRegister() {
@@ -143,6 +150,105 @@ export function OptionsApp(): React.ReactElement {
       setRecoveryKey(recKey);
     } catch (err) {
       setError(err instanceof Error ? err.message : "注册失败");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleRecover() {
+    resetForm();
+    if (!email || !recoveryKeyInput) {
+      setError("请填写邮箱和恢复密钥");
+      return;
+    }
+    if (!newPassword || !confirmNewPassword) {
+      setError("请填写新主密码");
+      return;
+    }
+    if (newPassword !== confirmNewPassword) {
+      setError("两次输入的新主密码不一致");
+      return;
+    }
+    if (newPassword.length < 8) {
+      setError("新主密码长度至少为 8 位");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      console.log("[recover] step 1: prelogin", email);
+      const preloginRes = await fetch(`${serverUrl}/api/auth/prelogin`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      if (!preloginRes.ok) {
+        const data = await preloginRes.json().catch(() => ({}));
+        throw new Error(data.error?.message || data.message || "邮箱或恢复密钥无效");
+      }
+      const kdfParams = await preloginRes.json();
+      console.log("[recover] step 2: prelogin ok, kdfType:", kdfParams.kdfType, "has encryptedRecoveryKey:", !!kdfParams.encryptedRecoveryKey);
+      if (!kdfParams.encryptedRecoveryKey) {
+        throw new Error("该账户未设置恢复密钥");
+      }
+
+      const recoveryMasterKey = await deriveRecoveryMasterKey(recoveryKeyInput, email);
+      console.log("[recover] step 3: derived recoveryMasterKey");
+      const userKey = await decryptWithKey(kdfParams.encryptedRecoveryKey, recoveryMasterKey);
+      console.log("[recover] step 4: decrypted userKey, length:", userKey.length);
+
+      const masterKey = await deriveMasterKey(newPassword, email, {
+        kdfType: kdfParams.kdfType,
+        kdfIterations: kdfParams.kdfIterations,
+        kdfMemory: kdfParams.kdfMemory,
+        kdfParallelism: kdfParams.kdfParallelism,
+      });
+      const stretched = await deriveStretchedMasterKey(masterKey);
+      const newProtectedKey = await encryptUserKey(userKey, stretched);
+      const newMasterPasswordHash = await deriveMasterPasswordHash(masterKey, newPassword);
+      console.log("[recover] step 5: derived new hashes");
+
+      const res = await fetch(`${serverUrl}/api/auth/recover`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email,
+          recoveryKey: recoveryKeyInput,
+          newMasterPasswordHash: arrayBufferToBase64(newMasterPasswordHash),
+          newProtectedKey,
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error?.message || data.message || "恢复失败，请检查恢复密钥");
+      }
+
+      const data = await res.json();
+      console.log("[recover] step 6: recover ok, id:", data.id);
+      await StorageService.setProfile({
+        id: data.id || "",
+        email,
+        kdfType: kdfParams.kdfType,
+        kdfIterations: kdfParams.kdfIterations,
+        kdfMemory: kdfParams.kdfMemory,
+        kdfParallelism: kdfParams.kdfParallelism,
+        publicKey: "",
+        securityStamp: data.securityStamp || "",
+        token: data.token,
+        refreshToken: data.refreshToken,
+      });
+      await StorageService.setEncryptedKey(newProtectedKey);
+      await StorageService.setUserKey(userKey);
+      console.log("[recover] step 7: saved to storage");
+
+      setError("");
+      setTab("login");
+      setPassword(newPassword);
+      alert("恢复成功，请使用新主密码登录");
+    } catch (err) {
+      console.error("[recover] failed:", err);
+      setError(err instanceof Error ? err.message : "恢复失败");
     } finally {
       setLoading(false);
     }
@@ -376,6 +482,21 @@ export function OptionsApp(): React.ReactElement {
               登录
             </button>
             <button
+              onClick={() => { setTab("recover"); resetForm(); }}
+              style={{
+                padding: "10px 20px",
+                border: "none",
+                background: "transparent",
+                fontSize: 14,
+                cursor: "pointer",
+                borderBottom: tab === "recover" ? "2px solid #1a73e8" : "2px solid transparent",
+                color: tab === "recover" ? "#1a73e8" : "#666",
+                fontWeight: tab === "recover" ? 500 : 400,
+              }}
+            >
+              恢复
+            </button>
+            <button
               onClick={() => { setTab("import"); resetForm(); }}
               style={{
                 padding: "10px 20px",
@@ -423,6 +544,35 @@ export function OptionsApp(): React.ReactElement {
             </div>
           )}
 
+          {tab === "recover" && (
+            <div>
+              <p style={{ fontSize: 13, color: "#555", marginBottom: 12 }}>
+                使用注册时保存的恢复密钥重置主密码。恢复后所有数据仍然可以访问。
+              </p>
+              {renderInput("邮箱", email, setEmail, "email")}
+              {renderInput("恢复密钥", recoveryKeyInput, setRecoveryKeyInput, "text")}
+              {renderInput("新主密码", newPassword, setNewPassword, "password")}
+              {renderInput("确认新主密码", confirmNewPassword, setConfirmNewPassword, "password")}
+              <button
+                onClick={handleRecover}
+                disabled={loading}
+                style={{
+                  width: "100%",
+                  padding: "10px",
+                  borderRadius: 8,
+                  border: "none",
+                  background: "#1a73e8",
+                  color: "#fff",
+                  fontSize: 14,
+                  cursor: loading ? "not-allowed" : "pointer",
+                  opacity: loading ? 0.7 : 1,
+                }}
+              >
+                {loading ? "恢复中..." : "恢复账户"}
+              </button>
+            </div>
+          )}
+
           {tab === "login" && (
             <div>
               {renderInput("邮箱", email, setEmail, "email")}
@@ -444,6 +594,21 @@ export function OptionsApp(): React.ReactElement {
               >
                 {loading ? "登录中..." : "登录"}
               </button>
+              <div style={{ marginTop: 12, textAlign: "center" }}>
+                <button
+                  onClick={() => { setTab("recover"); resetForm(); }}
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    color: "#1a73e8",
+                    fontSize: 13,
+                    cursor: "pointer",
+                    textDecoration: "underline",
+                  }}
+                >
+                  忘记主密码？使用恢复码
+                </button>
+              </div>
             </div>
           )}
           {tab === "import" && <ImportPanel />}

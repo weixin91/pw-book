@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.pwbook.crypto.KdfType
 import com.pwbook.crypto.KeyDerivation
+import com.pwbook.crypto.RecoveryKeyUtil
 import com.pwbook.crypto.RsaKeyGenerator
 import com.pwbook.crypto.VaultEncryption
 import com.pwbook.data.datasource.SecurePrefs
@@ -17,7 +18,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import timber.log.Timber
-import java.security.MessageDigest
 import javax.inject.Inject
 
 @HiltViewModel
@@ -100,12 +100,11 @@ class RegisterViewModel @Inject constructor(
                 val hash = keyDerivation.deriveMasterPasswordHash(masterKey, password)
                 val masterPasswordHash = keyDerivation.hashToBase64(hash)
 
-                val recoveryKey = rsaKeyGenerator.generateUserKey()
-                val recoveryKeyHash = hashRecoveryKey(recoveryKey)
-                val encryptedRecoveryKey = vaultEncryption.encryptString(
-                    Base64.encodeToString(recoveryKey, Base64.NO_WRAP),
-                    userKey
-                )
+                val recoveryKey = RecoveryKeyUtil.generateRecoveryKey()
+                val recoveryKeyHash = RecoveryKeyUtil.deriveRecoveryKeyHash(recoveryKey, email)
+                val recoveryMasterKey = RecoveryKeyUtil.deriveRecoveryMasterKey(recoveryKey, email)
+                val encryptedRecoveryKeyBytes = vaultEncryption.encryptBytes(userKey, recoveryMasterKey)
+                val encryptedRecoveryKey = Base64.encodeToString(encryptedRecoveryKeyBytes, Base64.NO_WRAP)
 
                 val response = authApi.register(
                     RegisterRequest(
@@ -133,7 +132,7 @@ class RegisterViewModel @Inject constructor(
                 securePrefs.putString(SecurePrefs.KEY_KDF_MEMORY, memoryKb.toString())
                 securePrefs.putString(SecurePrefs.KEY_KDF_PARALLELISM, parallelism.toString())
 
-                _uiState.value = _uiState.value.copy(isLoading = false)
+                _uiState.value = _uiState.value.copy(isLoading = false, recoveryKey = recoveryKey)
                 onSuccess()
             } catch (e: Exception) {
                 Timber.e(e, "Register failed for email: $email")
@@ -144,12 +143,6 @@ class RegisterViewModel @Inject constructor(
             }
         }
     }
-
-    private fun hashRecoveryKey(key: ByteArray): String {
-        val digest = MessageDigest.getInstance("SHA-256")
-        val hash = digest.digest(key)
-        return hash.joinToString("") { "%02x".format(it) }
-    }
 }
 
 data class RegisterUiState(
@@ -157,5 +150,6 @@ data class RegisterUiState(
     val password: String = "",
     val serverUrl: String = "",
     val isLoading: Boolean = false,
-    val error: String? = null
+    val error: String? = null,
+    val recoveryKey: String? = null
 )

@@ -279,7 +279,7 @@ export async function deriveRecoveryKeyHash(
   const encoder = new TextEncoder();
   const keyMaterial = await crypto.subtle.importKey(
     "raw",
-    encoder.encode(recoveryKey),
+    encoder.encode(recoveryKey.toUpperCase()),
     "PBKDF2",
     false,
     ["deriveBits"]
@@ -305,7 +305,7 @@ export async function deriveRecoveryMasterKey(
   const encoder = new TextEncoder();
   const keyMaterial = await crypto.subtle.importKey(
     "raw",
-    encoder.encode(recoveryKey),
+    encoder.encode(recoveryKey.toUpperCase()),
     "PBKDF2",
     false,
     ["deriveBits"]

@@ -19,7 +19,7 @@ class AesGcmEngine {
         SecureRandom().nextBytes(iv)
         val cipher = Cipher.getInstance(TRANSFORMATION)
         val spec = GCMParameterSpec(TAG_LENGTH, iv)
-        cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(key, ALGORITHM), spec)
+        cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(key.aesKey(), ALGORITHM), spec)
         associatedData?.let { cipher.updateAAD(it) }
         val ciphertext = cipher.doFinal(plaintext)
         return iv + ciphertext
@@ -31,8 +31,14 @@ class AesGcmEngine {
         val ciphertext = encryptedData.copyOfRange(IV_LENGTH, encryptedData.size)
         val cipher = Cipher.getInstance(TRANSFORMATION)
         val spec = GCMParameterSpec(TAG_LENGTH, iv)
-        cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec(key, ALGORITHM), spec)
+        cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec(key.aesKey(), ALGORITHM), spec)
         associatedData?.let { cipher.updateAAD(it) }
         return cipher.doFinal(ciphertext)
     }
+
+    /**
+     * 与 Edge 扩展保持一致：超过 32 字节时取前 32 字节作为 AES 密钥。
+     * AES-256 需要 32 字节，AES-128 需要 16 字节；64 字节的 userKey 需要截断。
+     */
+    private fun ByteArray.aesKey(): ByteArray = if (this.size > 32) this.copyOfRange(0, 32) else this
 }
