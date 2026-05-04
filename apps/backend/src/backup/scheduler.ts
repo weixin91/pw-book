@@ -2,6 +2,7 @@ import { exec } from "node:child_process";
 import { promisify } from "node:util";
 import { mkdir, readdir, stat, unlink } from "node:fs/promises";
 import { join } from "node:path";
+import type { FastifyInstance } from "fastify";
 
 const execAsync = promisify(exec);
 
@@ -11,7 +12,7 @@ function resolveDbPath(): string {
   return url.slice(5);
 }
 
-async function backup() {
+async function backup(app: FastifyInstance) {
   const db = resolveDbPath();
   const dir = process.env.BACKUP_DIR ?? "./backups";
   const keepDays = parseInt(process.env.BACKUP_RETENTION_DAYS ?? "7", 10);
@@ -20,7 +21,7 @@ async function backup() {
 
   await mkdir(dir, { recursive: true });
   await execAsync(`sqlite3 "${db}" ".backup '${out}'"`);
-  console.log(`[backup] 已备份: ${out}`);
+  app.log.info(`[backup] 已备份: ${out}`);
 
   const cutoff = Date.now() - keepDays * 86400000;
   for (const f of await readdir(dir)) {
@@ -28,7 +29,7 @@ async function backup() {
     const s = await stat(join(dir, f));
     if (s.mtimeMs < cutoff) {
       await unlink(join(dir, f));
-      console.log(`[backup] 已删除过期备份: ${f}`);
+      app.log.info(`[backup] 已删除过期备份: ${f}`);
     }
   }
 }
@@ -40,18 +41,18 @@ function nextDelayMs(hour: number): number {
   return t.getTime() - now.getTime();
 }
 
-export function startBackupScheduler() {
+export function startBackupScheduler(app: FastifyInstance) {
   if (process.env.BACKUP_ENABLED !== "true") {
-    console.log("[backup] 自动备份未启用");
+    app.log.info("[backup] 自动备份未启用");
     return;
   }
   const hour = parseInt(process.env.BACKUP_HOUR ?? "3", 10);
   const delay = nextDelayMs(hour);
-  console.log(
+  app.log.info(
     `[backup] 已启用，每天 ${String(hour).padStart(2, "0")}:00 备份，首次在 ${(delay / 3600000).toFixed(1)} 小时后`
   );
   setTimeout(() => {
-    backup().catch(console.error);
-    setInterval(() => backup().catch(console.error), 86400000);
+    backup(app).catch((err) => app.log.error(err));
+    setInterval(() => backup(app).catch((err) => app.log.error(err)), 86400000);
   }, delay);
 }
