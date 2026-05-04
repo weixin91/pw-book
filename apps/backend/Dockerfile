@@ -11,6 +11,7 @@ RUN pnpm --filter @pwbook/shared-types build
 RUN pnpm --filter backend build
 
 FROM node:20-alpine
+RUN apk add --no-cache sqlite
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=builder /app/apps/backend/dist ./apps/backend/dist

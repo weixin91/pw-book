@@ -117,6 +117,10 @@ docker run -d \
   -e JWT_SECRET="your-secret-key" \
   -e DATABASE_URL="file:/data/pwbook.db" \
   -e ALLOWED_EMAILS="user1@example.com,user2@example.com" \
+  -e BACKUP_ENABLED="true" \
+  -e BACKUP_DIR="/data/backups" \
+  -e BACKUP_HOUR=3 \
+  -e BACKUP_RETENTION_DAYS=7 \
   -v ./data:/data \
   --name pwbook-api \
   --restart unless-stopped \
@@ -139,34 +143,40 @@ pnpm start
 
 ## 数据备份
 
-后端使用 SQLite 单文件数据库（`./data/pwbook.db`），**目前无内置自动备份功能**，请自行做好备份。
+后端使用 SQLite 单文件数据库（`./data/pwbook.db`）。
 
-### 备份数据库文件
+### 自动备份（推荐）
 
-SQLite 数据库可直接复制文件备份。建议先暂停写入以确保一致性：
+服务内置定时自动备份，通过环境变量控制：
 
 ```bash
-# 方式一：直接复制（简单场景）
-cp ./data/pwbook.db ./data/pwbook.db.backup.$(date +%Y%m%d)
-
-# 方式二：使用 sqlite3 在线热备份（推荐）
-sqlite3 ./data/pwbook.db ".backup ./data/pwbook.db.backup.$(date +%Y%m%d)"
+BACKUP_ENABLED=true           # 启用自动备份
+BACKUP_DIR="./backups"        # 备份目录
+BACKUP_HOUR=3                 # 每天几点执行（0-23）
+BACKUP_RETENTION_DAYS=7       # 保留天数
 ```
 
-### Docker 部署下的备份
+启用后，服务每天定时使用 SQLite 原生 `.backup` 命令执行**在线热备份**（备份期间不中断服务），并自动清理超期的旧备份。
+
+### 手动备份
+
+如需手动触发或在外部备份：
 
 ```bash
-# 从运行中的容器导出数据库
+# sqlite3 在线热备份（不中断服务）
+sqlite3 ./data/pwbook.db ".backup ./backups/pwbook_manual.db"
+
+# Docker 部署下从容器导出
 docker exec pwbook-api sh -c "sqlite3 /data/pwbook.db '.backup /data/pwbook.db.backup'"
 docker cp pwbook-api:/data/pwbook.db.backup ./pwbook.db.backup
 ```
 
-### 定时自动备份（cron 示例）
-
-每天凌晨 3 点自动备份并保留最近 7 份：
+### 恢复备份
 
 ```bash
-0 3 * * * sqlite3 /data/pwbook.db ".backup /data/backups/pwbook_$(date +\%Y\%m\%d).db" && find /data/backups -name "pwbook_*.db" -mtime +7 -delete
+# 停止服务后，用备份文件替换当前数据库
+cp ./backups/pwbook_2026-01-01_03-00.db ./data/pwbook.db
+# 重新启动服务
 ```
 
 **重要提示**：密码数据采用端到端加密，服务端数据库仅存储加密后的密文。备份文件同样安全，但务必妥善保管主密码和恢复码，丢失后将无法解密任何数据。

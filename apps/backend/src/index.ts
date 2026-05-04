@@ -12,6 +12,7 @@ import { cookieRoutes } from "./cookies/routes.js";
 import { cookieConfigRoutes } from "./cookies/config-routes.js";
 import { registerWebSocket } from "./websocket/server.js";
 import { registrationWhitelist } from "./auth/whitelist.js";
+import { startBackupScheduler } from "./backup/scheduler.js";
 
 dotenv.config();
 
@@ -48,6 +49,8 @@ if (registrationWhitelist) {
 } else {
   console.log("[whitelist] 注册白名单未配置，允许所有人注册");
 }
+
+startBackupScheduler();
 
 // 安全提示：生产环境应在前方部署反向代理（如 Nginx、Caddy、Traefik）以提供 HTTPS/TLS 1.3
 try {

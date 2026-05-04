@@ -8,6 +8,10 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       NODE_ENV: production
       PORT: 3000
+      BACKUP_ENABLED: "true"
+      BACKUP_DIR: "/data/backups"
+      BACKUP_HOUR: 3
+      BACKUP_RETENTION_DAYS: 7
     ports:
       - "3000:3000"
     volumes:
