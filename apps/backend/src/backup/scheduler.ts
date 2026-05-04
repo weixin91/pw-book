@@ -43,7 +43,7 @@ function nextDelayMs(hour: number): number {
 
 export function startBackupScheduler(app: FastifyInstance) {
   if (process.env.BACKUP_ENABLED !== "true") {
-    app.log.info("[backup] 自动备份未启用");
+    app.log.warn("[backup] 自动备份未启用");
     return;
   }
   const hour = parseInt(process.env.BACKUP_HOUR ?? "3", 10);

@@ -45,9 +45,9 @@ const PORT = parseInt(process.env.PORT || "3000", 10);
 const HOST = process.env.HOST || "0.0.0.0";
 
 if (registrationWhitelist) {
-  app.log.info(`[whitelist] 注册白名单已启用: ${Array.from(registrationWhitelist).join(", ")}`);
+  app.log.warn(`[whitelist] 注册白名单已启用: ${Array.from(registrationWhitelist).join(", ")}`);
 } else {
-  app.log.info("[whitelist] 注册白名单未配置，允许所有人注册");
+  app.log.warn("[whitelist] 注册白名单未配置，允许所有人注册");
 }
 
 startBackupScheduler(app);
