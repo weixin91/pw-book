@@ -12,7 +12,10 @@ import { decryptCipherData, encryptCipherData } from "../crypto/crypto-service.j
 import { startLockTimer, initIdleListener } from "./lock-timer.js";
 import { PendingChangesQueue } from "../sync/pending-changes.js";
 import { SyncScheduler } from "../sync/sync-scheduler.js";
-import { parseUri, isUriMatch, type DomainAssocLite } from "../autofill/domain-utils.js";
+import { parseUri, type DomainAssocLite } from "../autofill/domain-utils.js";
+import { parseCipherData, getLoginData } from "../crypto/cipher-data-parser.js";
+import { CipherIndexService } from "../crypto/cipher-index.js";
+import type { CipherData } from "@pwbook/shared-types";
 interface StoredFormData {
   tabId: number;
   url: string;
@@ -284,21 +287,21 @@ async function handleGetVaultItems(urlStr: string): Promise<Array<Record<string,
   if (!sourceId) return [];
   const rules = await getAssocRules();
 
+  // 先从索引筛选匹配的 cipher ID，减少解密次数
+  const indexEntries = await CipherIndexService.getAll();
+  const matchedIds = CipherIndexService.filterByDomain(indexEntries, sourceId, rules);
+
+  // 只解密匹配的凭据
   const matched = [];
-  for (const cipher of ciphers) {
+  for (const cipherId of matchedIds) {
+    const cipher = ciphers.find((c) => c.id === cipherId);
+    if (!cipher) continue;
     try {
       const plainText = await decryptCipherData(cipher.data, userKey);
-      const data = JSON.parse(plainText);
-      const uris = data.login?.uris ?? [];
-      const isMatch = uris.some((u: { uri?: string }) => {
-        if (!u.uri) return false;
-        const targetId = parseUri(u.uri);
-        if (!targetId) return false;
-        return isUriMatch(sourceId, targetId, rules);
-      });
-      if (isMatch) matched.push({ cipher, data });
-    } catch {
-      // 跳过无法解密的凭据
+      const cipherData = parseCipherData(plainText);
+      matched.push({ cipher, data: cipherData });
+    } catch (e) {
+      console.error("[PWBook] 解密凭据失败:", cipher.id, e);
     }
   }
 
@@ -309,14 +312,17 @@ async function handleGetVaultItems(urlStr: string): Promise<Array<Record<string,
     return tb - ta;
   });
 
-  const result = matched.map(({ cipher, data }) => ({
-    id: cipher.id,
-    name: data.name,
-    username: data.login?.username ?? "",
-    password: data.login?.password ?? "",
-    uri: data.login?.uris?.[0]?.uri ?? "",
-    totp: data.login?.totp ?? "",
-  }));
+  const result = matched.map(({ cipher, data }) => {
+    const login = getLoginData(data);
+    return {
+      id: cipher.id,
+      name: data.name,
+      username: login.username,
+      password: login.password,
+      uri: login.uris[0]?.uri ?? "",
+      totp: login.totp ?? "",
+    };
+  });
   return result;
 }
 
@@ -339,34 +345,39 @@ async function handleSaveCipher(data: Record<string, unknown>): Promise<{ succes
     // 命中条件：URI 匹配（含子域名共享与关联规则） + 用户名完全相同
     let updatedCipherId: string | null = null;
     let resultEncrypted: string | null = null;
+    let resultData: CipherData | null = null;
 
     if (incomingId) {
-      for (let i = 0; i < ciphers.length; i++) {
+      // 先从索引筛选匹配域名和用户名的 cipher ID
+      const indexEntries = await CipherIndexService.getAll();
+      const matchedIds = await CipherIndexService.filterByDomainAndUsername(
+        indexEntries,
+        incomingId,
+        incomingUsername,
+        rules
+      );
+
+      for (const cipherId of matchedIds) {
+        const i = ciphers.findIndex((c) => c.id === cipherId);
+        if (i < 0) continue;
         try {
           const plainText = await decryptCipherData(ciphers[i].data, userKey);
-          const existing = JSON.parse(plainText) as Record<string, unknown>;
-          const existingLogin = (existing.login as Record<string, unknown>) ?? {};
-          const existingUsername = String(existingLogin.username ?? "");
-          if (existingUsername !== incomingUsername) continue;
-
-          const existingUris = (existingLogin.uris as Array<{ uri?: string }>) ?? [];
-          const uriMatched = existingUris.some((u) => {
-            if (!u.uri) return false;
-            const id = parseUri(u.uri);
-            return id ? isUriMatch(incomingId, id, rules) : false;
-          });
-          if (!uriMatched) continue;
+          const existing = parseCipherData(plainText);
+          const existingLogin = getLoginData(existing);
 
           // 命中：保留原有 name / notes / fields / uris 等，仅更新 password 与 lastUsedAt
-          const merged = {
+          const merged: CipherData = {
             ...existing,
             lastUsedAt: new Date().toISOString(),
             login: {
-              ...existingLogin,
+              username: existingLogin.username,
               password: incomingPassword,
+              uris: existingLogin.uris,
+              totp: existingLogin.totp,
             },
           };
           resultEncrypted = await encryptCipherData(JSON.stringify(merged), userKey);
+          resultData = merged;
           ciphers[i] = {
             ...ciphers[i],
             data: resultEncrypted,
@@ -374,8 +385,8 @@ async function handleSaveCipher(data: Record<string, unknown>): Promise<{ succes
           };
           updatedCipherId = ciphers[i].id;
           break;
-        } catch {
-          // 跳过无法解密的凭据
+        } catch (e) {
+          console.error("[PWBook] 解密凭据失败:", ciphers[i].id, e);
         }
       }
     }
@@ -395,11 +406,18 @@ async function handleSaveCipher(data: Record<string, unknown>): Promise<{ succes
       };
       ciphers.push(cipher);
       newCipherId = cipher.id;
+      // 新建凭据时，从 data 中解析出 CipherData 用于索引更新
+      resultData = parseCipherData(JSON.stringify(data));
     }
 
     await StorageService.setCiphers(ciphers);
 
+    // 更新索引
     const targetId = updatedCipherId ?? newCipherId!;
+    if (resultData) {
+      await CipherIndexService.updateOne(targetId, resultData);
+    }
+
     const queue = new PendingChangesQueue();
     await queue.enqueue({
       cipherId: targetId,
@@ -426,25 +444,40 @@ async function isCredentialAlreadySaved(url: string, username: string, password:
   if (!sourceId) return false;
   const rules = await getAssocRules();
 
-  for (const cipher of ciphers) {
+  // 先从索引筛选匹配域名和用户名的 cipher ID
+  const indexEntries = await CipherIndexService.getAll();
+  const matchedIds = await CipherIndexService.filterByDomainAndUsername(
+    indexEntries,
+    sourceId,
+    username,
+    rules
+  );
+
+  // 只解密匹配的凭据检查密码
+  for (const cipherId of matchedIds) {
+    const cipher = ciphers.find((c) => c.id === cipherId);
+    if (!cipher) continue;
     try {
       const plainText = await decryptCipherData(cipher.data, userKey);
-      const data = JSON.parse(plainText);
-      const uris = data.login?.uris ?? [];
-      const isDomainMatch = uris.some((u: { uri?: string }) => {
-        if (!u.uri) return false;
-        const targetId = parseUri(u.uri);
-        if (!targetId) return false;
-        return isUriMatch(sourceId, targetId, rules);
-      });
-      if (isDomainMatch && data.login?.username === username && data.login?.password === password) {
+      const cipherData = parseCipherData(plainText);
+      const login = getLoginData(cipherData);
+      if (login.password === password) {
         return true;
       }
-    } catch {
-      // 跳过无法解密的凭据
+    } catch (e) {
+      console.error("[PWBook] 解密凭据失败:", cipher.id, e);
     }
   }
   return false;
+}
+
+// 解锁后重建索引（确保索引与当前数据一致）
+async function rebuildCipherIndex(): Promise<void> {
+  const userKey = await StorageService.getUserKey();
+  if (!userKey) return;
+
+  const ciphers = await StorageService.getCiphers();
+  await CipherIndexService.rebuild(ciphers, (data) => decryptCipherData(data, userKey));
 }
 
 // 初始化后台锁定监听
@@ -462,6 +495,8 @@ chrome.runtime.onMessage.addListener((message) => {
     startLockTimer().catch(() => {});
     // 解锁后立即尝试同步
     syncScheduler.performSync().catch(() => {});
+    // 解锁后重建索引（确保索引与当前数据一致）
+    rebuildCipherIndex().catch(() => {});
   }
   if (msg.type === "TRIGGER_SYNC_NOW") {
     syncScheduler.performSync().catch(() => {});

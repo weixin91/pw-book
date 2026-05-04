@@ -1,4 +1,5 @@
 // WebSocket 客户端及轮询降级
+// 使用首条消息认证，避免 Token 在 URL 中暴露
 
 import { StorageService } from "../platform/storage.js";
 
@@ -10,6 +11,7 @@ export class WebSocketClient {
   private baseDelay = 1000;
   private onSyncRequiredCallback: (() => void) | null = null;
   private onDeviceLogoutCallback: (() => void) | null = null;
+  private authenticated = false;
 
   constructor(
     private onSyncRequired?: () => void,
@@ -24,23 +26,44 @@ export class WebSocketClient {
     if (!profile?.token) return;
 
     const baseUrl = await StorageService.getServerUrl();
-    const wsUrl = baseUrl.replace(/^http/, "ws") + `/ws?token=${profile.token}`;
+    // 不在 URL 中传递 token，改为首条消息认证
+    const wsUrl = baseUrl.replace(/^http/, "ws") + "/ws";
 
     try {
       this.ws = new WebSocket(wsUrl);
+      this.authenticated = false;
 
       this.ws.onopen = () => {
-        this.reconnectAttempts = 0;
-        this.startHeartbeat();
+        // 连接成功后发送认证消息
+        this.ws?.send(JSON.stringify({ type: "AUTH", token: profile.token }));
       };
 
       this.ws.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data);
-          if (msg.type === "SYNC_REQUIRED") {
-            this.onSyncRequiredCallback?.();
-          } else if (msg.type === "DEVICE_LOGOUT") {
-            this.onDeviceLogoutCallback?.();
+
+          // 处理认证响应
+          if (msg.type === "AUTH_SUCCESS") {
+            this.authenticated = true;
+            this.reconnectAttempts = 0;
+            this.startHeartbeat();
+            return;
+          }
+
+          if (msg.type === "AUTH_FAILED" || msg.type === "AUTH_REQUIRED") {
+            // 认证失败，重新连接
+            this.disconnect();
+            this.scheduleReconnect();
+            return;
+          }
+
+          // 认证成功后处理业务消息
+          if (this.authenticated) {
+            if (msg.type === "SYNC_REQUIRED") {
+              this.onSyncRequiredCallback?.();
+            } else if (msg.type === "DEVICE_LOGOUT") {
+              this.onDeviceLogoutCallback?.();
+            }
           }
         } catch {
           // ignore invalid messages
@@ -49,6 +72,7 @@ export class WebSocketClient {
 
       this.ws.onclose = () => {
         this.stopHeartbeat();
+        this.authenticated = false;
         this.scheduleReconnect();
       };
 
@@ -68,6 +92,7 @@ export class WebSocketClient {
     }
     this.ws?.close();
     this.ws = null;
+    this.authenticated = false;
   }
 
   private scheduleReconnect(): void {
@@ -87,7 +112,7 @@ export class WebSocketClient {
   private startHeartbeat(): void {
     this.stopHeartbeat();
     this.heartbeatTimer = setInterval(() => {
-      if (this.ws?.readyState === WebSocket.OPEN) {
+      if (this.ws?.readyState === WebSocket.OPEN && this.authenticated) {
         this.ws.send(JSON.stringify({ type: "PING" }));
       }
     }, 30000);

@@ -1,12 +1,10 @@
 import type { FastifyInstance } from "fastify";
-import { PrismaClient } from "@prisma/client";
 import { z } from "zod";
 import { authenticate } from "../auth/jwt.js";
 import { ApiError } from "../errors/handler.js";
 import { calculateSyncChecksum } from "./checksum.js";
 import { broadcastSyncRequired } from "../websocket/server.js";
-
-const prisma = new PrismaClient();
+import { prisma } from "../db/prisma.js";
 
 const pushSchema = z.object({
   changes: z.array(

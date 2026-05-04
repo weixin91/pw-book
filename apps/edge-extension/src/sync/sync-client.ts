@@ -1,6 +1,8 @@
 // 同步客户端 — 全量同步、基于时间戳的增量同步
 
 import { StorageService } from "../platform/storage.js";
+import { CipherIndexService } from "../crypto/cipher-index.js";
+import { decryptCipherData } from "../crypto/crypto-service.js";
 import type { SyncResponse, SyncPushRequest, SyncPushResponse } from "@pwbook/shared-types";
 
 export class SyncClient {
@@ -91,6 +93,13 @@ export class SyncClient {
     }
 
     await StorageService.setCiphers(Array.from(localMap.values()));
+
+    // 同步后重建索引（如果保险库已解锁）
+    const userKey = await StorageService.getUserKey();
+    if (userKey) {
+      const ciphers = Array.from(localMap.values());
+      await CipherIndexService.rebuild(ciphers, (data) => decryptCipherData(data, userKey));
+    }
 
     // 域名关联规则采用服务端权威：每次拉取都覆盖本地缓存
     if (Array.isArray(data.domainAssociations)) {

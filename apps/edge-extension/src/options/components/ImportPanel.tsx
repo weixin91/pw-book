@@ -1,5 +1,7 @@
 import React, { useState, useRef } from "react";
 import { StorageService } from "../../platform/storage";
+import { CipherIndexService } from "../../crypto/cipher-index";
+import { decryptCipherData } from "../../crypto/crypto-service";
 import { PendingChangesQueue } from "../../sync/pending-changes";
 import {
   parseBitwardenExport,
@@ -79,6 +81,9 @@ export function ImportPanel(): React.ReactElement {
         const merged = [...existingCiphers, ...ciphers];
         await StorageService.setCiphers(merged);
 
+        // 导入后重建索引
+        await CipherIndexService.rebuild(merged, (data) => decryptCipherData(data, userKey));
+
         const queue = new PendingChangesQueue();
         for (const cipher of ciphers) {
           await queue.enqueue({
@@ -101,6 +106,7 @@ export function ImportPanel(): React.ReactElement {
   async function handleClearVault() {
     if (!window.confirm("确定清空本地保险库吗？所有凭据将被删除且不可恢复。")) return;
     await StorageService.setCiphers([]);
+    await CipherIndexService.clear();
     await StorageService.setPendingChanges([]);
     await StorageService.setLastSyncToken("");
     setError(null);

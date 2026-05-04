@@ -6,18 +6,30 @@ import type { FastifyInstance } from "fastify";
 
 const execAsync = promisify(exec);
 
+/**
+ * 校验路径安全性，防止命令注入
+ * 仅允许字母、数字、下划线、连字符、点、斜杠
+ */
+function validatePath(path: string): string {
+  const normalized = path.replace(/[^a-zA-Z0-9_\-/.]/g, "");
+  if (normalized !== path) {
+    throw new Error(`非法路径字符: ${path}`);
+  }
+  return normalized;
+}
+
 function resolveDbPath(): string {
   const url = process.env.DATABASE_URL ?? "";
   if (!url.startsWith("file:")) throw new Error("BACKUP: DATABASE_URL 必须是 file: 协议");
-  return url.slice(5);
+  return validatePath(url.slice(5));
 }
 
 async function backup(app: FastifyInstance) {
   const db = resolveDbPath();
-  const dir = process.env.BACKUP_DIR ?? "./backups";
+  const dir = validatePath(process.env.BACKUP_DIR ?? "./backups");
   const keepDays = parseInt(process.env.BACKUP_RETENTION_DAYS ?? "7", 10);
   const ts = new Date().toISOString().replace(/[:T]/g, "-").slice(0, 16);
-  const out = join(dir, `pwbook_${ts}.db`);
+  const out = validatePath(join(dir, `pwbook_${ts}.db`));
 
   await mkdir(dir, { recursive: true });
   await execAsync(`sqlite3 "${db}" ".backup '${out}'"`);
@@ -26,10 +38,13 @@ async function backup(app: FastifyInstance) {
   const cutoff = Date.now() - keepDays * 86400000;
   for (const f of await readdir(dir)) {
     if (!f.startsWith("pwbook_") || !f.endsWith(".db")) continue;
-    const s = await stat(join(dir, f));
+    // 校验文件名安全性
+    const validatedName = validatePath(f);
+    const filePath = join(dir, validatedName);
+    const s = await stat(filePath);
     if (s.mtimeMs < cutoff) {
-      await unlink(join(dir, f));
-      app.log.info(`[backup] 已删除过期备份: ${f}`);
+      await unlink(filePath);
+      app.log.info(`[backup] 已删除过期备份: ${validatedName}`);
     }
   }
 }

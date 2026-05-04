@@ -148,29 +148,73 @@ export const StorageService = {
     await chrome.storage.local.set({ [LOCAL_KEYS.DOMAIN_ASSOCIATIONS]: rules });
   },
 
-  // --- chrome.storage.session (MV3, Service Worker 存活期间) ---
+  // --- chrome.storage.session (MV3, Service Worker 存活期间) + 条件持久化 ---
 
+  /**
+   * 存储用户密钥
+   * @param userKey 解密后的用户密钥
+   * @param persist 是否持久化到 local storage（仅"从不锁定"时为 true）
+   */
+  async setUserKey(userKey: Uint8Array, persist: boolean = false): Promise<void> {
+    const data = { userKey: Array.from(userKey) };
+    // 始终写入 session storage（浏览器关闭后自动清除）
+    await chrome.storage.session.set(data);
+
+    if (persist) {
+      // 仅"从不锁定"模式才持久化到 local storage
+      await chrome.storage.local.set(data);
+    } else {
+      // 确保 local storage 中没有残留密钥
+      await chrome.storage.local.remove("userKey");
+    }
+  },
+
+  /**
+   * 获取用户密钥
+   * 优先从 session 获取；仅在"从不锁定"模式下从 local 恢复
+   */
   async getUserKey(): Promise<Uint8Array | null> {
     try {
-      const result = await chrome.storage.session.get("userKey");
-      if (result.userKey) return new Uint8Array(result.userKey);
-      // 回退到 local storage，支持“从不”锁定模式在浏览器重启后恢复
-      const localResult = await chrome.storage.local.get("userKey");
-      if (localResult.userKey) return new Uint8Array(localResult.userKey);
+      // 优先从 session storage 获取（会话期间有效）
+      const sessionResult = await chrome.storage.session.get("userKey");
+      if (sessionResult.userKey) {
+        return new Uint8Array(sessionResult.userKey);
+      }
+
+      // 检查锁定设置，仅"从不锁定"时才从 local storage 恢复
+      const lockSettings = await this.getLockSettings();
+      if (lockSettings && lockSettings.timeoutMin <= 0) {
+        const localResult = await chrome.storage.local.get("userKey");
+        if (localResult.userKey) {
+          // 恢复到 session storage
+          await chrome.storage.session.set({ userKey: localResult.userKey });
+          return new Uint8Array(localResult.userKey);
+        }
+      }
+
       return null;
     } catch {
       return null;
     }
   },
 
-  async setUserKey(userKey: Uint8Array): Promise<void> {
-    const data = { userKey: Array.from(userKey) };
-    await chrome.storage.session.set(data);
-    await chrome.storage.local.set(data); // 同时持久化，支持“从不”锁定和重启恢复
-  },
-
   async clearUserKey(): Promise<void> {
     await chrome.storage.session.remove("userKey");
     await chrome.storage.local.remove("userKey");
+  },
+
+  // --- 锁定设置 ---
+
+  async getLockSettings(): Promise<{ timeoutMin: number; lockOnBackground: boolean } | null> {
+    try {
+      const result = await chrome.storage.local.get("lockSettings");
+      return result.lockSettings ?? { timeoutMin: 15, lockOnBackground: false };
+    } catch {
+      return { timeoutMin: 15, lockOnBackground: false };
+    }
+  },
+
+  async setLockSettings(settings: { timeoutMin: number; lockOnBackground: boolean }): Promise<void> {
+    await chrome.storage.local.set({ lockSettings: settings });
   },
 } as const;

@@ -40,7 +40,12 @@ export function UnlockScreen({ onUnlocked }: Props): React.ReactElement {
         return;
       }
       const userKey = await decryptUserKey(protectedKey, stretched);
-      await StorageService.setUserKey(userKey);
+
+      // 根据锁定设置决定是否持久化密钥
+      const lockSettings = await StorageService.getLockSettings();
+      const persist = lockSettings != null && lockSettings.timeoutMin <= 0; // "从不锁定"才持久化
+
+      await StorageService.setUserKey(userKey, persist);
       chrome.runtime.sendMessage({ type: "VAULT_UNLOCKED" });
       onUnlocked();
     } catch {

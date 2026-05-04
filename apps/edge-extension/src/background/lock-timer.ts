@@ -3,7 +3,6 @@
 
 import { StorageService } from "../platform/storage.js";
 
-const LOCK_SETTINGS_KEY = "lockSettings";
 const DEFAULT_TIMEOUT_MIN = 15;
 let lockTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -12,24 +11,14 @@ export interface LockSettings {
   lockOnBackground: boolean;
 }
 
-const DEFAULT_LOCK_SETTINGS: LockSettings = {
-  timeoutMin: DEFAULT_TIMEOUT_MIN,
-  lockOnBackground: false,
-};
-
 export const LockSettingsService = {
   async load(): Promise<LockSettings> {
-    try {
-      const result = await chrome.storage.local.get(LOCK_SETTINGS_KEY);
-      const saved = result[LOCK_SETTINGS_KEY] as LockSettings | undefined;
-      return { ...DEFAULT_LOCK_SETTINGS, ...saved };
-    } catch {
-      return { ...DEFAULT_LOCK_SETTINGS };
-    }
+    const settings = await StorageService.getLockSettings();
+    return settings ?? { timeoutMin: DEFAULT_TIMEOUT_MIN, lockOnBackground: false };
   },
 
   async save(settings: LockSettings): Promise<void> {
-    await chrome.storage.local.set({ [LOCK_SETTINGS_KEY]: settings });
+    await StorageService.setLockSettings(settings);
   },
 };
 

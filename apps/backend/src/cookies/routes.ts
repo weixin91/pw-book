@@ -1,10 +1,8 @@
 import type { FastifyInstance } from "fastify";
-import { PrismaClient } from "@prisma/client";
 import { z } from "zod";
 import { authenticate } from "../auth/jwt.js";
 import { ApiError } from "../errors/handler.js";
-
-const prisma = new PrismaClient();
+import { prisma } from "../db/prisma.js";
 
 const cookieSchema = z.object({
   domain: z.string().min(1),
@@ -49,24 +47,26 @@ export async function cookieRoutes(app: FastifyInstance): Promise<void> {
       const userId = request.user!.sub;
       const body = batchSchema.parse(request.body);
 
-      const accepted: string[] = [];
+      // 使用事务批量写入，确保原子性
+      const results = await prisma.$transaction(
+        body.items.map((item) =>
+          prisma.cookieData.upsert({
+            where: { userId_domain: { userId, domain: item.domain } },
+            update: {
+              encryptedData: item.encryptedData,
+              modifiedAt: item.modifiedAt ? new Date(item.modifiedAt) : new Date(),
+            },
+            create: {
+              userId,
+              domain: item.domain,
+              encryptedData: item.encryptedData,
+              modifiedAt: item.modifiedAt ? new Date(item.modifiedAt) : new Date(),
+            },
+          })
+        )
+      );
 
-      for (const item of body.items) {
-        await prisma.cookieData.upsert({
-          where: { userId_domain: { userId, domain: item.domain } },
-          update: {
-            encryptedData: item.encryptedData,
-            modifiedAt: item.modifiedAt ? new Date(item.modifiedAt) : new Date(),
-          },
-          create: {
-            userId,
-            domain: item.domain,
-            encryptedData: item.encryptedData,
-            modifiedAt: item.modifiedAt ? new Date(item.modifiedAt) : new Date(),
-          },
-        });
-        accepted.push(item.domain);
-      }
+      const accepted = results.map((r) => r.domain);
 
       return reply.send({
         accepted,

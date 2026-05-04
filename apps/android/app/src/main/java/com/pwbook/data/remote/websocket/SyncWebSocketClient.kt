@@ -44,6 +44,9 @@ class SyncWebSocketClient @Inject constructor(
     @Volatile
     private var isRunning = false
 
+    @Volatile
+    private var isAuthenticated = false
+
     fun addListener(listener: Listener) {
         listeners.add(listener)
     }
@@ -61,6 +64,7 @@ class SyncWebSocketClient @Inject constructor(
 
     fun stop() {
         isRunning = false
+        isAuthenticated = false
         reconnectJob?.cancel()
         pingJob?.cancel()
         scope.launch {
@@ -81,12 +85,14 @@ class SyncWebSocketClient @Inject constructor(
                 return@launch
             }
             try {
-                val wsUrl = "ws://10.0.2.2:3000/ws?token=$token"
+                // 不在 URL 中传递 token，改为首条消息认证
+                val wsUrl = "ws://10.0.2.2:3000/ws"
                 session = client.webSocketSession(wsUrl)
-                reconnectAttempt = 0
-                listeners.forEach { it.onConnected() }
-                Timber.i("WebSocket connected")
-                startPing()
+                isAuthenticated = false
+
+                // 连接成功后发送认证消息
+                session?.outgoing?.send(Frame.Text("""{"type":"AUTH","token":"$token"}"""))
+
                 receiveMessages()
             } catch (e: Exception) {
                 Timber.e(e, "WebSocket connection failed")
@@ -117,9 +123,24 @@ class SyncWebSocketClient @Inject constructor(
         try {
             val message = json.decodeFromString(WsMessage.serializer(), text)
             when (message.type) {
+                "AUTH_SUCCESS" -> {
+                    isAuthenticated = true
+                    reconnectAttempt = 0
+                    listeners.forEach { it.onConnected() }
+                    Timber.i("WebSocket authenticated")
+                    startPing()
+                }
+                "AUTH_FAILED", "AUTH_REQUIRED" -> {
+                    Timber.w("WebSocket authentication failed")
+                    isAuthenticated = false
+                    listeners.forEach { it.onDisconnected() }
+                    scheduleReconnect()
+                }
                 "SYNC_REQUIRED" -> {
-                    Timber.i("WebSocket: SYNC_REQUIRED received")
-                    listeners.forEach { it.onSyncRequired() }
+                    if (isAuthenticated) {
+                        Timber.i("WebSocket: SYNC_REQUIRED received")
+                        listeners.forEach { it.onSyncRequired() }
+                    }
                 }
                 "PONG" -> Timber.d("WebSocket: PONG")
                 "DEVICE_LOGOUT" -> Timber.w("WebSocket: DEVICE_LOGOUT received")
@@ -133,7 +154,7 @@ class SyncWebSocketClient @Inject constructor(
     private fun startPing() {
         pingJob?.cancel()
         pingJob = scope.launch {
-            while (isActive && isRunning) {
+            while (isActive && isRunning && isAuthenticated) {
                 delay(30_000)
                 try {
                     session?.outgoing?.send(Frame.Text("""{"type":"PING"}"""))

@@ -4,6 +4,9 @@
 import { StorageService } from "../platform/storage.js";
 import { decryptCipherData, encryptCipherData } from "../crypto/crypto-service.js";
 import { PendingChangesQueue } from "../sync/pending-changes.js";
+import { parseCipherData, getLoginData, getPasskeyData } from "../crypto/cipher-data-parser.js";
+import { CipherIndexService } from "../crypto/cipher-index.js";
+import type { CipherData } from "@pwbook/shared-types";
 import {
   generatePasskey,
   importPasskeyPrivateKey,
@@ -14,8 +17,6 @@ import {
   signAssertion,
   base64UrlEncode,
   base64UrlDecode,
-  CIPHER_TYPE_PASSKEY,
-  type PasskeyData,
 } from "../crypto/passkey-storage.js";
 
 const PASSKEY_AAGUID = new Uint8Array(16); // 全 0：软件认证器
@@ -102,34 +103,29 @@ export async function queryPasskeySaveCandidates(origin: string): Promise<SaveCa
   }
 
   const ciphers = await StorageService.getCiphers();
-  const candidates: SaveCandidate[] = [];
 
-  for (const cipher of ciphers) {
+  // 先从索引筛选匹配域名的 cipher ID
+  const indexEntries = await CipherIndexService.getAll();
+  const matchedIds = CipherIndexService.filterPasskeyCandidates(indexEntries, host, []);
+
+  // 只解密匹配的凭据
+  const candidates: SaveCandidate[] = [];
+  for (const cipherId of matchedIds) {
+    const cipher = ciphers.find((c) => c.id === cipherId);
+    if (!cipher) continue;
     try {
       const plain = await decryptCipherData(cipher.data, userKey);
-      const data = JSON.parse(plain) as Record<string, unknown>;
-      const login = (data.login as Record<string, unknown>) ?? {};
-      const uris = (login.uris as Array<{ uri?: string }>) ?? [];
-
-      // 只展示有 login 数据的凭据
-      const uriStr = uris[0]?.uri ?? "";
-      const uriHost = uriStr ? (() => {
-        try { return new URL(uriStr).hostname.toLowerCase(); } catch { return ""; }
-      })() : "";
-
-      // 简单匹配：host 相等或互为子域
-      const isMatch = uriHost && (uriHost === host || host.endsWith("." + uriHost) || uriHost.endsWith("." + host));
-
-      if (isMatch) {
-        candidates.push({
-          id: cipher.id,
-          name: String(data.name || ""),
-          username: String(login.username || ""),
-          uri: uriStr,
-        });
-      }
-    } catch {
-      // 跳过无法解密的凭据
+      const data = parseCipherData(plain);
+      const login = getLoginData(data);
+      const uriStr = login.uris[0]?.uri ?? "";
+      candidates.push({
+        id: cipher.id,
+        name: data.name || "",
+        username: login.username,
+        uri: uriStr,
+      });
+    } catch (e) {
+      console.error("[PWBook] queryPasskeySaveCandidates 解密失败:", cipher.id, e);
     }
   }
 
@@ -167,27 +163,23 @@ export async function queryPasskeyGetMatches(origin: string, publicKeyRaw: unkno
   console.log("[PWBook BG] queryPasskeyGetMatches: origin=", origin, "rpIdRequested=", rpIdRequested, "computed rpId=", rpId, "allowedIds count=", allowedIds.size);
 
   const ciphers = await StorageService.getCiphers();
-  const matches: GetMatch[] = [];
 
-  for (const cipher of ciphers) {
+  // 先从索引筛选匹配 rpId 的 passkey cipher ID
+  const indexEntries = await CipherIndexService.getAll();
+  const matchedIds = CipherIndexService.filterByRpId(indexEntries, rpId);
+
+  // 只解密匹配的凭据
+  const matches: GetMatch[] = [];
+  for (const cipherId of matchedIds) {
+    const cipher = ciphers.find((c) => c.id === cipherId);
+    if (!cipher) continue;
     try {
       const plain = await decryptCipherData(cipher.data, userKey);
-      const data = JSON.parse(plain) as Record<string, unknown>;
-      const passkey = data.passkey as PasskeyData | undefined;
+      const data = parseCipherData(plain);
+      const passkey = getPasskeyData(data);
       if (!passkey) continue;
 
-      // rpId 匹配：直接相等，或当前 origin host 以 passkey.rpId 结尾（支持子域）
-      const originHost = new URL(origin).hostname.toLowerCase();
-      const passkeyRpId = passkey.rpId.toLowerCase();
-      const rpIdMatch = passkeyRpId === rpId ||
-        (passkeyRpId === originHost) ||
-        (originHost.endsWith("." + passkeyRpId));
-
-      if (!rpIdMatch) {
-        console.log("[PWBook BG] queryPasskeyGetMatches: rpId 不匹配, passkey.rpId=", passkey.rpId, "computed rpId=", rpId, "originHost=", originHost);
-        continue;
-      }
-
+      // 允许列表过滤
       if (allowedIds.size > 0 && !allowedIds.has(passkey.credentialId)) {
         console.log("[PWBook BG] queryPasskeyGetMatches: credentialId 不匹配, passkey.credentialId=", passkey.credentialId, "allowedIds=", Array.from(allowedIds));
         continue;
@@ -196,12 +188,12 @@ export async function queryPasskeyGetMatches(origin: string, publicKeyRaw: unkno
       console.log("[PWBook BG] queryPasskeyGetMatches: 匹配成功, cipherId=", cipher.id, "name=", data.name, "rpId=", passkey.rpId);
       matches.push({
         id: cipher.id,
-        name: String(data.name || ""),
+        name: data.name || "",
         rpId: passkey.rpId,
         credentialId: passkey.credentialId,
       });
-    } catch {
-      // 跳过无法解密的凭据
+    } catch (e) {
+      console.error("[PWBook] queryPasskeyGetMatches 解密失败:", cipher.id, e);
     }
   }
 
@@ -267,9 +259,9 @@ export async function handleWebAuthnCreate(
     if (idx < 0) throw new Error("目标凭据不存在");
 
     const plain = await decryptCipherData(ciphers[idx].data, userKey);
-    const existingData = JSON.parse(plain) as Record<string, unknown>;
+    const existingData = parseCipherData(plain);
 
-    const updatedData = {
+    const updatedData: CipherData = {
       ...existingData,
       lastUsedAt: new Date().toISOString(),
       passkey: material.data,
@@ -282,6 +274,9 @@ export async function handleWebAuthnCreate(
       modifiedAt: new Date().toISOString(),
     };
     targetId = targetCipherId;
+
+    // 更新索引
+    await CipherIndexService.updateOne(targetId, updatedData);
 
     const queue = new PendingChangesQueue();
     await queue.enqueue({
@@ -319,6 +314,10 @@ export async function handleWebAuthnCreate(
     };
     ciphers.push(cipher);
     targetId = cipher.id;
+
+    // 更新索引
+    const parsedCipherData = parseCipherData(JSON.stringify(cipherData));
+    await CipherIndexService.updateOne(targetId, parsedCipherData);
 
     const queue = new PendingChangesQueue();
     await queue.enqueue({
@@ -365,20 +364,20 @@ export async function handleWebAuthnGet(
   );
 
   const ciphers = await StorageService.getCiphers();
-  let matched: { cipher: typeof ciphers[number]; passkey: PasskeyData; data: Record<string, unknown> } | null = null;
+  let matched: { cipher: typeof ciphers[number]; passkey: NonNullable<ReturnType<typeof getPasskeyData>>; data: CipherData } | null = null;
 
   for (const cipher of ciphers) {
     try {
       const plain = await decryptCipherData(cipher.data, userKey);
-      const data = JSON.parse(plain) as Record<string, unknown>;
-      const passkey = data.passkey as PasskeyData | undefined;
+      const data = parseCipherData(plain);
+      const passkey = getPasskeyData(data);
       if (!passkey || passkey.rpId !== rpId) continue;
       if (allowedIds.size > 0 && !allowedIds.has(passkey.credentialId)) continue;
       if (selectedCredentialId && passkey.credentialId !== selectedCredentialId) continue;
       matched = { cipher, passkey, data };
       if (selectedCredentialId) break; // 找到指定的就停
-    } catch {
-      // 跳过无法解密的凭据
+    } catch (e) {
+      console.error("[PWBook] handleWebAuthnGet 解密失败:", cipher.id, e);
     }
   }
 
@@ -401,10 +400,10 @@ export async function handleWebAuthnGet(
   const signature = await signAssertion(privateKey, authData, clientDataHash);
 
   // 更新 counter 并重新加密保存
-  const updatedData = {
+  const updatedData: CipherData = {
     ...matched.data,
     lastUsedAt: new Date().toISOString(),
-    passkey: { ...passkey, counter: newCounter },
+    passkey: { ...matched.passkey, counter: newCounter },
   };
   const encrypted = await encryptCipherData(JSON.stringify(updatedData), userKey);
   const idx = ciphers.findIndex((c) => c.id === matched!.cipher.id);

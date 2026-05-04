@@ -17,52 +17,69 @@ export function registerWebSocket(app: FastifyInstance): void {
     const server = app.server;
     wss = new WebSocketServer({ server, path: "/ws" });
 
-    wss.on("connection", (ws, req) => {
-      const url = new URL(req.url || "", `http://${req.headers.host || "localhost"}`);
-      const token = url.searchParams.get("token");
+    wss.on("connection", (ws, _req) => {
+      // 连接建立后等待首条认证消息
+      ws.send(JSON.stringify({ type: "AUTH_REQUIRED" }));
 
-      if (!token) {
-        ws.close(1008, "Missing token");
-        return;
-      }
+      ws.on("message", (raw: Buffer) => {
+        try {
+          const msg = JSON.parse(raw.toString());
 
-      verifyToken(token)
-        .then((payload) => {
-          const userId = payload.sub;
-          const clientConn: ClientConnection = {
-            socket: ws,
-            userId,
-            deviceId: payload.deviceId,
-          };
+          // 处理认证消息
+          if (msg.type === "AUTH" && msg.token) {
+            verifyToken(msg.token)
+              .then((payload) => {
+                const userId = payload.sub;
+                const clientConn: ClientConnection = {
+                  socket: ws,
+                  userId,
+                  deviceId: payload.deviceId,
+                };
 
-          const userClients = clients.get(userId) || [];
-          userClients.push(clientConn);
-          clients.set(userId, userClients);
+                const userClients = clients.get(userId) || [];
+                userClients.push(clientConn);
+                clients.set(userId, userClients);
 
-          ws.on("message", (raw: Buffer) => {
-            try {
-              const msg = JSON.parse(raw.toString());
-              if (msg.type === "PING") {
-                ws.send(JSON.stringify({ type: "PONG" }));
-              }
-            } catch {
-              // ignore invalid messages
-            }
-          });
+                ws.send(JSON.stringify({ type: "AUTH_SUCCESS" }));
 
-          ws.on("close", () => {
-            const list = clients.get(userId) || [];
-            const filtered = list.filter((c) => c.socket !== ws);
-            if (filtered.length === 0) {
-              clients.delete(userId);
-            } else {
-              clients.set(userId, filtered);
-            }
-          });
-        })
-        .catch(() => {
-          ws.close(1008, "Invalid token");
-        });
+                // 认证成功后，替换 message handler 处理后续消息
+                ws.removeAllListeners("message");
+                ws.on("message", (raw: Buffer) => {
+                  try {
+                    const msg = JSON.parse(raw.toString());
+                    if (msg.type === "PING") {
+                      ws.send(JSON.stringify({ type: "PONG" }));
+                    }
+                  } catch {
+                    // ignore invalid messages
+                  }
+                });
+
+                ws.on("close", () => {
+                  const list = clients.get(userId) || [];
+                  const filtered = list.filter((c) => c.socket !== ws);
+                  if (filtered.length === 0) {
+                    clients.delete(userId);
+                  } else {
+                    clients.set(userId, filtered);
+                  }
+                });
+              })
+              .catch(() => {
+                ws.send(JSON.stringify({ type: "AUTH_FAILED", error: "Token 无效或已过期" }));
+                ws.close(1008, "Invalid token");
+              });
+            return;
+          }
+
+          // 未认证的其他消息
+          if (msg.type !== "AUTH") {
+            ws.send(JSON.stringify({ type: "AUTH_REQUIRED" }));
+          }
+        } catch {
+          // ignore invalid JSON
+        }
+      });
     });
   });
 }

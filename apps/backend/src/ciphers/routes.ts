@@ -1,10 +1,8 @@
 import type { FastifyInstance } from "fastify";
-import { PrismaClient } from "@prisma/client";
 import { z } from "zod";
 import { authenticate } from "../auth/jwt.js";
 import { ApiError } from "../errors/handler.js";
-
-const prisma = new PrismaClient();
+import { prisma } from "../db/prisma.js";
 
 const cipherSchema = z.object({
   id: z.string().min(1),

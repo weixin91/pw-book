@@ -5,6 +5,8 @@ import { PendingChangesQueue } from "../../sync/pending-changes";
 import { parseUri } from "../../autofill/domain-utils";
 import { TotpDisplay } from "./TotpDisplay";
 import { parseOtpauthUri } from "../../crypto/totp";
+import { CipherIndexService } from "../../crypto/cipher-index";
+import { parseCipherData } from "../../crypto/cipher-data-parser";
 import {
   PasswordGeneratorSettingsService,
   generatePassword,
@@ -166,8 +168,12 @@ export function CipherForm({ editId, onBack, onSaved, onDeleted }: Props): React
 
       await StorageService.setCiphers(ciphers);
 
-      const queue = new PendingChangesQueue();
+      // 更新索引
       const targetId = editId || ciphers[ciphers.length - 1].id;
+      const cipherDataParsed = parseCipherData(JSON.stringify(cipherData));
+      await CipherIndexService.updateOne(targetId, cipherDataParsed);
+
+      const queue = new PendingChangesQueue();
       await queue.enqueue({
         cipherId: targetId,
         operation: editId ? "UPDATE" : "CREATE",
@@ -188,6 +194,7 @@ export function CipherForm({ editId, onBack, onSaved, onDeleted }: Props): React
     const ciphers = await StorageService.getCiphers();
     const filtered = ciphers.filter((c) => c.id !== editId);
     await StorageService.setCiphers(filtered);
+    await CipherIndexService.removeOne(editId);
 
     const queue = new PendingChangesQueue();
     await queue.enqueue({
@@ -220,6 +227,9 @@ export function CipherForm({ editId, onBack, onSaved, onDeleted }: Props): React
         modifiedAt: new Date().toISOString(),
       };
       await StorageService.setCiphers(ciphers);
+
+      // 更新索引（passkey 已移除）
+      await CipherIndexService.updateOne(editId, parseCipherData(JSON.stringify(restData)));
 
       const queue = new PendingChangesQueue();
       await queue.enqueue({

@@ -179,6 +179,7 @@ export async function signAssertion(
 }
 
 // 构造 COSE_Key（仅 EC2 / P-256 / ES256）
+// 手动 CBOR 编码以确保 WebAuthn 规范兼容性
 export function encodeCoseKeyEs256(x: Uint8Array, y: Uint8Array): Uint8Array {
   // 简化的 CBOR 编码：固定 5 个键值对的 map
   // map(5) = 0xA5

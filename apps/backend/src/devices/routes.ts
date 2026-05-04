@@ -1,9 +1,7 @@
 import type { FastifyInstance } from "fastify";
-import { PrismaClient } from "@prisma/client";
 import { authenticate } from "../auth/jwt.js";
 import { ApiError } from "../errors/handler.js";
-
-const prisma = new PrismaClient();
+import { prisma } from "../db/prisma.js";
 
 export async function deviceRoutes(app: FastifyInstance): Promise<void> {
   app.get("/", { preHandler: [authenticate] }, async (request, reply) => {

@@ -1,11 +1,14 @@
 import type { FastifyInstance } from "fastify";
-import { PrismaClient } from "@prisma/client";
 import { z } from "zod";
 import { createToken, createRefreshToken, verifyToken } from "./jwt.js";
 import { ApiError } from "../errors/handler.js";
 import { isEmailAllowed } from "./whitelist.js";
-
-const prisma = new PrismaClient();
+import {
+  loginRateLimitHook,
+  recordLoginAttempt,
+  clearLoginAttempts,
+} from "../rate-limiter.js";
+import { prisma } from "../db/prisma.js";
 
 const registerSchema = z.object({
   email: z.string().email(),
@@ -101,17 +104,22 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     });
   });
 
-  app.post("/login", async (request, reply) => {
+  app.post("/login", { preHandler: [loginRateLimitHook] }, async (request, reply) => {
     const body = loginSchema.parse(request.body);
 
     const user = await prisma.user.findUnique({ where: { email: body.email } });
     if (!user) {
+      recordLoginAttempt(body.email);
       throw new ApiError("INVALID_CREDENTIALS", 401, "邮箱或主密码错误");
     }
 
     if (user.masterPasswordHash !== body.masterPasswordHash) {
+      recordLoginAttempt(body.email);
       throw new ApiError("INVALID_CREDENTIALS", 401, "邮箱或主密码错误");
     }
+
+    // 登录成功，清除速率限制记录
+    clearLoginAttempts(body.email);
 
     await prisma.device.upsert({
       where: { userId_deviceId: { userId: user.id, deviceId: body.deviceId } },
