@@ -18,6 +18,8 @@ import com.pwbook.data.repository.DomainAssocRepository
 import com.pwbook.data.repository.RejectedSiteRepository
 import com.pwbook.data.repository.SettingsRepository
 import com.pwbook.domain.VaultSession
+import com.pwbook.domain.index.CipherIndexStore
+import com.pwbook.domain.index.DomainAssocLite
 import com.pwbook.domain.matcher.UriMatcher
 import com.pwbook.sync.PendingChangesQueue
 import dagger.hilt.android.AndroidEntryPoint
@@ -60,6 +62,9 @@ class PwBookAutofillService : AutofillService() {
 
     @Inject
     lateinit var json: Json
+
+    @Inject
+    lateinit var cipherIndexStore: CipherIndexStore
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -109,16 +114,40 @@ class PwBookAutofillService : AutofillService() {
                 val userId = securePrefs.getString(SecurePrefs.KEY_USER_ID)
                 Timber.d("onFillRequest: userId=$userId")
                 if (userId != null) {
-                    val ciphers = cipherRepository.getCiphers(userId)
-                    Timber.d("onFillRequest: found ${ciphers.size} ciphers")
+                    val rulesRaw = domainAssocRepository.getRules(userId)
+                    Timber.d("onFillRequest: found ${rulesRaw.size} domain rules")
 
-                    val rules = domainAssocRepository.getRules(userId)
-                    Timber.d("onFillRequest: found ${rules.size} domain rules")
+                    val rulesLite = rulesRaw.map { entity ->
+                        DomainAssocLite(
+                            domains = json.decodeFromString(entity.domains),
+                            packageNames = json.decodeFromString(entity.packageNames)
+                        )
+                    }
 
-                    val decrypted = ciphers.mapNotNull { vaultSession.decryptCipher(it) }
+                    val candidateIds = try {
+                        cipherIndexStore.filterByDomain(
+                            userId,
+                            UriMatcher.parseUri(parsed.uriString),
+                            rulesLite
+                        )
+                    } catch (e: Exception) {
+                        Timber.e(e, "filterByDomain failed, falling back to full decrypt")
+                        emptyList()
+                    }
+                    Timber.d("onFillRequest: index returned ${candidateIds.size} candidates")
+
+                    val ciphersToCheck = if (candidateIds.isNotEmpty()) {
+                        candidateIds.mapNotNull { cipherRepository.getCipher(it) }
+                    } else {
+                        cipherRepository.getCiphers(userId).also {
+                            Timber.d("onFillRequest: falling back to ${it.size} ciphers")
+                        }
+                    }
+
+                    val decrypted = ciphersToCheck.mapNotNull { vaultSession.decryptCipher(it) }
                         .filter { cipher ->
                             val matchResult = cipher.uris.any { uri ->
-                                UriMatcher.isMatch(parsed.uriString, uri, rules)
+                                UriMatcher.isMatch(parsed.uriString, uri, rulesRaw)
                             }
                             Timber.d("onFillRequest: cipher ${cipher.name} uris=${cipher.uris}, match=$matchResult")
                             matchResult
@@ -171,11 +200,13 @@ class PwBookAutofillService : AutofillService() {
                 if (!rejectedSiteRepository.isRejected(userId, baseDomain)) {
                     val handler = SaveRequestHandler(
                         cipherRepository = cipherRepository,
+                        domainAssocRepository = domainAssocRepository,
                         vaultSession = vaultSession,
                         vaultEncryption = vaultEncryption,
                         pendingChangesQueue = pendingChangesQueue,
                         securePrefs = securePrefs,
-                        json = json
+                        json = json,
+                        cipherIndexStore = cipherIndexStore
                     )
                     handler.handle(saveData)
                 } else {

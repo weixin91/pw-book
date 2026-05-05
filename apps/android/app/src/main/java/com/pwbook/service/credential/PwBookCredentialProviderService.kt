@@ -22,6 +22,7 @@ import com.pwbook.data.datasource.SecurePrefs
 import com.pwbook.data.repository.CipherRepository
 import com.pwbook.data.repository.DomainAssocRepository
 import com.pwbook.domain.VaultSession
+import com.pwbook.domain.index.CipherIndexStore
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -45,6 +46,7 @@ class PwBookCredentialProviderService : CredentialProviderService() {
     @Inject lateinit var cipherRepository: CipherRepository
     @Inject lateinit var domainAssocRepository: DomainAssocRepository
     @Inject lateinit var vaultSession: VaultSession
+    @Inject lateinit var cipherIndexStore: CipherIndexStore
     @Inject lateinit var securePrefs: SecurePrefs
 
     override fun onBeginCreateCredentialRequest(
@@ -211,16 +213,31 @@ class PwBookCredentialProviderService : CredentialProviderService() {
             emptyList()
         }
 
-        val ciphers = cipherRepository.findByRpId(userId, rpId)
-        Timber.d("populatePasskeyEntries found ${ciphers.size} ciphers for rpId=$rpId allowCredentials=$allowCredentialsStr")
+        // 通过索引预筛选 Passkey 候选凭据
+        val candidateIds = try {
+            cipherIndexStore.filterByRpId(userId, rpId)
+        } catch (e: Exception) {
+            Timber.e(e, "filterByRpId failed, falling back to full decrypt")
+            emptyList()
+        }
+        Timber.d("populatePasskeyEntries index returned ${candidateIds.size} candidates for rpId=$rpId")
+
+        val ciphersToCheck = if (candidateIds.isNotEmpty()) {
+            candidateIds.mapNotNull { cipherRepository.getCipher(it) }
+        } else {
+            cipherRepository.getAllLoginCiphers(userId).also {
+                Timber.d("populatePasskeyEntries falling back to ${it.size} login ciphers")
+            }
+        }
+
         val entries = mutableListOf<CredentialEntry>()
 
-        for (cipher in ciphers) {
+        for (cipher in ciphersToCheck) {
             val decrypted = vaultSession.decryptCipher(cipher) ?: continue
             val passkey = decrypted.passkey ?: continue
             Timber.d("populatePasskeyEntries checking credentialId=${passkey.credentialId} rpId=${passkey.rpId}")
 
-            // rpId 匹配
+            // rpId 匹配（二次校验）
             if (!PasskeyMatcher.isRpIdMatch(
                     passkeyRpId = passkey.rpId,
                     requestedRpId = rpId,

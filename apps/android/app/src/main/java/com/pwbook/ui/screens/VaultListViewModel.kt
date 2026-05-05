@@ -10,6 +10,7 @@ import com.pwbook.domain.DecryptedCipher
 import com.pwbook.domain.LoginDataJson
 import com.pwbook.domain.LoginUriJson
 import com.pwbook.domain.VaultSession
+import com.pwbook.domain.index.CipherIndexStore
 import com.pwbook.sync.PendingChangesQueue
 import com.pwbook.sync.SyncManager
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -34,7 +35,8 @@ class VaultListViewModel @Inject constructor(
     private val syncManager: SyncManager,
     private val vaultEncryption: VaultEncryption,
     private val pendingChangesQueue: PendingChangesQueue,
-    private val json: Json
+    private val json: Json,
+    private val cipherIndexStore: CipherIndexStore
 ) : ViewModel() {
 
     private val _searchQuery = MutableStateFlow("")
@@ -113,6 +115,20 @@ class VaultListViewModel @Inject constructor(
 
     fun lock() {
         vaultSession.lock()
+    }
+
+    fun logout() {
+        viewModelScope.launch {
+            val userId = securePrefs.getString(SecurePrefs.KEY_USER_ID)
+            if (userId != null) {
+                runCatching {
+                    cipherIndexStore.clear(userId)
+                }.onFailure {
+                    Timber.e(it, "Failed to clear index on logout")
+                }
+            }
+            vaultSession.lock()
+        }
     }
 
     /**

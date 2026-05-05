@@ -3,6 +3,10 @@ package com.pwbook.domain.usecase
 import com.pwbook.crypto.KeyDerivation
 import com.pwbook.crypto.VaultEncryption
 import com.pwbook.data.datasource.SecurePrefs
+import com.pwbook.data.local.entity.CipherEntity
+import com.pwbook.data.repository.CipherRepository
+import com.pwbook.domain.VaultSession
+import com.pwbook.domain.index.CipherIndexStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import timber.log.Timber
@@ -11,7 +15,10 @@ import javax.inject.Inject
 class UnlockVaultUseCase @Inject constructor(
     private val keyDerivation: KeyDerivation,
     private val vaultEncryption: VaultEncryption,
-    private val securePrefs: SecurePrefs
+    private val securePrefs: SecurePrefs,
+    private val vaultSession: VaultSession,
+    private val cipherRepository: CipherRepository,
+    private val cipherIndexStore: CipherIndexStore
 ) {
     suspend fun unlock(password: String): Result<ByteArray> {
         Timber.d("=== UNLOCK DEBUG ===")
@@ -75,10 +82,50 @@ class UnlockVaultUseCase @Inject constructor(
                 Timber.e("Unexpected userKey size: ${decryptedUserKey.size}, expected 64")
             }
 
+            vaultSession.unlock(decryptedUserKey)
+
+            // 索引一致性检查和 pending rebuild 处理
+            val userId = securePrefs.getString(SecurePrefs.KEY_USER_ID)
+            if (userId != null) {
+                runCatching {
+                    checkAndRepairIndex(userId)
+                }.onFailure {
+                    Timber.e(it, "Index check/repair failed after unlock")
+                }
+            }
+
             Timber.d("unlock success")
             decryptedUserKey
         }.onFailure { e ->
             Timber.e(e, "Unlock failed")
+        }
+    }
+
+    private suspend fun checkAndRepairIndex(userId: String) {
+        val loginCiphers = cipherRepository.getAllLoginCiphers(userId)
+        val localIds = loginCiphers.map { it.id }.toSet()
+        val missing = cipherIndexStore.checkConsistency(userId, localIds)
+        if (missing != null && missing.isNotEmpty()) {
+            val decryptFn = buildDecryptFn()
+            missing.forEach { id ->
+                val entity = cipherRepository.getCipher(id) ?: return@forEach
+                cipherIndexStore.rebuildOne(id, userId, entity.data, decryptFn)
+            }
+        }
+
+        val getCipherFn: suspend (String) -> CipherEntity? = { id -> cipherRepository.getCipher(id) }
+        cipherIndexStore.processPendingRebuild(userId, buildDecryptFn(), getCipherFn)
+    }
+
+    private fun buildDecryptFn(): suspend (String) -> String? {
+        val userKey = vaultSession.getUserKey() ?: return { null }
+        val cipherKey = userKey.copyOfRange(0, 32)
+        return { data ->
+            try {
+                vaultEncryption.decryptString(data, cipherKey)
+            } catch (_: Exception) {
+                null
+            }
         }
     }
 }

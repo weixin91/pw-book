@@ -175,9 +175,11 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(32.dp))
             Button(
                 onClick = {
-                    settingsRepository.clearAll()
-                    viewModel.lock()
-                    onLogout()
+                    scope.launch {
+                        viewModel.logout()
+                        settingsRepository.clearAll()
+                        onLogout()
+                    }
                 },
                 modifier = Modifier.fillMaxWidth()
             ) {

@@ -1,5 +1,6 @@
 package com.pwbook.sync
 
+import com.pwbook.crypto.VaultEncryption
 import com.pwbook.data.datasource.SecurePrefs
 import com.pwbook.data.local.entity.CipherEntity
 import com.pwbook.data.local.entity.DomainAssocEntity
@@ -13,6 +14,8 @@ import com.pwbook.data.remote.api.SyncApi
 import com.pwbook.data.repository.CipherRepository
 import com.pwbook.data.repository.DomainAssocRepository
 import com.pwbook.data.repository.SettingsRepository
+import com.pwbook.domain.VaultSession
+import com.pwbook.domain.index.CipherIndexStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -35,7 +38,10 @@ class SyncManager @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val pendingChangesQueue: PendingChangesQueue,
     private val securePrefs: SecurePrefs,
-    private val json: Json
+    private val json: Json,
+    private val vaultSession: VaultSession,
+    private val vaultEncryption: VaultEncryption,
+    private val cipherIndexStore: CipherIndexStore
 ) {
     // 使用独立的作用域，不受 ViewModel 生命周期影响
     private val syncScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -69,6 +75,9 @@ class SyncManager @Inject constructor(
         cipherRepository.clearUserCiphers(userId)
         val ciphers = response.ciphers.map { it.toEntity(userId) }
         cipherRepository.saveCiphers(ciphers)
+
+        // 重建索引
+        rebuildIndexAfterFullSync(userId, ciphers)
 
         domainAssocRepository.clearUserRules(userId)
         val rules = response.domainAssociations.map { it.toEntity(userId) }
@@ -185,6 +194,25 @@ class SyncManager @Inject constructor(
                 pendingCount = pushResult?.accepted ?: 0
             )
         )
+    }
+
+    private suspend fun rebuildIndexAfterFullSync(userId: String, ciphers: List<CipherEntity>) {
+        val userKey = vaultSession.getUserKey()
+        if (userKey != null) {
+            val decryptFn: suspend (String) -> String? = { data ->
+                try {
+                    vaultEncryption.decryptString(data, userKey.copyOfRange(0, 32))
+                } catch (_: Exception) {
+                    null
+                }
+            }
+            cipherIndexStore.rebuild(userId, ciphers, decryptFn)
+        } else {
+            ciphers.forEach {
+                cipherIndexStore.markPendingRebuild(it.id, userId)
+            }
+            Timber.d("Vault locked during full sync, marked ${ciphers.size} ciphers as pending rebuild")
+        }
     }
 
     private fun getUserIdOrThrow(): String {
