@@ -86,12 +86,21 @@ export function ImportPanel(): React.ReactElement {
 
         const queue = new PendingChangesQueue();
         for (const cipher of ciphers) {
-          await queue.enqueue({
-            cipherId: cipher.id,
-            operation: "CREATE",
-            encryptedData: cipher.data,
-            clientTimestamp: new Date().toISOString(),
-          });
+          await queue.enqueue(
+            {
+              cipherId: cipher.id,
+              operation: "CREATE",
+              encryptedData: cipher.data,
+              clientTimestamp: new Date().toISOString(),
+            },
+            false // 批量入队时不触发同步，全部入队后统一触发
+          );
+        }
+        // 全部入队后统一触发一次同步
+        try {
+          chrome.runtime.sendMessage({ type: "TRIGGER_SYNC_NOW" });
+        } catch {
+          // ignore
         }
       }
 

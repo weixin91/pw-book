@@ -4,8 +4,12 @@ import { StorageService } from "../platform/storage.js";
 import type { PendingChange } from "@pwbook/shared-types";
 
 export class PendingChangesQueue {
-  async enqueue(change: Omit<PendingChange, "id" | "retryCount">): Promise<void> {
+  async enqueue(
+    change: Omit<PendingChange, "id" | "retryCount">,
+    triggerSync = true
+  ): Promise<void> {
     const changes = await StorageService.getPendingChanges();
+    const wasEmpty = changes.length === 0;
     const newChange: PendingChange = {
       ...change,
       id: crypto.randomUUID(),
@@ -13,11 +17,13 @@ export class PendingChangesQueue {
     };
     changes.push(newChange);
     await StorageService.setPendingChanges(changes);
-    // 通知后台立即尝试同步
-    try {
-      chrome.runtime.sendMessage({ type: "TRIGGER_SYNC_NOW" });
-    } catch {
-      // ignore
+    // 只有首次入队时才触发同步，避免批量入队时重复发送同步请求
+    if (triggerSync && wasEmpty) {
+      try {
+        chrome.runtime.sendMessage({ type: "TRIGGER_SYNC_NOW" });
+      } catch {
+        // ignore
+      }
     }
   }
 

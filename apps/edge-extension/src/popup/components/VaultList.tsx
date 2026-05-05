@@ -459,7 +459,12 @@ export function VaultList({ onAdd, onEdit, onOpenGenerator, onOpenCookieSync }: 
           ))}
         </div>
       )}
-      <div style={{ fontSize: 13, fontWeight: 500, color: "#333", marginBottom: 8 }}>所有项目</div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+        <div style={{ fontSize: 13, fontWeight: 500, color: "#333" }}>所有项目</div>
+        <div style={{ fontSize: 12, color: "#888" }}>
+          {search.trim().length > 0 ? `${filtered.length} / ${items.length}` : items.length}
+        </div>
+      </div>
       <div style={{ maxHeight: 340, overflowY: "auto" }}>
         {filtered.map((item) => (
           <div
