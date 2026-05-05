@@ -11,6 +11,7 @@ import com.pwbook.domain.LoginDataJson
 import com.pwbook.domain.LoginUriJson
 import com.pwbook.domain.VaultSession
 import com.pwbook.domain.index.CipherIndexStore
+import com.pwbook.domain.matcher.UriMatcher
 import com.pwbook.sync.PendingChangesQueue
 import com.pwbook.sync.SyncManager
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -66,13 +67,13 @@ class VaultListViewModel @Inject constructor(
             }
         }
 
-        // 按 targetUri 匹配排序：匹配的凭据置顶
+        // 按 targetUri 匹配排序：使用 UriMatcher 进行规范化匹配，防止钓鱼站点
         val sorted = if (targetUri.isNullOrBlank()) {
             filtered.sortedByDescending { it.modifiedAt }
         } else {
             filtered.sortedWith(
                 compareByDescending<DecryptedCipher> { cipher ->
-                    cipher.uris.any { uri -> uri == targetUri || uri.contains(targetUri) || targetUri.contains(uri) }
+                    cipher.uris.any { uri -> UriMatcher.isMatch(uri, targetUri) }
                 }.thenByDescending { it.modifiedAt }
             )
         }

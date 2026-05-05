@@ -1,5 +1,6 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
+import helmet from "@fastify/helmet";
 import dotenv from "dotenv";
 import { registerErrorHandler } from "./errors/handler.js";
 import { authRoutes } from "./auth/routes.js";
@@ -24,8 +25,48 @@ const app = Fastify({
 
 registerErrorHandler(app);
 
+// 安全响应头：CSP、HSTS、frameguard、noSniff、referrerPolicy
+await app.register(helmet, {
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      // API 服务，限制严格
+    },
+  },
+  hsts: {
+    maxAge: 31536000,
+    includeSubDomains: true,
+    // 仅在生产环境启用 preload
+    preload: process.env.NODE_ENV === "production",
+  },
+  frameguard: {
+    action: "deny",
+  },
+  noSniff: true,
+  referrerPolicy: {
+    policy: "no-referrer",
+  },
+});
+
+// CORS 白名单配置
+const allowedOrigins = process.env.CORS_ALLOWED_ORIGINS
+  ? process.env.CORS_ALLOWED_ORIGINS.split(",").map((o) => o.trim())
+  : ["chrome-extension://*", "http://localhost:*", "http://10.0.2.2:*"];
+
 await app.register(cors, {
-  origin: true,
+  origin: (origin, callback) => {
+    // origin 可能是 undefined（同源请求），此时允许
+    if (!origin) {
+      callback(null, true);
+      return;
+    }
+    // 允许 chrome-extension 协议和配置的白名单
+    if (origin.startsWith("chrome-extension://") || allowedOrigins.some((o) => new RegExp(o.replace("*", ".*")).test(origin))) {
+      callback(null, true);
+    } else {
+      callback(new Error("不允许的 CORS origin"), false);
+    }
+  },
   credentials: true,
 });
 

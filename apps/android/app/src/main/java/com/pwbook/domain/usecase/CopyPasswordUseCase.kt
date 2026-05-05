@@ -1,10 +1,13 @@
 package com.pwbook.domain.usecase
 
 import android.content.ClipData
+import android.content.ClipDescription
 import android.content.ClipboardManager
 import android.content.Context
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.PersistableBundle
 import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -30,9 +33,15 @@ class CopyPasswordUseCase @Inject constructor(
         }
 
         val clip = ClipData.newPlainText("password", password)
+        // Android 13+ 标记为敏感内容，防止剪贴板预览泄露
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            clip.description.extras = PersistableBundle().apply {
+                putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true)
+            }
+        }
         clipboard.setPrimaryClip(clip)
         lastCopiedPassword = password
-        Timber.i("Password copied to clipboard")
+        Timber.i("Password copied to clipboard (sensitive marked)")
 
         // 取消之前的定时器
         currentClearRunnable?.let { handler.removeCallbacks(it) }
@@ -46,6 +55,12 @@ class CopyPasswordUseCase @Inject constructor(
 
     private fun clearClipboardImmediately() {
         val emptyClip = ClipData.newPlainText("", "")
+        // 清空时也标记为敏感（防止敏感标记残留）
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            emptyClip.description.extras = PersistableBundle().apply {
+                putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, false)
+            }
+        }
         clipboard.setPrimaryClip(emptyClip)
         lastCopiedPassword = null
         currentClearRunnable = null

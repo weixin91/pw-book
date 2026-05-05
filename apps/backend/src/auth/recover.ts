@@ -1,10 +1,13 @@
 import type { FastifyInstance } from "fastify";
-import { PrismaClient } from "@prisma/client";
 import { z } from "zod";
 import { createToken, createRefreshToken } from "./jwt.js";
 import { ApiError } from "../errors/handler.js";
-
-const prisma = new PrismaClient();
+import { prisma } from "../db/prisma.js";
+import {
+  recoverRateLimitHook,
+  recordRecoverAttempt,
+  clearRecoverAttempts,
+} from "../rate-limiter.js";
 
 const recoverSchema = z.object({
   email: z.string().email(),
@@ -32,18 +35,23 @@ async function deriveRecoveryKeyHash(recoveryKey: string, email: string): Promis
 }
 
 export async function recoverRoutes(app: FastifyInstance): Promise<void> {
-  app.post("/recover", async (request, reply) => {
+  app.post("/recover", { preHandler: [recoverRateLimitHook] }, async (request, reply) => {
     const body = recoverSchema.parse(request.body);
 
     const user = await prisma.user.findUnique({ where: { email: body.email } });
     if (!user) {
+      recordRecoverAttempt(body.email);
       throw new ApiError("INVALID_CREDENTIALS", 401, "邮箱或恢复密钥无效");
     }
 
     const recoveryKeyHash = await deriveRecoveryKeyHash(body.recoveryKey, body.email);
     if (!user.recoveryKeyHash || user.recoveryKeyHash !== recoveryKeyHash) {
+      recordRecoverAttempt(body.email);
       throw new ApiError("INVALID_CREDENTIALS", 401, "邮箱或恢复密钥无效");
     }
+
+    // 恢复成功，清除速率限制记录
+    clearRecoverAttempts(body.email);
 
     const updated = await prisma.user.update({
       where: { id: user.id },

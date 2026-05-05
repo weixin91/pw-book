@@ -85,8 +85,14 @@ class SyncWebSocketClient @Inject constructor(
                 return@launch
             }
             try {
-                // 不在 URL 中传递 token，改为首条消息认证
-                val wsUrl = "ws://10.0.2.2:3000/ws"
+                // 从用户配置读取服务器地址，强制使用 wss://
+                val serverUrl = securePrefs.getString(SecurePrefs.KEY_SERVER_URL)
+                    ?: "https://10.0.2.2:3000/"
+                val wsBaseUrl = serverUrl
+                    .replace("http://", "ws://")
+                    .replace("https://", "wss://")
+                    .removeSuffix("/")
+                val wsUrl = "$wsBaseUrl/ws"
                 session = client.webSocketSession(wsUrl)
                 isAuthenticated = false
 

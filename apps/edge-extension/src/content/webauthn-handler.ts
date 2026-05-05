@@ -35,7 +35,9 @@ export function installWebAuthnBridge(_doc: Document): void {
   (window as unknown as Record<string, boolean>).__PWBOOK_WEBAUTHN_BRIDGE__ = true;
 
   window.addEventListener("message", async (event: MessageEvent) => {
+    // 安全校验：仅接受来自当前页面的消息，防止 iframe/钓鱼页面伪造请求
     if (event.source !== window) return;
+    if (event.origin !== window.location.origin) return;
     const data = event.data as Partial<BridgeRequest> | undefined;
     if (!data || data.kind !== REQUEST_KIND) return;
     if (typeof data.id !== "string" || (data.op !== "create" && data.op !== "get")) return;

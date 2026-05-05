@@ -93,21 +93,23 @@ object PasskeyCrypto {
      * 构建 WebAuthn authenticatorData。
      *
      * Create（注册）: flags = 0x41 (AT + UP), 包含 attestedCredentialData
-     * Get（认证）: flags = 0x05 (UP + UV), 不包含 attestedCredentialData
+     * Get（认证）: flags 由 userVerified 参数决定 UV 标志
      */
     fun buildAuthenticatorData(
         rpId: String,
         signCount: Int,
         includeAttestedCredentialData: Boolean = false,
         credentialId: ByteArray? = null,
-        publicKeyCose: ByteArray? = null
+        publicKeyCose: ByteArray? = null,
+        userVerified: Boolean = false
     ): ByteArray {
         val rpIdHash = MessageDigest.getInstance("SHA-256").digest(rpId.toByteArray(Charsets.UTF_8))
 
         var flags = 0x01 // UP = 1
         if (includeAttestedCredentialData) {
             flags = flags or 0x40 // AT = 1
-        } else {
+        } else if (userVerified) {
+            // 仅在实际完成用户验证后才设置 UV=1
             flags = flags or 0x04 // UV = 1
         }
 

@@ -99,12 +99,6 @@ class LoginViewModel @Inject constructor(
                 val kdfType = KdfType.valueOf(_uiState.value.kdfType)
                 val iterations = _uiState.value.kdfIterations
 
-                Timber.d("=== LOGIN DEBUG ===")
-                Timber.d("email: $email")
-                Timber.d("password length: ${password.length}")
-                Timber.d("kdfType: ${kdfType.name}")
-                Timber.d("iterations: $iterations")
-
                 // KDF 计算是 CPU 密集型操作，切换到 Default 调度器避免阻塞主线程
                 val masterKey = withContext(Dispatchers.Default) {
                     keyDerivation.deriveMasterKey(
@@ -116,14 +110,12 @@ class LoginViewModel @Inject constructor(
                         parallelism = _uiState.value.kdfParallelism
                     )
                 }
-                Timber.d("masterKey (hex): ${masterKey.joinToString("") { "%02x".format(it) }}")
 
                 // 使用与 Edge 一致的密码哈希计算方式
                 val hash = withContext(Dispatchers.Default) {
                     keyDerivation.deriveMasterPasswordHash(masterKey, password)
                 }
                 val masterPasswordHash = keyDerivation.hashToBase64(hash)
-                Timber.d("masterPasswordHash (base64): $masterPasswordHash")
 
                 val deviceId = UUID.randomUUID().toString()
                 val response = authApi.login(

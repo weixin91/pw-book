@@ -11,9 +11,14 @@ interface RateLimitEntry {
 
 // 内存存储（单实例足够，SQLite 后端本身单进程）
 const loginAttempts = new Map<string, RateLimitEntry>();
+const recoverAttempts = new Map<string, RateLimitEntry>();
 
-const MAX_ATTEMPTS = 10;
-const WINDOW_MS = 60_000; // 1 分钟窗口
+const MAX_LOGIN_ATTEMPTS = 10;
+const LOGIN_WINDOW_MS = 60_000; // 1 分钟窗口
+
+// 恢复密钥：更严格的限制，防止暴力枚举
+const MAX_RECOVER_ATTEMPTS = 5;
+const RECOVER_WINDOW_MS = 3600_000; // 1 小时窗口
 
 /**
  * 检查邮箱是否可继续尝试登录
@@ -25,13 +30,32 @@ function checkRateLimit(email: string): boolean {
   if (!entry) return true;
 
   const elapsed = Date.now() - entry.firstAttempt;
-  if (elapsed > WINDOW_MS) {
+  if (elapsed > LOGIN_WINDOW_MS) {
     // 窗口过期，清除记录
     loginAttempts.delete(normalizedEmail);
     return true;
   }
 
-  return entry.count < MAX_ATTEMPTS;
+  return entry.count < MAX_LOGIN_ATTEMPTS;
+}
+
+/**
+ * 检查邮箱是否可继续尝试恢复（更严格）
+ */
+function checkRecoverRateLimit(email: string): boolean {
+  const normalizedEmail = email.toLowerCase();
+  const entry = recoverAttempts.get(normalizedEmail);
+
+  if (!entry) return true;
+
+  const elapsed = Date.now() - entry.firstAttempt;
+  if (elapsed > RECOVER_WINDOW_MS) {
+    // 窗口过期，清除记录
+    recoverAttempts.delete(normalizedEmail);
+    return true;
+  }
+
+  return entry.count < MAX_RECOVER_ATTEMPTS;
 }
 
 /**
@@ -52,6 +76,23 @@ export function recordLoginAttempt(email: string): void {
 }
 
 /**
+ * 记录一次恢复失败尝试
+ */
+export function recordRecoverAttempt(email: string): void {
+  const normalizedEmail = email.toLowerCase();
+  const existing = recoverAttempts.get(normalizedEmail);
+
+  if (existing) {
+    existing.count++;
+  } else {
+    recoverAttempts.set(normalizedEmail, {
+      count: 1,
+      firstAttempt: Date.now(),
+    });
+  }
+}
+
+/**
  * 登录成功后清除记录
  */
 export function clearLoginAttempts(email: string): void {
@@ -59,7 +100,14 @@ export function clearLoginAttempts(email: string): void {
 }
 
 /**
- * Fastify preValidation hook：检查速率限制
+ * 恢复成功后清除记录
+ */
+export function clearRecoverAttempts(email: string): void {
+  recoverAttempts.delete(email.toLowerCase());
+}
+
+/**
+ * Fastify preValidation hook：检查登录速率限制
  */
 export const loginRateLimitHook: preValidationHookHandler = (
   request: FastifyRequest,
@@ -77,6 +125,30 @@ export const loginRateLimitHook: preValidationHookHandler = (
 
   if (!checkRateLimit(email)) {
     done(new ApiError("RATE_LIMITED", 429, "尝试次数过多，请 1 分钟后重试"));
+    return;
+  }
+
+  done();
+};
+
+/**
+ * Fastify preValidation hook：检查恢复速率限制（更严格）
+ */
+export const recoverRateLimitHook: preValidationHookHandler = (
+  request: FastifyRequest,
+  _reply: FastifyReply,
+  done: (err?: Error) => void
+) => {
+  const body = request.body as { email?: string } | undefined;
+  const email = body?.email;
+
+  if (!email) {
+    done();
+    return;
+  }
+
+  if (!checkRecoverRateLimit(email)) {
+    done(new ApiError("RATE_LIMITED", 429, "恢复尝试次数过多，请 1 小时后重试"));
     return;
   }
 

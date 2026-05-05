@@ -60,6 +60,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.pwbook.R
 import com.pwbook.domain.DecryptedCipher
+import com.pwbook.domain.matcher.UriMatcher
 import com.pwbook.sync.SyncManager
 import kotlinx.coroutines.launch
 
@@ -168,11 +169,12 @@ fun VaultListScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 if (isAutofillMode && searchQuery.isBlank() && targetUri != null) {
+                    // 使用 UriMatcher 进行规范化域名匹配，防止钓鱼站点攻击
                     val matched = uiState.ciphers.filter { cipher ->
-                        cipher.uris.any { uri -> uri == targetUri || uri.contains(targetUri) || targetUri.contains(uri) }
+                        cipher.uris.any { uri -> UriMatcher.isMatch(uri, targetUri) }
                     }
                     val others = uiState.ciphers.filter { cipher ->
-                        cipher.uris.none { uri -> uri == targetUri || uri.contains(targetUri) || targetUri.contains(uri) }
+                        cipher.uris.none { uri -> UriMatcher.isMatch(uri, targetUri) }
                     }
                     if (matched.isNotEmpty()) {
                         item {
@@ -221,7 +223,7 @@ fun VaultListScreen(
                 } else {
                     items(uiState.ciphers, key = { it.id }) { cipher ->
                         val isMatch = targetUri != null && cipher.uris.any { uri ->
-                            uri == targetUri || uri.contains(targetUri) || targetUri.contains(uri)
+                            UriMatcher.isMatch(uri, targetUri)
                         }
                         CipherListItem(
                             cipher = cipher,

@@ -107,62 +107,76 @@ export async function syncRoutes(app: FastifyInstance): Promise<void> {
     const rejected: string[] = [];
     const conflicts: string[] = [];
 
-    for (const change of body.changes) {
-      try {
-        const existing = await prisma.cipher.findUnique({
-          where: { id: change.cipher.id },
-        });
-
-        if (change.type === "DELETE") {
-          if (existing) {
-            await prisma.cipher.update({
-              where: { id: change.cipher.id },
-              data: { deletedAt: new Date(), modifiedAt: new Date() },
-            });
-          }
-          accepted.push(change.id);
-          continue;
-        }
-
-        const serverModifiedAt = existing?.modifiedAt ?? new Date(0);
-        const clientModifiedAt = new Date(change.cipher.modifiedAt);
-
-        if (clientModifiedAt >= serverModifiedAt) {
-          await prisma.cipher.upsert({
+    // 使用事务确保原子性
+    await prisma.$transaction(async (tx) => {
+      for (const change of body.changes) {
+        try {
+          const existing = await tx.cipher.findUnique({
             where: { id: change.cipher.id },
-            update: {
-              type: change.cipher.type,
-              data: change.cipher.data,
-              favorite: change.cipher.favorite,
-              reprompt: change.cipher.reprompt,
-              modifiedAt: clientModifiedAt,
-            },
-            create: {
-              id: change.cipher.id,
-              userId,
-              type: change.cipher.type,
-              data: change.cipher.data,
-              favorite: change.cipher.favorite,
-              reprompt: change.cipher.reprompt,
-              modifiedAt: clientModifiedAt,
-            },
           });
-          accepted.push(change.id);
-        } else {
-          conflicts.push(change.id);
+
+          // 校验所有权：existing 必须不存在或属于当前用户
+          if (existing && existing.userId !== userId) {
+            // 跨租户操作，拒绝
+            rejected.push(change.id);
+            continue;
+          }
+
+          if (change.type === "DELETE") {
+            if (existing && existing.userId === userId) {
+              await tx.cipher.update({
+                where: { id: change.cipher.id, userId },
+                data: { deletedAt: new Date(), modifiedAt: new Date() },
+              });
+            }
+            accepted.push(change.id);
+            continue;
+          }
+
+          const serverModifiedAt = existing?.modifiedAt ?? new Date(0);
+          const clientModifiedAt = new Date(change.cipher.modifiedAt);
+
+          if (clientModifiedAt >= serverModifiedAt) {
+            await tx.cipher.upsert({
+              where: { id: change.cipher.id },
+              update: {
+                userId, // 确保 userId 不被篡改
+                type: change.cipher.type,
+                data: change.cipher.data,
+                favorite: change.cipher.favorite,
+                reprompt: change.cipher.reprompt,
+                modifiedAt: clientModifiedAt,
+              },
+              create: {
+                id: change.cipher.id,
+                userId,
+                type: change.cipher.type,
+                data: change.cipher.data,
+                favorite: change.cipher.favorite,
+                reprompt: change.cipher.reprompt,
+                modifiedAt: clientModifiedAt,
+              },
+            });
+            accepted.push(change.id);
+          } else {
+            conflicts.push(change.id);
+          }
+        } catch (e) {
+          console.error(`[SyncPush] rejected change ${change.id} (cipher=${change.cipher.id}):`, e);
+          rejected.push(change.id);
         }
-      } catch (e) {
-        console.error(`[SyncPush] rejected change ${change.id} (cipher=${change.cipher.id}):`, e);
-        rejected.push(change.id);
       }
-    }
+    });
 
     const newSyncToken = new Date().toISOString();
     const newChecksum = calculateSyncChecksum(
       await prisma.cipher.findMany({ where: { userId, deletedAt: null } })
     );
 
-    broadcastSyncRequired(userId, request.user!.deviceId || undefined);
+    // 只有实际有变更时才广播
+    if (accepted.length > 0) {
+      broadcastSyncRequired(userId, request.user!.deviceId || undefined);
+    }
 
     return reply.send({ accepted, rejected, conflicts, newSyncToken, checksum: newChecksum });
   });

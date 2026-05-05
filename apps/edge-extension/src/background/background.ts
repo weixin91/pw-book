@@ -34,6 +34,41 @@ function getPendingKey(tabId: number): string {
   return `_pwbook_pending_${tabId}`;
 }
 
+// 使用 chrome.storage.session 替代 local，防止明文密码持久化到磁盘
+// session storage 在 Service Worker 终止后自动清除，更安全
+async function setPendingData(tabId: number, data: StoredFormData): Promise<void> {
+  pendingFormData.set(tabId, data);
+  if (chrome.storage.session) {
+    await chrome.storage.session.set({ [getPendingKey(tabId)]: data });
+  } else {
+    // fallback: 旧版本浏览器无 session storage
+    await chrome.storage.local.set({ [getPendingKey(tabId)]: data });
+  }
+}
+
+async function getPendingData(tabId: number): Promise<StoredFormData | undefined> {
+  const memoryData = pendingFormData.get(tabId);
+  if (memoryData) return memoryData;
+
+  // 从 session storage 恢复
+  if (chrome.storage.session) {
+    const result = await chrome.storage.session.get(getPendingKey(tabId));
+    return result[getPendingKey(tabId)] as StoredFormData | undefined;
+  } else {
+    const result = await chrome.storage.local.get(getPendingKey(tabId));
+    return result[getPendingKey(tabId)] as StoredFormData | undefined;
+  }
+}
+
+async function removePendingData(tabId: number): Promise<void> {
+  pendingFormData.delete(tabId);
+  if (chrome.storage.session) {
+    await chrome.storage.session.remove(getPendingKey(tabId));
+  } else {
+    await chrome.storage.local.remove(getPendingKey(tabId));
+  }
+}
+
 async function getAssocRules(): Promise<DomainAssocLite[]> {
   const list = await StorageService.getDomainAssociations();
   return list.map((r) => ({
@@ -66,9 +101,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       password: String(msg.password ?? ""),
       timestamp: Date.now(),
     };
-    pendingFormData.set(sender.tab.id, data);
-    // 持久化到 local storage，防止 Service Worker 终止后丢失
-    chrome.storage.local.set({ [getPendingKey(sender.tab.id)]: data });
+    // 使用 session storage 存储，防止明文密码持久化到磁盘
+    setPendingData(sender.tab.id, data);
 
     // 取消旧定时器
     const oldTimer = pendingTimers.get(sender.tab.id);
@@ -76,14 +110,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     // 启动兜底定时器：5 秒后若未触发导航，也弹出保存提示（兼容 SPA/AJAX 登录）
     const tabId = sender.tab.id;
-    const timer = setTimeout(() => {
-      const d = pendingFormData.get(tabId);
+    const timer = setTimeout(async () => {
+      const d = await getPendingData(tabId);
       if (!d) return;
 
       isCredentialAlreadySaved(d.url, d.username, d.password).then((exists) => {
         pendingFormData.delete(tabId);
         pendingTimers.delete(tabId);
-        chrome.storage.local.remove(getPendingKey(tabId));
+        removePendingData(tabId);
 
         if (exists) {
           console.log("[PWBook BG] 兜底定时器：凭据未变化，跳过保存提示");
@@ -102,10 +136,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     pendingTimers.set(tabId, timer);
 
     // 10 秒后清理
-    setTimeout(() => {
+    setTimeout(async () => {
       pendingFormData.delete(sender.tab?.id ?? data.tabId);
       pendingTimers.delete(sender.tab?.id ?? data.tabId);
-      chrome.storage.local.remove(getPendingKey(sender.tab?.id ?? data.tabId));
+      removePendingData(sender.tab?.id ?? data.tabId);
     }, FORM_DATA_TTL);
 
     sendResponse({ success: true });
@@ -133,7 +167,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       // 清理该 tab 的 pending 状态（防止兜底定时器重复触发）
       pendingFormData.delete(tabId);
       pendingTimers.delete(tabId);
-      chrome.storage.local.remove(getPendingKey(tabId));
+      removePendingData(tabId);
     });
 
     sendResponse({ success: true });
@@ -153,17 +187,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           sendResponse({ data });
         }
         pendingFormData.delete(tabId);
-        chrome.storage.local.remove(getPendingKey(tabId));
+        removePendingData(tabId);
       });
       return true;
     }
-    // 内存中没有，尝试从 local storage 恢复（Service Worker 终止后的兜底）
-    chrome.storage.local.get(getPendingKey(tabId)).then(async (result) => {
-      const localData = result[getPendingKey(tabId)] as StoredFormData | undefined;
+    // 内存中没有，尝试从 session storage 恢复（Service Worker 终止后的兜底）
+    getPendingData(tabId).then(async (localData) => {
       if (localData && Date.now() - localData.timestamp < FORM_DATA_TTL) {
         const exists = await isCredentialAlreadySaved(localData.url, localData.username, localData.password);
         if (exists) {
-          console.log("[PWBook BG] GET_PENDING_FORM_DATA(local): 凭据未变化，跳过");
+          console.log("[PWBook BG] GET_PENDING_FORM_DATA(session): 凭据未变化，跳过");
           sendResponse({ data: null });
         } else {
           sendResponse({ data: localData });
@@ -171,7 +204,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       } else {
         sendResponse({ data: null });
       }
-      chrome.storage.local.remove(getPendingKey(tabId));
+      removePendingData(tabId);
     });
     return true;
   }
@@ -244,36 +277,37 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 BrowserApi.onWebNavigationCompleted((details) => {
   if (details.frameId !== 0) return;
 
-  const data = pendingFormData.get(details.tabId);
-  if (!data) return;
+  getPendingData(details.tabId).then((data) => {
+    if (!data) return;
 
-  const beforeUrl = new URL(data.url);
-  const afterUrl = new URL(details.url);
+    const beforeUrl = new URL(data.url);
+    const afterUrl = new URL(details.url);
 
-  // URL 发生变化（非 hash 变化），判定登录成功
-  if (
-    beforeUrl.origin !== afterUrl.origin ||
-    beforeUrl.pathname !== afterUrl.pathname
-  ) {
-    isCredentialAlreadySaved(data.url, data.username, data.password).then((exists) => {
-      pendingFormData.delete(details.tabId);
-      pendingTimers.delete(details.tabId);
-      chrome.storage.local.remove(getPendingKey(details.tabId));
+    // URL 发生变化（非 hash 变化），判定登录成功
+    if (
+      beforeUrl.origin !== afterUrl.origin ||
+      beforeUrl.pathname !== afterUrl.pathname
+    ) {
+      isCredentialAlreadySaved(data.url, data.username, data.password).then((exists) => {
+        pendingFormData.delete(details.tabId);
+        pendingTimers.delete(details.tabId);
+        removePendingData(details.tabId);
 
-      if (exists) {
-        console.log("[PWBook BG] 凭据未变化，跳过保存提示");
-        return;
-      }
+        if (exists) {
+          console.log("[PWBook BG] 凭据未变化，跳过保存提示");
+          return;
+        }
 
-      // 向 content script 发送保存密码提示
-      chrome.tabs.sendMessage(details.tabId, {
-        type: "SHOW_SAVE_PROMPT",
-        username: data.username,
-        password: data.password,
-        url: data.url,
+        // 向 content script 发送保存密码提示
+        chrome.tabs.sendMessage(details.tabId, {
+          type: "SHOW_SAVE_PROMPT",
+          username: data.username,
+          password: data.password,
+          url: data.url,
+        });
       });
-    });
-  }
+    }
+  });
 });
 
 async function handleGetVaultItems(urlStr: string): Promise<Array<Record<string, unknown>>> {

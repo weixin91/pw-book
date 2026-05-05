@@ -127,7 +127,7 @@ class PasskeyGetActivity : FragmentActivity() {
         }
 
         try {
-            val response = authenticateWithPasskey(credentialId, option, origin)
+            val response = authenticateWithPasskey(credentialId, option, origin, userVerified = true)
             val result = Intent()
             val publicKeyCredential = PublicKeyCredential(response)
             PendingIntentHandler.setGetCredentialResponse(
@@ -178,7 +178,8 @@ class PasskeyGetActivity : FragmentActivity() {
     private suspend fun authenticateWithPasskey(
         credentialId: String,
         option: GetPublicKeyCredentialOption,
-        origin: String?
+        origin: String?,
+        userVerified: Boolean = false
     ): String {
         val userKey = vaultSession.getUserKey()
             ?: throw IllegalStateException("保险库未解锁")
@@ -208,7 +209,8 @@ class PasskeyGetActivity : FragmentActivity() {
         val authData = PasskeyCrypto.buildAuthenticatorData(
             rpId = rpId,
             signCount = newCounter,
-            includeAttestedCredentialData = false
+            includeAttestedCredentialData = false,
+            userVerified = userVerified
         )
 
         val clientDataJSON = PasskeyCrypto.buildClientDataJSON("webauthn.get", challenge, resolvedOrigin)
@@ -248,7 +250,7 @@ class PasskeyGetActivity : FragmentActivity() {
         )
         syncManager.launchSyncAll()
 
-        Timber.i("Passkey assertion signed for credentialId=$credentialId, newCounter=$newCounter")
+        Timber.i("Passkey assertion signed for credentialId=$credentialId, newCounter=$newCounter, userVerified=$userVerified")
 
         // 构建响应
         val userHandleBytes = try {
@@ -280,9 +282,10 @@ class PasskeyGetActivity : FragmentActivity() {
 
         val biometricManager = BiometricManager.from(this)
         val canAuth = biometricManager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG)
+        // 生物识别不可用时必须返回 false，不能跳过用户验证
         if (canAuth != BiometricManager.BIOMETRIC_SUCCESS) {
-            Timber.w("Biometric not available, skipping: $canAuth")
-            return true
+            Timber.w("Biometric not available: $canAuth, cannot proceed without user verification")
+            return false
         }
 
         return suspendCancellableCoroutine { continuation ->

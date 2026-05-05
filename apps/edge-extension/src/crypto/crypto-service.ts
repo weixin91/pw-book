@@ -60,11 +60,12 @@ export async function deriveMasterPasswordHash(
     false,
     ["deriveBits"]
   );
+  // 提升至 600000 次迭代（OWASP 2023 推荐），防止暴力破解
   const derivedBits = await crypto.subtle.deriveBits(
     {
       name: "PBKDF2",
       salt: encoder.encode(password),
-      iterations: 1,
+      iterations: 600_000,
       hash: "SHA-256",
     },
     keyMaterial,

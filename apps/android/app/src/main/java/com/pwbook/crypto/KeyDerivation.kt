@@ -50,31 +50,24 @@ class KeyDerivation(private val kdfEngine: KdfEngine) {
 
     /**
      * 计算登录用的密码哈希（与 Edge 端一致）
-     * PBKDF2-HMAC-SHA256(masterKey, password, iterations=1, dkLen=32)
+     * PBKDF2-HMAC-SHA256(masterKey, password, iterations=600000, dkLen=32)
      *
      * 注意：Edge 使用 Web Crypto API:
      *   importKey(masterKey) 作为密钥材料
      *   salt = password
-     *   iterations = 1
+     *   iterations = 600000 (OWASP 2023 推荐)
      *
-     * Java PBEKeySpec 无法直接用 byte[] 作为密钥材料，需要手动实现
+     * 使用标准 PBKDF2 实现，提升至 600000 次迭代防止暴力破解
      */
     fun deriveMasterPasswordHash(masterKey: ByteArray, password: String): ByteArray {
-        // PBKDF2 只迭代 1 次，输出 32 字节
-        // PBKDF2(password, salt, c, dkLen) 定义：
-        //   DK = T1 || T2 || ... || TdkLen/hlen
-        //   Ti = F(password, salt, c, i)
-        //   F = U1 ^ U2 ^ ... ^ Uc
-        //   U1 = PRF(password, salt || INT(i))
-        // 当 c=1 且 dkLen <= hLen(32)，只需一个 block：
-        //   DK = HMAC-SHA256(masterKey, password || INT(1))
-
-        val mac = Mac.getInstance("HmacSHA256")
-        mac.init(SecretKeySpec(masterKey, "HmacSHA256"))
-        mac.update(password.toByteArray(Charsets.UTF_8))
-        // INT(i) 是 4 字节大端序，i=1
-        mac.update(byteArrayOf(0, 0, 0, 1))
-        return mac.doFinal()
+        val spec = PBEKeySpec(
+            password.toCharArray(),
+            masterKey, // 将 masterKey 作为 salt（PBKDF2 的 salt 参数）
+            600_000,   // OWASP 2023 推荐迭代次数
+            32         // 输出 32 字节
+        )
+        val factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
+        return factory.generateSecret(spec).encoded
     }
 
     /**

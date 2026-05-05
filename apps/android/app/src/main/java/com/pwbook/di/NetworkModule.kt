@@ -1,5 +1,6 @@
 package com.pwbook.di
 
+import com.pwbook.BuildConfig
 import com.pwbook.data.datasource.SecurePrefs
 import com.pwbook.data.remote.api.AuthApi
 import com.pwbook.data.remote.api.CipherApi
@@ -41,7 +42,10 @@ object NetworkModule {
     fun provideHttpClient(json: Json, securePrefs: SecurePrefs): HttpClient {
         return HttpClient(Android) {
             install(ContentNegotiation) { json(json) }
-            install(Logging) { level = LogLevel.BODY }
+            // 仅在 DEBUG 模式下启用详细日志，生产环境关闭以防止敏感信息泄露
+            install(Logging) {
+                level = if (BuildConfig.DEBUG) LogLevel.BODY else LogLevel.NONE
+            }
             install(WebSockets)
             install(Auth) {
                 bearer {

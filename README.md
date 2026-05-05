@@ -117,6 +117,7 @@ docker run -d \
   -e JWT_SECRET="your-secret-key" \
   -e DATABASE_URL="file:/data/pwbook.db" \
   -e ALLOWED_EMAILS="user1@example.com,user2@example.com" \
+  -e CORS_ALLOWED_ORIGINS="chrome-extension://your-extension-id,https://yourdomain.com" \
   -e BACKUP_ENABLED="true" \
   -e BACKUP_DIR="/data/backups" \
   -e BACKUP_HOUR=3 \
@@ -134,12 +135,38 @@ docker run -d \
 ```bash
 cd apps/backend
 cp .env.example .env
-# 配置环境变量
+# 配置环境变量（详见下方说明）
 pnpm install
 pnpm migrate:deploy
 pnpm build
 pnpm start
 ```
+
+### 环境变量说明
+
+| 变量 | 必填 | 说明 |
+|------|------|------|
+| `JWT_SECRET` | ✅ | JWT 签名密钥，至少 32 字符随机字符串 |
+| `DATABASE_URL` | ✅ | SQLite 数据库路径，默认 `file:./data/pwbook.db` |
+| `ALLOWED_EMAILS` | ❌ | 注册邮箱白名单，逗号分隔。不设置则允许所有邮箱 |
+| `CORS_ALLOWED_ORIGINS` | ❌ | CORS 白名单，逗号分隔。生产环境建议配置 |
+| `BACKUP_ENABLED` | ❌ | 启用自动备份，默认 `false` |
+| `BACKUP_DIR` | ❌ | 备份目录，默认 `./backups` |
+| `BACKUP_HOUR` | ❌ | 每天备份时间（0-23），默认 `3` |
+| `BACKUP_RETENTION_DAYS` | ❌ | 备份保留天数，默认 `7` |
+
+#### CORS_ALLOWED_ORIGINS 配置
+
+控制允许跨域访问 API 的来源：
+
+- **开发环境**：默认允许 `chrome-extension://*`、`http://localhost:*`
+- **生产环境**：建议精确配置，例如：
+  ```
+  CORS_ALLOWED_ORIGINS=chrome-extension://abcdefg,https://app.yourdomain.com
+  ```
+- **格式**：逗号分隔的完整 URL，支持通配符 `*`（不建议生产使用）
+
+> 注意：Edge 浏览器插件必须以 `chrome-extension://` 协议访问 API，请确保配置中包含扩展 ID。
 
 ## 数据备份
 
