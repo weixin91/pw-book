@@ -66,18 +66,26 @@ object TotpGenerator {
     }
 
     /**
-     * Base32 解码（支持大写/小写，忽略填充符 =）
+     * Base32 解码（RFC 4648）。
+     * 与 Edge 端 `apps/edge-extension/src/crypto/totp.ts` 保持一致：
+     * - 忽略空白字符与连字符；
+     * - 去除尾部填充符 `=`；
+     * - 遇到非法字符时抛出异常（严格模式），避免 Android/Edge 在同一密钥上得出不同结果。
      */
     private fun base32Decode(input: String): ByteArray {
         val alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
-        val cleaned = input.uppercase().replace("=", "")
+        val cleaned = input.replace(Regex("\\s+|-"), "")
+            .uppercase()
+            .replace(Regex("=+$"), "")
         val output = mutableListOf<Byte>()
         var buffer = 0
         var bitsLeft = 0
 
         for (char in cleaned) {
             val valChar = alphabet.indexOf(char)
-            if (valChar < 0) continue
+            if (valChar < 0) {
+                throw IllegalArgumentException("Base32 解码失败：非法字符 \"$char\"")
+            }
             buffer = (buffer shl 5) or valChar
             bitsLeft += 5
             if (bitsLeft >= 8) {

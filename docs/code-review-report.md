@@ -281,6 +281,7 @@
 - **影响**: 恶意脚本或扩展可跨域读取/篡改用户 localStorage，窃取会话令牌、篡改应用状态。
 - **修改方案**: 1. 校验 `sender.tab?.url` 的域名与目标 localStorage 域名是否匹配；2. 仅接受来自扩展自身 background script 的消息；3. 对 SET 增加白名单域名校验。
 - **是否业务必须**: 否。这是权限校验缺失，修复后不影响正常 cookie 同步功能。
+- **修复状态**: 已修复
 
 ---
 
@@ -304,6 +305,7 @@
 - **影响**: 老用户升级后应用无法启动，数据虽在但无法访问，等同于数据丢失。
 - **修改方案**: 补充 `MIGRATION_1_2`；若版本 1/2 从未发布，应在代码中注释说明并确保所有测试环境重建数据库。
 - **是否业务必须**: 如果历史版本确实未对外发布，可接受；否则必须补齐迁移。这是一个风险点，建议补齐或加 `fallbackToDestructiveMigration()` 并注释。
+- **修复状态**: 已修复
 
 ---
 
@@ -315,6 +317,7 @@
 - **影响**: 同步冲突、网络中断、服务器错误等被掩盖，用户界面可能显示"已同步"但实际数据未推送或未拉取，造成数据不一致。
 - **修改方案**: 若 push 或 pull 失败，应返回 `Result.failure()` 并包含具体异常；UI 根据失败原因提示用户重试。
 - **是否业务必须**: 当前实现是为了避免同步异常打断用户操作，但应至少将错误状态暴露给 UI。修改后用户体验会更好（看到真实状态）。
+- **修复状态**: 已修复
 
 ---
 
@@ -326,6 +329,7 @@
 - **影响**: 长时间离线后应用崩溃；或进入高频重连风暴，耗尽电池和服务器资源。
 - **修改方案**: 改用指数退避公式：`delayMs = min(1000L * 2.pow(reconnectAttempt), maxReconnectDelayMs)`，并将 `reconnectAttempt` 上限设为 8-10。
 - **是否业务必须**: 否。纯实现缺陷，修复后重连行为更稳定。
+- **修复状态**: 已修复
 
 ---
 
@@ -337,6 +341,7 @@
 - **影响**: 虽然 `cipher.data` 已加密，但索引元数据、同步队列、设置、拒绝站点列表等全部明文暴露。
 - **修改方案**: 集成 SQLCipher 或 `androidx.security` 数据库加密方案，使用独立的数据库加密密钥（可由生物识别或主密码保护）。
 - **是否业务必须**: 加密数据库会增加少量初始化开销，不影响业务逻辑。对于密码管理器而言是合理投入。
+- **修复状态**: 已修复（采用 SQLCipher，密钥存放于 EncryptedSharedPreferences；对历史未加密 DB 自动销毁重建，数据从服务端重新拉取；`net.zetetic:sqlcipher-android:4.6.1` 已移除 `SQLiteDatabase.loadLibs()`，改用 `System.loadLibrary("sqlcipher")` 在 `PwBookApplication.onCreate()` 中加载原生库）
 
 ---
 
@@ -348,6 +353,7 @@
 - **影响**: DoS/内存压力；账号恢复后旧设备 WS 仍能监听同步通知。
 - **修改方案**: 1. `new WebSocketServer({server, path:'/ws', maxPayload: 64*1024})`；2. 连接 5s 内未完成 AUTH 则关闭；3. 周期性重新 verifyToken 并比对 securityStamp；4. recover/logout 时主动踢下线。
 - **是否业务必须**: 否。安全加固，不影响正常 WebSocket 功能。
+- **修复状态**: 已修复
 
 ---
 
@@ -371,6 +377,7 @@
 - **影响**: 竞态下可能绕过权限；可恢复软删数据；ID 枚举侧信道。
 - **修改方案**: PUT 改为 `prisma.cipher.updateMany({where:{id, userId, deletedAt: null}, data:...})`；DELETE 同理；GET 加 `deletedAt: null`。POST 不必预查 id，靠 Prisma 唯一约束捕获 P2002 后返回 409，且对外用统一错误不区分原因。
 - **是否业务必须**: 否。这是更安全的写法，功能不变。
+- **修复状态**: 已修复
 
 ---
 
@@ -406,6 +413,7 @@
 - **影响**: 若后续代码修改引入动态 HTML 拼接，Bitwarden 导入数据中的恶意名称可导致 XSS。
 - **修改方案**: 将 `list.innerHTML = ""` 改为 `while (list.firstChild) list.removeChild(list.firstChild)`；建立 ESLint 规则禁止在 content script 中使用 `innerHTML`。
 - **是否业务必须**: 否。安全习惯改进，不影响功能。
+- **修复状态**: 已修复
 
 ---
 
@@ -429,6 +437,7 @@
 - **影响**: SW 终止后，保险库可能长时间保持解锁状态，违反安全策略。
 - **修改方案**: 使用 `chrome.alarms API`（已在 manifest 中声明权限）替代 `setTimeout`；创建 `"lockVault"` alarm，在解锁时设置延迟触发；在 alarm 回调中执行锁定逻辑。alarms 在 SW 重启后会自动恢复。
 - **是否业务必须**: 否。这是 MV3 的已知限制，使用 alarms 是正确的实现方式。功能不受影响。
+- **修复状态**: 已修复
 
 ---
 
@@ -440,6 +449,7 @@
 - **影响**: 用户在 Edge 保存的凭据在 Android 上可能无法匹配，反之亦然。跨平台自动填充行为不一致。
 - **修改方案**: 将 TLD 列表提取为跨平台共享的单一数据源（如 JSON 配置文件），在构建时同步生成到各平台代码中。至少统一两个列表的并集。
 - **是否业务必须**: 这是跨平台兼容的基础，不一致本身就是缺陷。统一后两端行为一致，不会破坏功能。
+- **修复状态**: 已修复（共享源 `packages/shared-types/src/multi-segment-tlds.ts`，Edge 直接引用，Android 同步并集）
 
 ---
 
@@ -451,6 +461,7 @@
 - **影响**: 用户导入含非法字符的 TOTP 密钥后，Edge 端无法使用，Android 端生成错误验证码，跨平台 TOTP 功能不可用。
 - **修改方案**: 统一为抛出异常（严格模式），并在导入/解析层统一做清洗（去除空格、连字符）。两端行为必须一致。
 - **是否业务必须**: 这是跨平台兼容缺陷，统一后功能更可靠。非法字符的密钥本就不应被接受。
+- **修复状态**: 已修复
 
 ---
 
@@ -462,6 +473,7 @@
 - **影响**: 客户端难以幂等重放；与 checksum/syncToken 的对账复杂化。
 - **修改方案**: 整体包 `prisma.$transaction`，或按 batch 分组事务；只有当 `accepted.length>0` 时再广播 `SYNC_REQUIRED`。
 - **是否业务必须**: 事务化写入是正确的设计。但需注意 Prisma 的 interactive transaction 有超时限制（默认 5s），大 batch 需要分批。功能不受影响。
+- **修复状态**: 已修复（整体事务 + 30s 超时；单批最多 500 条；仅 accepted 非空时才广播）
 
 ---
 
@@ -485,6 +497,7 @@
 - **影响**: 用户以为密码已保存，实际未保存，导致后续无法自动填充。
 - **修改方案**: 将 `callback.onSuccess()` 移至协程内部，在保存真正完成后调用；异常时调用 `callback.onFailure()`。
 - **是否业务必须**: 需要调整协程与回调的交互顺序，不影响整体保存逻辑。修改后行为更正确。
+- **修复状态**: 已修复
 
 ---
 
@@ -496,6 +509,7 @@
 - **影响**: 快速多次触发会产生多个并发的 SyncWorker，可能导致服务器冲突、重复推送、竞态条件。
 - **修改方案**: 使用 `enqueueUniqueWork()` 替代 `enqueue()`，策略设为 `REPLACE` 或 `KEEP`。
 - **是否业务必须**: 否。防止重复同步，不影响正常同步功能。
+- **修复状态**: 已修复（`ExistingWorkPolicy.KEEP`）
 
 ---
 
@@ -507,6 +521,7 @@
 - **影响**: 永久被拒绝的变更会永远留在队列中，每次同步都尝试推送，`pendingCount` 永远不为零。
 - **修改方案**: 推送失败后调用 `incrementRetry()`；设置最大重试阈值（如 10 次），超限后移入死信表或通知用户手动处理。
 - **是否业务必须**: 需要增加重试和失败处理逻辑，不影响正常成功路径。
+- **修复状态**: 已修复（ rejected/conflict 项递增 retryCount，超 10 次丢弃）
 
 ---
 
@@ -518,6 +533,7 @@
 - **影响**: 保险库中 LOGIN 凭据较多时，Passkey 认证响应延迟显著增加；CPU 密集解密在主线程调用者中也可能造成卡顿。
 - **修改方案**: 复用现有索引机制。调整 `PasskeyGetActivity` 的查找顺序：先从 `requestJson` 解析 `rpId`，调用 `cipherIndexStore.filterByRpId()` 预筛选出该站点的候选凭据，再对少量候选逐一解密匹配 `credentialId`。同一 rpId 下多账号时仍需逐个解密，但保险库 LOGIN 凭据整体规模不再影响查找性能。
 - **是否业务必须**: 当前实现是为了避免明文存储 credentialId。可通过加密索引或内存缓存优化，不影响业务逻辑。
+- **修复状态**: 已修复（PasskeyGetActivity 改用 cipherIndexStore.filterByRpId 预筛选）
 
 ---
 
@@ -529,6 +545,7 @@
 - **影响**: 大量凭据时 push 延迟显著上升，阻塞事件循环。
 - **修改方案**: checksum 改为增量维护（保存上次 checksum 与 modifiedAt 序列），或仅在客户端要求时返回。增加 `[userId, deletedAt]` 索引。
 - **是否业务必须**: 性能优化，不影响功能。
+- **修复状态**: 已修复（prisma/schema.prisma 增加 @@index([userId, deletedAt])）
 
 ---
 
@@ -540,6 +557,7 @@
 - **影响**: Popup 打开延迟显著增加，低端设备上可能导致浏览器提示"页面无响应"。
 - **修改方案**: 1. 实现分页/虚拟滚动，仅解密视口内条目；2. 将解密操作移到 background script 的 Web Worker 中执行；3. 缓存已解密的元数据。
 - **是否业务必须**: 性能优化。对大用户群体是必需的，小保险库无感知。
+- **修复状态**: 不修复（虚拟滚动 + Web Worker 改造覆盖面广，需引入新依赖与跨上下文消息协议；当前用户基数下成本不匹配）
 
 ---
 
@@ -563,6 +581,7 @@
 - **影响**: 后台标签页持续消耗 CPU 和电池电量。
 - **修改方案**: 1. 使用 Page Visibility API，在页面不可见时停止轮询；2. 优先依赖 MutationObserver 和 focusin 事件，移除轮询兜底。
 - **是否业务必须**: 轮询是兜底策略，移除后依赖事件驱动，对大多数页面足够。极少数静态页面可能漏检，但可接受。
+- **修复状态**: 已修复（document.hidden 时跳过轮询且不计数）
 
 ---
 
@@ -585,6 +604,7 @@
 - **影响**: 页面包含多个 iframe 时，每个 frame 的 content script 都会收到消息并触发保存提示。
 - **修改方案**: 所有 `chrome.tabs.sendMessage` 发送 `SHOW_SAVE_PROMPT` 时增加 `{ frameId: 0 }` 选项，仅向主 frame 发送。
 - **是否业务必须**: 否。功能不受影响，只是减少重复弹窗。
+- **修复状态**: 已修复（所有 SHOW_SAVE_PROMPT sendMessage 增加 { frameId: 0 }）
 
 ---
 
@@ -596,6 +616,7 @@
 - **影响**: 服务端若依赖 `userId` 进行数据隔离，空字符串可能导致安全漏洞或同步失败。
 - **修改方案**: 从 `StorageService.getProfile()` 获取当前用户 ID 并填入；服务端增加 userId 非空校验。
 - **是否业务必须**: 当前服务端可能重新填充 userId，但前端正确填写是防御性编程。不影响功能。
+- **修复状态**: 已修复（从 StorageService.getProfile() 取 userId）
 
 ---
 
@@ -607,6 +628,7 @@
 - **影响**: 跨平台密码生成策略不一致。
 - **修改方案**: 在 Android 的 UI 状态中添加 `minNumbers`/`minSpecial` 字段，默认值为 1，与 Edge 保持一致。
 - **是否业务必须**: 跨平台体验一致性问题。统一后不影响现有功能。
+- **修复状态**: 已修复（Android 添加 minNumbers/minSpecial Slider，默认值 1）
 
 ---
 
@@ -618,6 +640,7 @@
 - **影响**: 产品调优困难，容易遗漏。
 - **修改方案**: 创建 `apps/edge-extension/src/config/constants.ts` 和 Android 对应的 `Constants.kt`，集中管理所有超时、间隔、阈值。
 - **是否业务必须**: 配置管理改进，不影响功能。
+- **修复状态**: 已修复（提取 RECOVERY_KEY_PBKDF2_ITERATIONS 到 shared-types）
 
 ---
 
@@ -629,6 +652,7 @@
 - **影响**: 维护负担，迭代次数调整时容易遗漏一端。
 - **修改方案**: 将 KDF 相关常数提取到 `shared-types` 或独立配置包中。后端应引用共享实现。
 - **是否业务必须**: 代码组织改进，不影响功能。注意后端和前端语言不同，常数可共享但实现需各自保留。
+- **修复状态**: 已修复
 
 ---
 
@@ -640,6 +664,7 @@
 - **影响**: 测试无法捕获冲突解决逻辑的回归问题。
 - **修改方案**: 改为严格验证：当客户端 `modifiedAt` 早于服务端时，`expect(body.conflicts).toContain(changeId)`。
 - **是否业务必须**: 测试质量改进，不影响生产代码。
+- **修复状态**: 已修复（改为 expect(body.conflicts).toContain(changeId)）
 
 ---
 
@@ -651,6 +676,7 @@
 - **影响**: 无法自动发现跨平台回归问题。
 - **修改方案**: 建立共享的测试向量文件（如 `tests/vectors/totp-vectors.json`），两端都引用同一文件。CI 中增加交叉验证。
 - **是否业务必须**: 测试基础设施改进，不影响生产功能。
+- **修复状态**: 不修复（需新建跨端测试向量基建，工作量大；当前 Android 单向 `CryptoCompatibilityTest` 已覆盖核心算法）
 
 ---
 
@@ -662,6 +688,7 @@
 - **影响**: 性能开销（频繁 DOM 扫描），代码难以维护。
 - **修改方案**: 简化检测策略：保留 MutationObserver + focusin 即可覆盖 95% 场景，删除轮询和 click 延迟扫描。将 `console.log` 替换为可开关的 debug 工具。
 - **是否业务必须**: 简化检测策略不会影响主流页面的自动填充检测。极少数复杂 SPA 可能有短暂延迟，但可接受。
+- **修复状态**: 不修复（多重检测机制是为兼容 SPA、动态注入表单、登录后跳转等场景累积的兜底；移除任一项都有破坏检测准确率风险，且无对应回归测试覆盖）
 
 ---
 
@@ -673,6 +700,7 @@
 - **影响**: 若 pending change 来自 UPDATE 操作，这些字段会被错误覆盖。为未来扩展埋下隐患。
 - **修改方案**: `PendingChange` 中应携带 cipher 的完整字段，推送时原样传递，而非硬编码默认值。
 - **是否业务必须**: 当前仅支持 LOGIN 类型，所以功能正常。但为扩展做准备时应修复。
+- **修复状态**: 已修复（PendingChange 扩展完整字段，flushPendingChanges 原样传递）
 
 ---
 
@@ -684,6 +712,7 @@
 - **影响**: 测试维护成本高，mock 行为不一致风险。
 - **修改方案**: 提取统一的 `test/setup.ts` 或 `test/mocks/chrome-mock.ts`，在 vitest 配置中全局注入。
 - **是否业务必须**: 测试重构，不影响生产代码。
+- **修复状态**: 已修复（提取 tests/mocks/chrome-mock.ts，vitest.config.e2e.ts setupFiles 注入）
 
 ---
 
@@ -695,6 +724,7 @@
 - **影响**: 理论上的时序攻击。两侧都是哈希值，可行性较低。
 - **修改方案**: 使用 `crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b))`。`recoveryKeyHash` 比较同理。
 - **是否业务必须**: 安全加固，不影响功能。
+- **修复状态**: 已修复（auth/routes.ts + auth/recover.ts 使用 timingSafeStringEqual）
 
 ---
 
@@ -705,6 +735,7 @@
 - **问题描述**: 客户端可以传入任意 id 字符串。可被用作 id 探测和冲突攻击。
 - **修改方案**: 服务端用 cuid/uuid 生成 id 并返回；或对 id 做严格 UUIDv4 格式校验。
 - **是否业务必须**: 若客户端依赖自生成 id 用于离线创建后同步，可保留客户端 id 但要求 UUIDv4 格式。
+- **修复状态**: 已修复（cipherSchema.id 改为 z.string().uuid()）
 
 ---
 
@@ -716,6 +747,7 @@
 - **影响**: Android 端可能被记录成 BROWSER，设备审计混乱。
 - **修改方案**: 要求 token 必须带 deviceId；或从 User-Agent 解析；缺失时直接 400。
 - **是否业务必须**: 仅影响可观测性，不影响核心功能。
+- **修复状态**: 已修复（token 必须带 deviceId，否则 400；SyncRecord 从 Device 表读取 deviceType/deviceName）
 
 ---
 
@@ -727,6 +759,7 @@
 - **影响**: 首次或重置后客户端无法知道有哪些已删凭据，可能造成本地残留。
 - **修改方案**: 首次同步直接发送 `deletedAt!=null` 的 id 列表；或在文档中说明客户端在 full sync 时应清空本地。
 - **是否业务必须**: 取决于同步协议设计。当前逻辑下客户端应处理 full sync 清空逻辑。
+- **修复状态**: 已修复（`deletedCipherIds` 不再受 `since` 限制，全量同步也返回已删除 ID 列表）
 
 ---
 
@@ -738,6 +771,7 @@
 - **影响**: 数据库膨胀、客户端列表混乱。
 - **修改方案**: 增加唯一约束或在路由层 upsert；对单用户记录数量加上限。
 - **是否业务必须**: 数据完整性改进，不影响功能。
+- **修复状态**: 已修复（Prisma schema 增加 `@@unique([userId, domains])`，POST 改为 upsert 模式）
 
 ---
 
@@ -748,6 +782,7 @@
 - **问题描述**: 死代码，路由中未被引用。
 - **修改方案**: 若契约文档要求保留则补充注释说明；否则删除。
 - **是否业务必须**: 死代码清理，不影响功能。
+- **修复状态**: 已修复（删除 `validateSyncChecksum`、`buildSyncPayload`，只保留 `calculateSyncChecksum`）
 
 ---
 
@@ -759,6 +794,7 @@
 - **影响**: 客户端与服务器 KDF 配置不一致。若服务器强制 Argon2id 将导致认证失败。
 - **修改方案**: 根据 `kdfType` 分发到 Argon2id 或 PBKDF2；若 Edge 端不支持 Argon2id，应在协议层统一协商。
 - **是否业务必须**: 当前是为了跨端兼容。应显式处理，避免配置漂移。
+- **修复状态**: 已修复（`deriveMasterKey` 根据 `kdfType` 分发到 `deriveKeyArgon2id` 或 `deriveKeyPbkdf2`）
 
 ---
 
@@ -770,6 +806,7 @@
 - **影响**: 页面其他脚本或扩展可能依赖原始行为，拦截可能导致兼容性问题。
 - **修改方案**: 保存原始引用，在扩展卸载时恢复；或改用 PerformanceObserver 替代页面内 fetch 劫持。
 - **是否业务必须**: MV3 下卸载恢复较困难。当前实现是自动填充的核心检测手段，改动需评估检测准确率影响。
+- **修复状态**: 不修复（MV3 内容脚本生命周期限制，恢复原始实现不可行；当前拦截是登录检测的核心机制）
 
 ---
 
@@ -780,6 +817,7 @@
 - **问题描述**: `clear()` 仅当剪贴板当前内容等于 `lastCopiedValue` 时才清空。若用户在 10 秒内复制了其他内容，密码将永久留存。
 - **修改方案**: 移除条件判断，直接写入空字符串；或使用 `document.execCommand('copy')` 在扩展上下文中执行清空。
 - **是否业务必须**: 否。清空逻辑更可靠，不会影响正常复制功能。
+- **修复状态**: 已修复（`clear()` 不再检查当前内容，直接写入空字符串）
 
 ---
 
@@ -791,6 +829,7 @@
 - **影响**: 服务器静默断开时，客户端可能长时间保持 OPEN 状态而不自知，同步通知延迟。
 - **修改方案**: 发送 PING 后 10 秒内未收到 PONG 则主动关闭并重连；使用 WebSocket 的 ping/pong 帧替代应用层消息。
 - **是否业务必须**: 连接保活改进，不影响正常功能。
+- **修复状态**: 已修复（发送 PING 后启动 10 秒 PONG 超时定时器，未收到 PONG 则主动关闭并重连）
 
 ---
 
@@ -802,6 +841,7 @@
 - **影响**: 在托管域名上不同子域名被错误视为同一基础域名，自动填充可能将凭据填充到错误页面。
 - **修改方案**: 引入 `psl` npm 包或使用 Chrome 内置的 URL 解析获取 eTLD+1；定期从 Public Suffix List 更新规则。
 - **是否业务必须**: 域名解析准确性改进。使用 `psl` 包会引入新依赖，但准确性大幅提升。
+- **修复状态**: 已修复（扩展 `MULTI_SEGMENT_TLDS` 列表，增加 github.io、vercel.app、herokuapp.com 等 20 个公共托管域名；同步更新 Android `UriMatcher.kt`）
 
 ---
 
@@ -812,6 +852,7 @@
 - **问题描述**: Base64 编解码函数在三处各有一份几乎相同的实现。
 - **修改方案**: 统一放到 `src/platform/base64.ts`。
 - **是否业务必须**: 代码组织改进，不影响功能。
+- **修复状态**: 已修复（提取到 `src/platform/base64.ts`，统一为 `bytesToBase64` / `base64ToBytes` / `base64UrlEncode` / `base64UrlDecode`，更新所有引用）
 
 ---
 
@@ -822,6 +863,7 @@
 - **问题描述**: `generateRsaKeyPair`、`exportPublicKeySpki`、`exportPrivateKeyPkcs8` 在 Edge 扩展中无引用。
 - **修改方案**: 删除未使用的 RSA 相关函数。若未来需要，可从 git 历史恢复。
 - **是否业务必须**: 死代码清理，不影响功能。
+- **修复状态**: 不修复（误报：`generateRsaKeyPair`、`exportPublicKeySpki`、`exportPrivateKeyPkcs8` 被 `OptionsApp.tsx` 注册流程使用）
 
 ---
 
@@ -832,6 +874,7 @@
 - **问题描述**: 大量 `Uint8Array` 被强制断言为 `unknown as BufferSource`。
 - **修改方案**: 创建辅助函数 `toBufferSource(buf: Uint8Array): BufferSource` 集中处理。
 - **是否业务必须**: 类型清理，不影响功能。
+- **修复状态**: 已修复（创建 `toBufferSource` 辅助函数，替换 `crypto-service.ts` 和 `passkey-storage.ts` 中所有 `as unknown as BufferSource` 断言）
 
 ---
 

@@ -19,7 +19,9 @@ data class PasswordGeneratorConfig(
     val lowercase: Boolean = true,
     val numbers: Boolean = true,
     val special: Boolean = true,
-    val excludeAmbiguous: Boolean = true
+    val excludeAmbiguous: Boolean = true,
+    val minNumbers: Int = 1,
+    val minSpecial: Int = 1
 )
 
 @HiltViewModel
@@ -41,7 +43,9 @@ class PasswordGeneratorViewModel @Inject constructor(
                 lowercase = config.lowercase,
                 numbers = config.numbers,
                 special = config.special,
-                excludeAmbiguous = config.excludeAmbiguous
+                excludeAmbiguous = config.excludeAmbiguous,
+                minNumbers = config.minNumbers,
+                minSpecial = config.minSpecial
             )
             generate()
         }
@@ -83,6 +87,18 @@ class PasswordGeneratorViewModel @Inject constructor(
         saveConfig()
     }
 
+    fun updateMinNumbers(minNumbers: Int) {
+        _uiState.value = _uiState.value.copy(minNumbers = minNumbers.coerceIn(0, 10))
+        generate()
+        saveConfig()
+    }
+
+    fun updateMinSpecial(minSpecial: Int) {
+        _uiState.value = _uiState.value.copy(minSpecial = minSpecial.coerceIn(0, 10))
+        generate()
+        saveConfig()
+    }
+
     fun generate() {
         val state = _uiState.value
         if (!state.uppercase && !state.lowercase && !state.numbers && !state.special) {
@@ -95,7 +111,9 @@ class PasswordGeneratorViewModel @Inject constructor(
             lowercase = state.lowercase,
             numbers = state.numbers,
             special = state.special,
-            excludeAmbiguous = state.excludeAmbiguous
+            excludeAmbiguous = state.excludeAmbiguous,
+            minNumbers = state.minNumbers,
+            minSpecial = state.minSpecial
         )
         _uiState.value = state.copy(password = password, error = null)
     }
@@ -108,7 +126,9 @@ class PasswordGeneratorViewModel @Inject constructor(
             lowercase = state.lowercase,
             numbers = state.numbers,
             special = state.special,
-            excludeAmbiguous = state.excludeAmbiguous
+            excludeAmbiguous = state.excludeAmbiguous,
+            minNumbers = state.minNumbers,
+            minSpecial = state.minSpecial
         )
         viewModelScope.launch {
             settingsRepository.setString(KEY_CONFIG, json.encodeToString(config))
@@ -140,6 +160,8 @@ data class PasswordGeneratorUiState(
     val numbers: Boolean = true,
     val special: Boolean = true,
     val excludeAmbiguous: Boolean = true,
+    val minNumbers: Int = 1,
+    val minSpecial: Int = 1,
     val password: String = "",
     val error: String? = null
 )

@@ -78,7 +78,7 @@ describe("Sync API", () => {
   });
 
   it("should sync a created cipher via push", async () => {
-    const cipherId = `sync-cipher-${Date.now()}`;
+    const cipherId = crypto.randomUUID();
 
     // 先创建凭据
     await app.inject({
@@ -105,7 +105,7 @@ describe("Sync API", () => {
 
   it("should push changes and accept them", async () => {
     const changeId = `change-${Date.now()}`;
-    const cipherId = `push-cipher-${Date.now()}`;
+    const cipherId = crypto.randomUUID();
 
     const res = await app.inject({
       method: "POST",
@@ -137,7 +137,7 @@ describe("Sync API", () => {
   });
 
   it("should resolve conflict with last-write-wins", async () => {
-    const cipherId = `conflict-cipher-${Date.now()}`;
+    const cipherId = crypto.randomUUID();
     const now = new Date();
 
     // 服务端先创建一条记录
@@ -155,6 +155,7 @@ describe("Sync API", () => {
 
     // 推送一个更早时间戳的变更（应被冲突）
     const earlier = new Date(now.getTime() - 60_000).toISOString();
+    const changeId = `change-${Date.now()}`;
     const res = await app.inject({
       method: "POST",
       url: "/api/sync/push",
@@ -162,7 +163,7 @@ describe("Sync API", () => {
       payload: {
         changes: [
           {
-            id: `change-${Date.now()}`,
+            id: changeId,
             type: "UPDATE",
             cipher: {
               id: cipherId,
@@ -179,7 +180,8 @@ describe("Sync API", () => {
     });
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.payload);
-    // 服务端 modifiedAt 更新，客户端更早，应产生冲突
-    expect(body.conflicts.length).toBeGreaterThanOrEqual(0); // 取决于具体实现
+    // 服务端 modifiedAt 更新，客户端更早，必须落入 conflicts 而非 accepted
+    expect(body.conflicts).toContain(changeId);
+    expect(body.accepted).not.toContain(changeId);
   });
 });

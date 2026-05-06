@@ -1,12 +1,8 @@
 // Cookie 数据编解码与压缩
 // JSON -> gzip -> AES-256-GCM 加密 -> Base64；反向解码
 
-import {
-  arrayBufferToBase64,
-  base64ToArrayBuffer,
-  encryptWithKey,
-  decryptWithKey,
-} from "../crypto/crypto-service.js";
+import { bytesToBase64, base64ToBytes } from "../platform/base64.js";
+import { encryptWithKey, decryptWithKey } from "../crypto/crypto-service.js";
 
 /**
  * 使用 CompressionStream 对字符串进行 gzip 压缩

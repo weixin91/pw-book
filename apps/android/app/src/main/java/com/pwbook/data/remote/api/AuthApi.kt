@@ -95,7 +95,10 @@ data class RegisterRequest(
     val kdfMemory: Int? = null,
     val kdfParallelism: Int? = null,
     val recoveryKeyHash: String,
-    val encryptedRecoveryKey: String
+    val encryptedRecoveryKey: String,
+    val deviceId: String? = null,
+    val deviceType: String? = null,
+    val deviceName: String? = null
 )
 
 @Serializable

@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import timber.log.Timber
+import java.util.UUID
 import javax.inject.Inject
 
 @HiltViewModel
@@ -118,7 +119,10 @@ class RegisterViewModel @Inject constructor(
                         kdfMemory = memoryKb,
                         kdfParallelism = parallelism,
                         recoveryKeyHash = recoveryKeyHash,
-                        encryptedRecoveryKey = encryptedRecoveryKey
+                        encryptedRecoveryKey = encryptedRecoveryKey,
+                        deviceId = UUID.randomUUID().toString(),
+                        deviceType = "ANDROID",
+                        deviceName = "Android Device"
                     )
                 )
 

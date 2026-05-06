@@ -5,6 +5,9 @@
 // 实际明文私钥不会直接落盘 —— passkey 字段位于 Cipher.data 内，
 // 上层在保存时会与其他凭据数据一同走 AES-256-GCM 加密。
 
+import { toBufferSource } from "./crypto-service.js";
+import { bytesToBase64, base64ToBytes, base64UrlEncode, base64UrlDecode } from "../platform/base64.js";
+
 export const CIPHER_TYPE_PASSKEY = 5;
 
 export interface PasskeyData {
@@ -56,8 +59,8 @@ export async function generatePasskey(params: PasskeyCreationParams): Promise<Pa
 
   const data: PasskeyData = {
     credentialId: base64UrlEncode(credentialIdBytes),
-    privateKey: base64Encode(new Uint8Array(pkcs8)),
-    publicKey: base64Encode(new Uint8Array(spki)),
+    privateKey: bytesToBase64(new Uint8Array(pkcs8)),
+    publicKey: bytesToBase64(new Uint8Array(spki)),
     rpId: params.rpId,
     rpName: params.rpName,
     userHandle: base64UrlEncode(params.userHandle),
@@ -75,7 +78,7 @@ export async function importPasskeyPrivateKey(privateKeyB64: string): Promise<Cr
   const pkcs8 = base64UrlDecode(privateKeyB64);
   return crypto.subtle.importKey(
     "pkcs8",
-    pkcs8 as unknown as BufferSource,
+    toBufferSource(pkcs8),
     { name: "ECDSA", namedCurve: "P-256" },
     false,
     ["sign"]
@@ -98,7 +101,7 @@ export async function exportPublicKeyRaw(publicKey: CryptoKey): Promise<{ x: Uin
 // 计算 rpIdHash = SHA-256(rpId)
 export async function rpIdHash(rpId: string): Promise<Uint8Array> {
   const enc = new TextEncoder().encode(rpId);
-  const hash = await crypto.subtle.digest("SHA-256", enc as unknown as BufferSource);
+  const hash = await crypto.subtle.digest("SHA-256", toBufferSource(enc));
   return new Uint8Array(hash);
 }
 
@@ -171,7 +174,7 @@ export async function signAssertion(
     await crypto.subtle.sign(
       { name: "ECDSA", hash: "SHA-256" },
       privateKey,
-      data as unknown as BufferSource
+      toBufferSource(data)
     )
   );
   // sigRaw 是 IEEE-P1363（r||s 各 32 字节），转 DER 以便 RP 服务端使用主流验证库
@@ -316,25 +319,3 @@ function encodeAsn1Integer(value: Uint8Array): Uint8Array {
 }
 
 // Base64 / Base64URL 工具
-export function base64Encode(buf: Uint8Array): string {
-  let binary = "";
-  for (let i = 0; i < buf.length; i++) binary += String.fromCharCode(buf[i]);
-  return btoa(binary);
-}
-
-export function base64Decode(b64: string): Uint8Array {
-  const binary = atob(b64);
-  const out = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
-  return out;
-}
-
-export function base64UrlEncode(buf: Uint8Array): string {
-  return base64Encode(buf).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
-
-export function base64UrlDecode(b64url: string): Uint8Array {
-  const padded = b64url.replace(/-/g, "+").replace(/_/g, "/");
-  const padLen = (4 - (padded.length % 4)) % 4;
-  return base64Decode(padded + "=".repeat(padLen));
-}

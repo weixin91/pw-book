@@ -16,6 +16,7 @@ import {
   deriveRecoveryKeyHash,
   deriveRecoveryMasterKey,
 } from "../crypto/crypto-service";
+import { bytesToBase64 } from "../platform/base64";
 import { LockSettingsService, type LockSettings } from "../background/lock-timer";
 import { ImportPanel } from "./components/ImportPanel";
 
@@ -113,19 +114,23 @@ export function OptionsApp(): React.ReactElement {
       const recoveryKeyHash = await deriveRecoveryKeyHash(recKey, email);
       const recoveryMasterKey = await deriveRecoveryMasterKey(recKey, email);
       const encryptedRecoveryKey = await encryptWithKey(userKey, recoveryMasterKey);
+      const deviceId = crypto.randomUUID();
 
       const res = await fetch(`${serverUrl}/api/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email,
-          masterPasswordHash: arrayBufferToBase64(masterPasswordHash),
+          masterPasswordHash: bytesToBase64(masterPasswordHash),
           protectedKey,
           publicKey,
           encryptedPrivateKey,
           ...DEFAULT_KDF,
           recoveryKeyHash,
           encryptedRecoveryKey,
+          deviceId,
+          deviceType: "BROWSER",
+          deviceName: navigator.userAgent.slice(0, 50) || "Edge Browser",
         }),
       });
 
@@ -214,7 +219,7 @@ export function OptionsApp(): React.ReactElement {
         body: JSON.stringify({
           email,
           recoveryKey: recoveryKeyInput,
-          newMasterPasswordHash: arrayBufferToBase64(newMasterPasswordHash),
+          newMasterPasswordHash: bytesToBase64(newMasterPasswordHash),
           newProtectedKey,
         }),
       });
@@ -288,7 +293,7 @@ export function OptionsApp(): React.ReactElement {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email,
-          masterPasswordHash: arrayBufferToBase64(masterPasswordHash),
+          masterPasswordHash: bytesToBase64(masterPasswordHash),
           deviceId,
           deviceType: "BROWSER",
           deviceName: navigator.userAgent.slice(0, 50) || "Edge Browser",
@@ -637,12 +642,4 @@ function renderInput(label: string, value: string, onChange: (v: string) => void
       />
     </div>
   );
-}
-
-function arrayBufferToBase64(buffer: Uint8Array): string {
-  let binary = "";
-  for (let i = 0; i < buffer.byteLength; i++) {
-    binary += String.fromCharCode(buffer[i]);
-  }
-  return btoa(binary);
 }

@@ -59,6 +59,13 @@ export class WebSocketClient {
 
           // 认证成功后处理业务消息
           if (this.authenticated) {
+            if (msg.type === "PONG") {
+              if (this.pongTimeoutTimer) {
+                clearTimeout(this.pongTimeoutTimer);
+                this.pongTimeoutTimer = null;
+              }
+              return;
+            }
             if (msg.type === "SYNC_REQUIRED") {
               this.onSyncRequiredCallback?.();
             } else if (msg.type === "DEVICE_LOGOUT") {
@@ -108,12 +115,19 @@ export class WebSocketClient {
   }
 
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  private pongTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly pongTimeoutMs = 10000;
 
   private startHeartbeat(): void {
     this.stopHeartbeat();
     this.heartbeatTimer = setInterval(() => {
       if (this.ws?.readyState === WebSocket.OPEN && this.authenticated) {
         this.ws.send(JSON.stringify({ type: "PING" }));
+        // 启动 PONG 超时检测：10 秒内未收到 PONG 视为连接失效
+        this.pongTimeoutTimer = setTimeout(() => {
+          console.log("[WS] PONG 超时，关闭连接并触发重连");
+          this.ws?.close();
+        }, this.pongTimeoutMs);
       }
     }, 30000);
   }
@@ -122,6 +136,10 @@ export class WebSocketClient {
     if (this.heartbeatTimer) {
       clearInterval(this.heartbeatTimer);
       this.heartbeatTimer = null;
+    }
+    if (this.pongTimeoutTimer) {
+      clearTimeout(this.pongTimeoutTimer);
+      this.pongTimeoutTimer = null;
     }
   }
 }

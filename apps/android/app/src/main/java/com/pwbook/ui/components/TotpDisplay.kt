@@ -37,12 +37,18 @@ fun TotpDisplay(
         parseOtpauthUri(secret, algorithm, digits, period)
     }
 
-    var code by remember { mutableStateOf(TotpGenerator.generate(actualSecret, actualPeriod, actualDigits, actualAlgorithm)) }
+    fun safeGenerate(): String = try {
+        TotpGenerator.generate(actualSecret, actualPeriod, actualDigits, actualAlgorithm)
+    } catch (_: Exception) {
+        "------"
+    }
+
+    var code by remember { mutableStateOf(safeGenerate()) }
     var remaining by remember { mutableIntStateOf(TotpGenerator.remainingSeconds(actualPeriod)) }
 
     LaunchedEffect(secret) {
         while (true) {
-            code = TotpGenerator.generate(actualSecret, actualPeriod, actualDigits, actualAlgorithm)
+            code = safeGenerate()
             remaining = TotpGenerator.remainingSeconds(actualPeriod)
             delay(1000)
         }

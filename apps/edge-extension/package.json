@@ -12,6 +12,7 @@
     "lint": "eslint src/ --ext .ts,.tsx"
   },
   "dependencies": {
+    "@pwbook/shared-types": "workspace:*",
     "react": "^18.3.0",
     "react-dom": "^18.3.0"
   },

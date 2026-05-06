@@ -218,7 +218,7 @@ describe("webauthn-handler", () => {
       mockCiphers.push(...stored);
 
       // 用正确的 credential id（base64url decode 后重新 encode）
-      const { base64UrlDecode } = await import("../crypto/passkey-storage.js");
+      const { base64UrlDecode } = await import("../platform/base64.js");
       const credentialIdBytes = base64UrlDecode(created.id);
 
       const result = await handleWebAuthnGet("https://example.com", {

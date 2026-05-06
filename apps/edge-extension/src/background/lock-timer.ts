@@ -1,10 +1,11 @@
 // 保险库自动锁定逻辑
-// 支持可配置超时、后台锁定
+// MV3 下 Service Worker 会在空闲约 30s 后被浏览器终止，setTimeout 不会保留；
+// 改用 chrome.alarms 才能在 SW 重启后继续触发锁定。
 
 import { StorageService } from "../platform/storage.js";
 
 const DEFAULT_TIMEOUT_MIN = 15;
-let lockTimer: ReturnType<typeof setTimeout> | null = null;
+const LOCK_ALARM_NAME = "lockVault";
 
 export interface LockSettings {
   timeoutMin: number;
@@ -23,19 +24,18 @@ export const LockSettingsService = {
 };
 
 export async function startLockTimer(timeoutMin?: number): Promise<void> {
-  stopLockTimer();
+  await stopLockTimer();
   const settings = await LockSettingsService.load();
   const effectiveTimeout = timeoutMin ?? settings.timeoutMin;
-  if (effectiveTimeout <= 0) return; // “从不”锁定，不启动定时器
-  lockTimer = setTimeout(() => {
-    StorageService.clearUserKey().catch(() => {});
-  }, effectiveTimeout * 60 * 1000);
+  if (effectiveTimeout <= 0) return; // “从不”锁定，不创建 alarm
+  await chrome.alarms.create(LOCK_ALARM_NAME, { delayInMinutes: effectiveTimeout });
 }
 
-export function stopLockTimer(): void {
-  if (lockTimer) {
-    clearTimeout(lockTimer);
-    lockTimer = null;
+export async function stopLockTimer(): Promise<void> {
+  try {
+    await chrome.alarms.clear(LOCK_ALARM_NAME);
+  } catch {
+    /* ignore */
   }
 }
 
@@ -45,7 +45,7 @@ export async function resetLockTimer(timeoutMin?: number): Promise<void> {
 
 /** 立即锁定保险库 */
 export async function lockVault(): Promise<void> {
-  stopLockTimer();
+  await stopLockTimer();
   await StorageService.clearUserKey();
 }
 
@@ -59,4 +59,17 @@ export function initIdleListener(): void {
       }
     });
   }
+}
+
+/**
+ * 注册锁定 alarm 的触发回调。必须在 Service Worker 顶层调用，
+ * 这样 SW 被终止后重启时仍能恢复对 alarm 事件的监听。
+ */
+export function initLockAlarmListener(): void {
+  if (typeof chrome === "undefined" || !chrome.alarms) return;
+  chrome.alarms.onAlarm.addListener((alarm) => {
+    if (alarm.name === LOCK_ALARM_NAME) {
+      StorageService.clearUserKey().catch(() => {});
+    }
+  });
 }

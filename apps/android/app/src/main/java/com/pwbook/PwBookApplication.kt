@@ -12,6 +12,9 @@ class PwBookApplication : Application() {
         super.onCreate()
         // 注册 BouncyCastle Provider 以支持 Argon2
         Security.addProvider(BouncyCastleProvider())
+        // 加载 SQLCipher 原生库（必须在打开任何加密 Room 数据库之前调用）
+        // sqlcipher-android 4.6+ 已移除 SQLiteDatabase.loadLibs() 静态方法，改用 System.loadLibrary
+        System.loadLibrary("sqlcipher")
         if (BuildConfig.DEBUG) {
             Timber.plant(Timber.DebugTree())
         }

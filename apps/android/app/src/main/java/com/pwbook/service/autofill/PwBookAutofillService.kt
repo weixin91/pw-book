@@ -212,11 +212,12 @@ class PwBookAutofillService : AutofillService() {
                 } else {
                     Timber.i("onSaveRequest: domain $baseDomain rejected")
                 }
+                callback.onSuccess()
             } catch (e: Exception) {
                 Timber.e(e, "onSaveRequest failed")
+                callback.onFailure(e.message ?: "Save failed")
             }
         }
-        callback.onSuccess()
     }
 
     private fun buildUnlockResponse(parsed: ParsedStructure): FillResponse? {

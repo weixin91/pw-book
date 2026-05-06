@@ -22,12 +22,9 @@ export const ClipboardManager = {
 
   async clear(): Promise<void> {
     try {
-      const current = await navigator.clipboard.readText();
-      if (current === lastCopiedValue) {
-        await navigator.clipboard.writeText("");
-      }
+      await navigator.clipboard.writeText("");
     } catch {
-      // 剪贴板访问权限问题，静默处理
+      // 剪贴板写入权限问题，静默处理
     }
     lastCopiedValue = "";
     currentTimer = null;

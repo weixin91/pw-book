@@ -1,3 +1,6 @@
+import dotenv from "dotenv";
+dotenv.config();
+
 import { SignJWT, jwtVerify } from "jose";
 import type { FastifyRequest, FastifyReply } from "fastify";
 import { ApiError } from "../errors/handler.js";

@@ -2,12 +2,7 @@
 
 import type { Cipher, CipherData, LoginUri, CipherType } from "@pwbook/shared-types";
 import { encryptCipherData, decryptCipherData } from "../crypto/crypto-service.js";
-import {
-  base64Encode,
-  base64Decode,
-  base64UrlEncode,
-  base64UrlDecode,
-} from "../crypto/passkey-storage.js";
+import { bytesToBase64, base64ToBytes, base64UrlEncode, base64UrlDecode } from "../platform/base64.js";
 
 // --- Bitwarden 导出类型定义 ---
 
@@ -91,7 +86,7 @@ export function parseBitwardenExport(jsonText: string): ParseResult {
 
 export async function extractSpkiFromPkcs8(pkcs8Base64: string): Promise<string | null> {
   try {
-    const pkcs8 = base64Decode(pkcs8Base64);
+    const pkcs8 = base64ToBytes(pkcs8Base64);
     const privateKey = await crypto.subtle.importKey(
       "pkcs8",
       pkcs8 as unknown as BufferSource,
@@ -117,7 +112,7 @@ export async function extractSpkiFromPkcs8(pkcs8Base64: string): Promise<string 
       ["verify"]
     );
     const spki = await crypto.subtle.exportKey("spki", publicKey);
-    return base64Encode(new Uint8Array(spki));
+    return bytesToBase64(new Uint8Array(spki));
   } catch {
     return null;
   }

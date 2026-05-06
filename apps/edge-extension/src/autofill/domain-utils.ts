@@ -6,19 +6,9 @@
 // 3. 提供统一的 URI 匹配 API，便于自动填充与保存提示复用
 // 4. 对域名关联规则（DomainAssociation）提供成员化判断
 
-const ANDROID_PROTOCOL = "androidapp://";
+import { MULTI_SEGMENT_TLD_SET } from "@pwbook/shared-types";
 
-/** 常见多段顶级域后缀（简化版 PSL，覆盖中国/英国/日本等常见情况） */
-const MULTI_PART_SUFFIXES = new Set([
-  "com.cn", "net.cn", "org.cn", "gov.cn", "edu.cn", "ac.cn",
-  "co.uk", "org.uk", "ac.uk", "gov.uk", "ltd.uk",
-  "co.jp", "ne.jp", "or.jp", "ac.jp",
-  "com.hk", "org.hk", "edu.hk", "gov.hk",
-  "com.tw", "org.tw", "edu.tw", "gov.tw",
-  "com.au", "net.au", "org.au", "edu.au",
-  "co.kr", "or.kr",
-  "com.sg", "edu.sg", "gov.sg",
-]);
+const ANDROID_PROTOCOL = "androidapp://";
 
 /** 从 hostname 中提取基础域名（如 `www.tieba.baidu.com` → `baidu.com`） */
 export function getBaseDomain(hostname: string): string {
@@ -33,7 +23,7 @@ export function getBaseDomain(hostname: string): string {
 
   // 检查最后两段是否构成多段后缀
   const lastTwo = parts.slice(-2).join(".");
-  if (MULTI_PART_SUFFIXES.has(lastTwo) && parts.length >= 3) {
+  if (MULTI_SEGMENT_TLD_SET.has(lastTwo) && parts.length >= 3) {
     return parts.slice(-3).join(".");
   }
   return parts.slice(-2).join(".");

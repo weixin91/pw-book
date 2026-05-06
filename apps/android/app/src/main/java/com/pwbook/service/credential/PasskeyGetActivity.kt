@@ -47,6 +47,7 @@ import kotlin.coroutines.resume
 class PasskeyGetActivity : FragmentActivity() {
 
     @Inject lateinit var cipherRepository: CipherRepository
+    @Inject lateinit var cipherIndexStore: com.pwbook.domain.index.CipherIndexStore
     @Inject lateinit var vaultSession: VaultSession
     @Inject lateinit var vaultEncryption: VaultEncryption
     @Inject lateinit var pendingChangesQueue: PendingChangesQueue
@@ -97,7 +98,9 @@ class PasskeyGetActivity : FragmentActivity() {
 
             val loginCiphers = withContext(Dispatchers.IO) {
                 val userId = securePrefs.getString(SecurePrefs.KEY_USER_ID) ?: ""
-                cipherRepository.getAllLoginCiphers(userId)
+                // 先通过索引预筛选含目标 rpId 的 cipher ID，避免全量解密
+                val candidateIds = cipherIndexStore.filterByRpId(userId, rpId)
+                candidateIds.mapNotNull { id -> cipherRepository.getCipher(id) }
                     .mapNotNull { vaultSession.decryptCipher(it) }
                     .filter { it.passkey != null && isCipherMatchRpId(it, rpId) }
             }

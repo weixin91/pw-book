@@ -45,8 +45,14 @@ export async function domainAssocRoutes(app: FastifyInstance): Promise<void> {
       const userId = request.user!.sub;
       const body = domainAssocSchema.parse(request.body);
 
-      const record = await prisma.domainAssociation.create({
-        data: {
+      const record = await prisma.domainAssociation.upsert({
+        where: {
+          userId_domains: { userId, domains: JSON.stringify(body.domains) },
+        },
+        update: {
+          packageNames: JSON.stringify(body.packageNames),
+        },
+        create: {
           userId,
           domains: JSON.stringify(body.domains),
           packageNames: JSON.stringify(body.packageNames),

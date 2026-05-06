@@ -5,11 +5,13 @@ import androidx.hilt.work.HiltWorker
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.WorkInfo
+import com.pwbook.Constants
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.channels.awaitClose
@@ -45,7 +47,7 @@ class SyncWorker @AssistedInject constructor(
 
     companion object {
         private const val WORK_NAME = "pwbook_sync_worker"
-        private const val SYNC_INTERVAL_MINUTES = 15L
+        private val SYNC_INTERVAL_MINUTES = Constants.SYNC_INTERVAL_MINUTES
 
         fun schedule(context: Context) {
             val constraints = Constraints.Builder()
@@ -83,6 +85,8 @@ class SyncWorker @AssistedInject constructor(
                 }
         }
 
+        private const val IMMEDIATE_WORK_NAME = "pwbook_sync_worker_immediate"
+
         fun triggerImmediate(context: Context) {
             val request = androidx.work.OneTimeWorkRequestBuilder<SyncWorker>()
                 .setConstraints(
@@ -92,7 +96,9 @@ class SyncWorker @AssistedInject constructor(
                 )
                 .addTag("immediate_sync")
                 .build()
-            WorkManager.getInstance(context).enqueue(request)
+            // 使用唯一工作名 + KEEP：已在排队/运行中的同步会被复用，避免并发触发多个 Worker
+            WorkManager.getInstance(context)
+                .enqueueUniqueWork(IMMEDIATE_WORK_NAME, ExistingWorkPolicy.KEEP, request)
         }
 
         private fun <T> androidx.lifecycle.LiveData<T>.asFlow(): kotlinx.coroutines.flow.Flow<T> {

@@ -90,6 +90,20 @@ fun PasswordGeneratorScreen(
             ToggleRow("数字 0-9", uiState.numbers, viewModel::toggleNumbers)
             ToggleRow("特殊字符", uiState.special, viewModel::toggleSpecial)
             ToggleRow("排除易混淆字符 (0O, 1lI)", uiState.excludeAmbiguous, viewModel::toggleExcludeAmbiguous)
+            Text(text = "最少数字: ${uiState.minNumbers}", style = MaterialTheme.typography.bodyLarge)
+            Slider(
+                value = uiState.minNumbers.toFloat(),
+                onValueChange = { viewModel.updateMinNumbers(it.toInt()) },
+                valueRange = 0f..10f,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Text(text = "最少特殊字符: ${uiState.minSpecial}", style = MaterialTheme.typography.bodyLarge)
+            Slider(
+                value = uiState.minSpecial.toFloat(),
+                onValueChange = { viewModel.updateMinSpecial(it.toInt()) },
+                valueRange = 0f..10f,
+                modifier = Modifier.fillMaxWidth()
+            )
             uiState.error?.let {
                 Text(text = it, color = MaterialTheme.colorScheme.error)
             }

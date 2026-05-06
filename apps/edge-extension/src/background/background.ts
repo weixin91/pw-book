@@ -9,7 +9,7 @@ import {
 } from "./webauthn-handler.js";
 import { StorageService } from "../platform/storage.js";
 import { decryptCipherData, encryptCipherData } from "../crypto/crypto-service.js";
-import { startLockTimer, initIdleListener } from "./lock-timer.js";
+import { startLockTimer, initIdleListener, initLockAlarmListener } from "./lock-timer.js";
 import { PendingChangesQueue } from "../sync/pending-changes.js";
 import { SyncScheduler } from "../sync/sync-scheduler.js";
 import { parseUri, type DomainAssocLite } from "../autofill/domain-utils.js";
@@ -24,11 +24,11 @@ interface StoredFormData {
   timestamp: number;
 }
 
+import { FORM_DATA_TTL_MS, FALLBACK_DELAY_MS, SYNC_INTERVAL_MS } from "../config/constants.js";
+
 // 后台暂存表单提交数据（用于处理登录后重定向）
 const pendingFormData = new Map<number, StoredFormData>();
 const pendingTimers = new Map<number, ReturnType<typeof setTimeout>>();
-const FORM_DATA_TTL = 10_000; // 10 秒
-const FALLBACK_DELAY = 5_000;  // 5 秒兜底：无导航也触发保存提示
 
 function getPendingKey(tabId: number): string {
   return `_pwbook_pending_${tabId}`;
@@ -130,9 +130,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           username: d.username,
           password: d.password,
           url: d.url,
-        });
+        }, { frameId: 0 });
       });
-    }, FALLBACK_DELAY);
+    }, FALLBACK_DELAY_MS);
     pendingTimers.set(tabId, timer);
 
     // 10 秒后清理
@@ -140,7 +140,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       pendingFormData.delete(sender.tab?.id ?? data.tabId);
       pendingTimers.delete(sender.tab?.id ?? data.tabId);
       removePendingData(sender.tab?.id ?? data.tabId);
-    }, FORM_DATA_TTL);
+    }, FORM_DATA_TTL_MS);
 
     sendResponse({ success: true });
     return false;
@@ -162,7 +162,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           username,
           password,
           url,
-        });
+        }, { frameId: 0 });
       }
       // 清理该 tab 的 pending 状态（防止兜底定时器重复触发）
       pendingFormData.delete(tabId);
@@ -177,7 +177,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (msg.type === "GET_PENDING_FORM_DATA" && sender.tab?.id) {
     const tabId = sender.tab.id;
     const data = pendingFormData.get(tabId);
-    if (data && Date.now() - data.timestamp < FORM_DATA_TTL) {
+    if (data && Date.now() - data.timestamp < FORM_DATA_TTL_MS) {
       // 检查凭据是否已存在，避免重复提示
       isCredentialAlreadySaved(data.url, data.username, data.password).then((exists) => {
         if (exists) {
@@ -193,7 +193,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
     // 内存中没有，尝试从 session storage 恢复（Service Worker 终止后的兜底）
     getPendingData(tabId).then(async (localData) => {
-      if (localData && Date.now() - localData.timestamp < FORM_DATA_TTL) {
+      if (localData && Date.now() - localData.timestamp < FORM_DATA_TTL_MS) {
         const exists = await isCredentialAlreadySaved(localData.url, localData.username, localData.password);
         if (exists) {
           console.log("[PWBook BG] GET_PENDING_FORM_DATA(session): 凭据未变化，跳过");
@@ -304,7 +304,7 @@ BrowserApi.onWebNavigationCompleted((details) => {
           username: data.username,
           password: data.password,
           url: data.url,
-        });
+        }, { frameId: 0 });
       });
     }
   });
@@ -453,11 +453,18 @@ async function handleSaveCipher(data: Record<string, unknown>): Promise<{ succes
     }
 
     const queue = new PendingChangesQueue();
+    const targetCipher = ciphers.find((c) => c.id === targetId);
     await queue.enqueue({
       cipherId: targetId,
       operation: updatedCipherId ? "UPDATE" : "CREATE",
       encryptedData: resultEncrypted!,
       clientTimestamp: new Date().toISOString(),
+      userId: targetCipher?.userId ?? "",
+      type: targetCipher?.type ?? 1,
+      favorite: targetCipher?.favorite ?? false,
+      reprompt: targetCipher?.reprompt ?? 0,
+      createdAt: targetCipher?.createdAt ?? new Date().toISOString(),
+      modifiedAt: targetCipher?.modifiedAt ?? new Date().toISOString(),
     });
 
     return { success: true, id: targetId };
@@ -516,10 +523,12 @@ async function rebuildCipherIndex(): Promise<void> {
 
 // 初始化后台锁定监听
 initIdleListener();
+// 注册 chrome.alarms 锁定回调（必须在 SW 顶层注册，SW 重启后会自动恢复）
+initLockAlarmListener();
 
 // 初始化同步调度器（轮询间隔 10 分钟）
 const syncScheduler = new SyncScheduler();
-syncScheduler.start(600_000);
+syncScheduler.start(SYNC_INTERVAL_MS);
 
 // 监听保险库解锁消息，启动锁定计时器
 chrome.runtime.onMessage.addListener((message) => {

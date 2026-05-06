@@ -1,6 +1,9 @@
 // Web Crypto API 加密核心实现
 // 遵循 contracts/crypto.md 规范
 
+import { RECOVERY_KEY_PBKDF2_ITERATIONS, MASTER_KEY_PBKDF2_ITERATIONS } from "@pwbook/shared-types";
+import { bytesToBase64, base64ToBytes } from "../platform/base64.js";
+
 const ENC_INFO = new TextEncoder().encode("enc");
 const MAC_INFO = new TextEncoder().encode("mac");
 
@@ -9,6 +12,11 @@ export interface KdfConfig {
   kdfIterations: number;
   kdfMemory?: number;
   kdfParallelism?: number;
+}
+
+// Uint8Array 天然兼容 BufferSource，包装以消除重复的类型断言噪音
+export function toBufferSource(buf: Uint8Array): BufferSource {
+  return buf as unknown as BufferSource;
 }
 
 export async function sha256(input: string): Promise<Uint8Array> {
@@ -38,7 +46,7 @@ export async function deriveMasterKey(
   const derivedBits = await crypto.subtle.deriveBits(
     {
       name: "PBKDF2",
-      salt: salt as unknown as unknown as BufferSource,
+      salt: toBufferSource(salt),
       iterations: config.kdfIterations,
       hash: "SHA-256",
     },
@@ -55,7 +63,7 @@ export async function deriveMasterPasswordHash(
   const encoder = new TextEncoder();
   const keyMaterial = await crypto.subtle.importKey(
     "raw",
-    masterKey as unknown as unknown as BufferSource,
+    toBufferSource(masterKey),
     "PBKDF2",
     false,
     ["deriveBits"]
@@ -65,7 +73,7 @@ export async function deriveMasterPasswordHash(
     {
       name: "PBKDF2",
       salt: encoder.encode(password),
-      iterations: 600_000,
+      iterations: MASTER_KEY_PBKDF2_ITERATIONS,
       hash: "SHA-256",
     },
     keyMaterial,
@@ -80,9 +88,9 @@ export async function hkdfSha256(
   info: Uint8Array,
   length: number
 ): Promise<Uint8Array> {
-  const key = await crypto.subtle.importKey("raw", ikm as unknown as BufferSource, "HKDF", false, ["deriveBits"]);
+  const key = await crypto.subtle.importKey("raw", toBufferSource(ikm), "HKDF", false, ["deriveBits"]);
   const derivedBits = await crypto.subtle.deriveBits(
-    { name: "HKDF", hash: "SHA-256", salt: (salt ?? new Uint8Array(0)) as unknown as BufferSource, info: info as unknown as BufferSource },
+    { name: "HKDF", hash: "SHA-256", salt: toBufferSource(salt ?? new Uint8Array(0)), info: toBufferSource(info) },
     key,
     length * 8
   );
@@ -115,21 +123,21 @@ export async function encryptUserKey(
     ["encrypt"]
   );
   const ciphertext = await crypto.subtle.encrypt(
-    { name: "AES-GCM", iv: iv as unknown as BufferSource },
+    { name: "AES-GCM", iv: toBufferSource(iv) },
     aesKey,
-    userKey as unknown as BufferSource
+    toBufferSource(userKey)
   );
   const combined = new Uint8Array(iv.length + ciphertext.byteLength);
   combined.set(iv, 0);
   combined.set(new Uint8Array(ciphertext), iv.length);
-  return arrayBufferToBase64(combined);
+  return bytesToBase64(combined);
 }
 
 export async function decryptUserKey(
   protectedKey: string,
   stretchedMasterKey: Uint8Array
 ): Promise<Uint8Array> {
-  const combined = base64ToArrayBuffer(protectedKey);
+  const combined = base64ToBytes(protectedKey);
   const iv = combined.slice(0, 12);
   const ciphertext = combined.slice(12);
   const aesKey = await crypto.subtle.importKey(
@@ -168,14 +176,14 @@ export async function encryptCipherData(
   const combined = new Uint8Array(iv.length + ciphertext.byteLength);
   combined.set(iv, 0);
   combined.set(new Uint8Array(ciphertext), iv.length);
-  return arrayBufferToBase64(combined);
+  return bytesToBase64(combined);
 }
 
 export async function decryptCipherData(
   encryptedData: string,
   userKey: Uint8Array
 ): Promise<string> {
-  const combined = base64ToArrayBuffer(encryptedData);
+  const combined = base64ToBytes(encryptedData);
   const iv = combined.slice(0, 12);
   const ciphertext = combined.slice(12);
   const aesKey = await crypto.subtle.importKey(
@@ -193,23 +201,6 @@ export async function decryptCipherData(
   return new TextDecoder().decode(plaintext);
 }
 
-export function arrayBufferToBase64(buffer: Uint8Array): string {
-  let binary = "";
-  for (let i = 0; i < buffer.byteLength; i++) {
-    binary += String.fromCharCode(buffer[i]);
-  }
-  return btoa(binary);
-}
-
-export function base64ToArrayBuffer(base64: string): Uint8Array {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes;
-}
-
 export async function generateRsaKeyPair(): Promise<CryptoKeyPair> {
   return crypto.subtle.generateKey(
     {
@@ -225,7 +216,7 @@ export async function generateRsaKeyPair(): Promise<CryptoKeyPair> {
 
 export async function exportPublicKeySpki(publicKey: CryptoKey): Promise<string> {
   const spki = await crypto.subtle.exportKey("spki", publicKey);
-  return arrayBufferToBase64(new Uint8Array(spki));
+  return bytesToBase64(new Uint8Array(spki));
 }
 
 export async function exportPrivateKeyPkcs8(privateKey: CryptoKey): Promise<Uint8Array> {
@@ -243,18 +234,18 @@ export async function encryptWithKey(plaintext: Uint8Array, key: Uint8Array): Pr
     ["encrypt"]
   );
   const ciphertext = await crypto.subtle.encrypt(
-    { name: "AES-GCM", iv: iv as unknown as BufferSource },
+    { name: "AES-GCM", iv: toBufferSource(iv) },
     aesKey,
-    plaintext as unknown as BufferSource
+    toBufferSource(plaintext)
   );
   const combined = new Uint8Array(iv.length + ciphertext.byteLength);
   combined.set(iv, 0);
   combined.set(new Uint8Array(ciphertext), iv.length);
-  return arrayBufferToBase64(combined);
+  return bytesToBase64(combined);
 }
 
 export async function decryptWithKey(encryptedData: string, key: Uint8Array): Promise<Uint8Array> {
-  const combined = base64ToArrayBuffer(encryptedData);
+  const combined = base64ToBytes(encryptedData);
   const iv = combined.slice(0, 12);
   const ciphertext = combined.slice(12);
   const aesKey = await crypto.subtle.importKey(
@@ -288,14 +279,14 @@ export async function deriveRecoveryKeyHash(
   const derivedBits = await crypto.subtle.deriveBits(
     {
       name: "PBKDF2",
-      salt: salt as unknown as unknown as BufferSource,
-      iterations: 100_000,
+      salt: toBufferSource(salt),
+      iterations: RECOVERY_KEY_PBKDF2_ITERATIONS,
       hash: "SHA-256",
     },
     keyMaterial,
     256
   );
-  return arrayBufferToBase64(new Uint8Array(derivedBits));
+  return bytesToBase64(new Uint8Array(derivedBits));
 }
 
 export async function deriveRecoveryMasterKey(
@@ -314,8 +305,8 @@ export async function deriveRecoveryMasterKey(
   const derivedBits = await crypto.subtle.deriveBits(
     {
       name: "PBKDF2",
-      salt: salt as unknown as unknown as BufferSource,
-      iterations: 600_000,
+      salt: toBufferSource(salt),
+      iterations: MASTER_KEY_PBKDF2_ITERATIONS,
       hash: "SHA-256",
     },
     keyMaterial,

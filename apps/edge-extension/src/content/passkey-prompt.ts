@@ -110,7 +110,7 @@ export function showPasskeySavePrompt(
     list.style.cssText = "overflow-y: auto; padding: 0 20px 16px; flex: 1;";
 
     function renderItems(filter = "") {
-      list.innerHTML = "";
+      while (list.firstChild) list.removeChild(list.firstChild);
       const filtered = candidates.filter(
         (c) =>
           c.name.toLowerCase().includes(filter.toLowerCase()) ||

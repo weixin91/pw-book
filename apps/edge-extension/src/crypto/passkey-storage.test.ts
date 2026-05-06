@@ -20,10 +20,9 @@ import {
   encodeCoseKeyEs256,
   encodeAttestationObjectNone,
   signAssertion,
-  base64UrlEncode,
-  base64UrlDecode,
   rpIdHash,
 } from "./passkey-storage";
+import { base64UrlEncode, base64UrlDecode } from "../platform/base64";
 
 describe("passkey-storage", () => {
   it("生成 Passkey 并恢复私钥", async () => {

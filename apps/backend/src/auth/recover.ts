@@ -3,11 +3,14 @@ import { z } from "zod";
 import { createToken, createRefreshToken } from "./jwt.js";
 import { ApiError } from "../errors/handler.js";
 import { prisma } from "../db/prisma.js";
+import { kickUser } from "../websocket/server.js";
 import {
   recoverRateLimitHook,
   recordRecoverAttempt,
   clearRecoverAttempts,
 } from "../rate-limiter.js";
+import { timingSafeStringEqual } from "./timing-safe.js";
+import { RECOVERY_KEY_PBKDF2_ITERATIONS } from "@pwbook/shared-types";
 
 const recoverSchema = z.object({
   email: z.string().email(),
@@ -22,7 +25,7 @@ async function deriveRecoveryKeyHash(recoveryKey: string, email: string): Promis
   const salt = new Uint8Array(await crypto.subtle.digest("SHA-256", saltData));
   const keyMaterial = await crypto.subtle.importKey("raw", encoder.encode(recoveryKey.toUpperCase()), "PBKDF2", false, ["deriveBits"]);
   const derivedBits = await crypto.subtle.deriveBits(
-    { name: "PBKDF2", salt, iterations: 100_000, hash: "SHA-256" },
+    { name: "PBKDF2", salt, iterations: RECOVERY_KEY_PBKDF2_ITERATIONS, hash: "SHA-256" },
     keyMaterial,
     256
   );
@@ -45,7 +48,7 @@ export async function recoverRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const recoveryKeyHash = await deriveRecoveryKeyHash(body.recoveryKey, body.email);
-    if (!user.recoveryKeyHash || user.recoveryKeyHash !== recoveryKeyHash) {
+    if (!user.recoveryKeyHash || !timingSafeStringEqual(user.recoveryKeyHash, recoveryKeyHash)) {
       recordRecoverAttempt(body.email);
       throw new ApiError("INVALID_CREDENTIALS", 401, "邮箱或恢复密钥无效");
     }
@@ -61,6 +64,9 @@ export async function recoverRoutes(app: FastifyInstance): Promise<void> {
         securityStamp: crypto.randomUUID(),
       },
     });
+
+    // securityStamp 已变更，立即踢下线所有现存 WebSocket 连接
+    kickUser(updated.id, "Account recovered");
 
     const token = await createToken({
       sub: updated.id,

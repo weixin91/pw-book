@@ -49,6 +49,8 @@ model Cipher {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, modifiedAt])
+  // 软删除过滤场景的覆盖索引：findMany({ where: { userId, deletedAt: null } })
+  @@index([userId, deletedAt])
   @@map("ciphers")
 }
 
@@ -61,6 +63,7 @@ model DomainAssociation {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@unique([userId, domains])
   @@map("domain_associations")
 }
 

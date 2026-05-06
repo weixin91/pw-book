@@ -40,6 +40,7 @@ class SyncWebSocketClient @Inject constructor(
     private val listeners = mutableListOf<Listener>()
     private var reconnectAttempt = 0
     private val maxReconnectDelayMs = 300_000L // 5 minutes
+    private val maxReconnectAttempt = 8         // 1000ms shl 8 = 256s，配合上限 300s 后趋于稳定
 
     @Volatile
     private var isRunning = false
@@ -174,8 +175,9 @@ class SyncWebSocketClient @Inject constructor(
     private fun scheduleReconnect() {
         if (!isRunning) return
         reconnectJob?.cancel()
-        reconnectAttempt++
-        val delayMs = min(1000L * (1 shl reconnectAttempt), maxReconnectDelayMs)
+        // 限制 reconnectAttempt 上限，避免 Int 左移溢出导致负数延迟或重连风暴
+        reconnectAttempt = (reconnectAttempt + 1).coerceAtMost(maxReconnectAttempt)
+        val delayMs = min(1000L shl reconnectAttempt, maxReconnectDelayMs)
         Timber.i("WebSocket reconnecting in ${delayMs}ms (attempt $reconnectAttempt)")
         reconnectJob = scope.launch {
             delay(delayMs)

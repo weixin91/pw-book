@@ -16,11 +16,23 @@ class KeyDerivation(private val kdfEngine: KdfEngine) {
         memoryKb: Int? = null,
         parallelism: Int? = null
     ): ByteArray {
-        // 与 Edge 一致：使用 SHA-256(email.lowercase()) 作为 salt
+        // 与 Edge 一致：使用 SHA-256(email.lowercase().trim()) 作为 salt
         val salt = sha256(email.lowercase().trim())
-        // Edge 端 Web Crypto 原生不支持 Argon2id，统一使用 PBKDF2
-        // Android 端保持一致，也使用 PBKDF2
-        return kdfEngine.deriveKeyPbkdf2(password.toCharArray(), salt, iterations)
+        return when (kdfType) {
+            KdfType.ARGON2ID -> kdfEngine.deriveKeyArgon2id(
+                password.toByteArray(Charsets.UTF_8),
+                salt,
+                iterations,
+                memoryKb ?: 65536,
+                parallelism ?: 4,
+                32
+            )
+            KdfType.PBKDF2_SHA256 -> kdfEngine.deriveKeyPbkdf2(
+                password.toCharArray(),
+                salt,
+                iterations
+            )
+        }
     }
 
     private fun sha256(input: String): ByteArray {
@@ -53,21 +65,57 @@ class KeyDerivation(private val kdfEngine: KdfEngine) {
      * PBKDF2-HMAC-SHA256(masterKey, password, iterations=600000, dkLen=32)
      *
      * 注意：Edge 使用 Web Crypto API:
-     *   importKey(masterKey) 作为密钥材料
-     *   salt = password
+     *   importKey(masterKey) 作为 PBKDF2 的 password（HMAC 密钥）
+     *   salt = password 的 UTF-8 bytes
      *   iterations = 600000 (OWASP 2023 推荐)
      *
-     * 使用标准 PBKDF2 实现，提升至 600000 次迭代防止暴力破解
+     * Java 的 PBEKeySpec 固定 password/salt 角色不可调换，因此手动实现 PBKDF2。
      */
     fun deriveMasterPasswordHash(masterKey: ByteArray, password: String): ByteArray {
-        val spec = PBEKeySpec(
-            password.toCharArray(),
-            masterKey, // 将 masterKey 作为 salt（PBKDF2 的 salt 参数）
-            600_000,   // OWASP 2023 推荐迭代次数
-            32         // 输出 32 字节
+        return pbkdf2HmacSha256(
+            password = masterKey,
+            salt = password.toByteArray(Charsets.UTF_8),
+            iterations = 600_000,
+            dkLen = 32
         )
-        val factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
-        return factory.generateSecret(spec).encoded
+    }
+
+    /**
+     * PBKDF2-HMAC-SHA256（RFC 2898）
+     * password = HMAC 密钥，salt = 盐值
+     */
+    private fun pbkdf2HmacSha256(password: ByteArray, salt: ByteArray, iterations: Int, dkLen: Int): ByteArray {
+        val mac = Mac.getInstance("HmacSHA256")
+        mac.init(SecretKeySpec(password, "HmacSHA256"))
+
+        val blockCount = (dkLen + 31) / 32 // SHA-256 输出 32 字节
+        val result = ByteArray(dkLen)
+
+        for (i in 1..blockCount) {
+            // U_1 = HMAC(password, salt || INT_32_BE(i))
+            val block = ByteArray(salt.size + 4)
+            salt.copyInto(block, 0)
+            block[salt.size] = (i ushr 24).toByte()
+            block[salt.size + 1] = (i ushr 16).toByte()
+            block[salt.size + 2] = (i ushr 8).toByte()
+            block[salt.size + 3] = i.toByte()
+
+            var u = mac.doFinal(block)
+            val xor = u.copyOf()
+
+            // U_2 .. U_c（迭代 iterations-1 次）
+            repeat(iterations - 1) {
+                u = mac.doFinal(u)
+                for (j in xor.indices) {
+                    xor[j] = (xor[j].toInt() xor u[j].toInt()).toByte()
+                }
+            }
+
+            val copyLen = minOf(32, dkLen - (i - 1) * 32)
+            xor.copyInto(result, (i - 1) * 32, 0, copyLen)
+        }
+
+        return result
     }
 
     /**

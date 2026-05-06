@@ -83,5 +83,6 @@ class SecurePrefs @Inject constructor(
         const val KEY_BIOMETRIC_ENCRYPTED_KEY = "biometric_encrypted_key"
         const val KEY_VAULT_TIMEOUT = "vault_timeout"
         const val KEY_LAST_SYNC = "last_sync"
+        const val KEY_DB_PASSPHRASE = "db_passphrase" // Base64 编码的 32 字节随机数据库密钥
     }
 }

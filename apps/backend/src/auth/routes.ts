@@ -9,6 +9,7 @@ import {
   clearLoginAttempts,
 } from "../rate-limiter.js";
 import { prisma } from "../db/prisma.js";
+import { timingSafeStringEqual } from "./timing-safe.js";
 
 const registerSchema = z.object({
   email: z.string().email(),
@@ -22,6 +23,10 @@ const registerSchema = z.object({
   kdfParallelism: z.number().int().optional(),
   recoveryKeyHash: z.string().min(1),
   encryptedRecoveryKey: z.string().min(1),
+  // 注册时同步建立设备会话，避免后续 /sync 请求因 token 缺少 deviceId 而 400
+  deviceId: z.string().min(1).optional(),
+  deviceType: z.enum(["BROWSER", "ANDROID"]).optional(),
+  deviceName: z.string().min(1).optional(),
 });
 
 const loginSchema = z.object({
@@ -84,15 +89,31 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       },
     });
 
+    // 客户端可在注册时一并建立设备会话；缺省时该 token 不带 deviceId，需先调用 /login 才能 /sync
+    if (body.deviceId && body.deviceType && body.deviceName) {
+      await prisma.device.upsert({
+        where: { userId_deviceId: { userId: user.id, deviceId: body.deviceId } },
+        update: { deviceName: body.deviceName, lastSyncAt: new Date() },
+        create: {
+          userId: user.id,
+          deviceId: body.deviceId,
+          deviceType: body.deviceType,
+          deviceName: body.deviceName,
+        },
+      });
+    }
+
     const token = await createToken({
       sub: user.id,
       email: user.email,
       securityStamp: user.securityStamp,
+      deviceId: body.deviceId,
     });
     const refreshToken = await createRefreshToken({
       sub: user.id,
       email: user.email,
       securityStamp: user.securityStamp,
+      deviceId: body.deviceId,
     });
 
     return reply.status(201).send({
@@ -113,7 +134,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       throw new ApiError("INVALID_CREDENTIALS", 401, "邮箱或主密码错误");
     }
 
-    if (user.masterPasswordHash !== body.masterPasswordHash) {
+    if (!timingSafeStringEqual(user.masterPasswordHash, body.masterPasswordHash)) {
       recordLoginAttempt(body.email);
       throw new ApiError("INVALID_CREDENTIALS", 401, "邮箱或主密码错误");
     }

@@ -95,6 +95,10 @@ dependencies {
     implementation("androidx.room:room-ktx:2.6.1")
     ksp("androidx.room:room-compiler:2.6.1")
 
+    // SQLCipher (encrypts the local Room database at rest)
+    implementation("net.zetetic:sqlcipher-android:4.6.1@aar")
+    implementation("androidx.sqlite:sqlite-ktx:2.4.0")
+
     // Ktor Client
     implementation("io.ktor:ktor-client-android:3.1.0")
     implementation("io.ktor:ktor-client-content-negotiation:3.1.0")

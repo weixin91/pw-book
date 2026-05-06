@@ -1,12 +1,16 @@
-node_modules/
+**/node_modules/
 .git/
-Dockerfile*
+**/Dockerfile*
 .dockerignore
-*.log*
-.env*
-coverage/
-dist/
-build/
-.gradle/
-.idea/
-*.iml
+**/*.log*
+**/.env*
+**/coverage/
+**/dist/
+**/build/
+**/.gradle/
+**/.idea/
+**/*.iml
+
+# 后端镜像无需打包其他端的源码
+apps/android/
+apps/edge-extension/

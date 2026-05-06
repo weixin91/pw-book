@@ -134,12 +134,19 @@ export function VaultList({ onAdd, onEdit, onOpenGenerator, onOpenCookieSync }: 
       const { decryptCipherData, encryptCipherData } = await import("../../crypto/crypto-service");
       const plainText = await decryptCipherData(ciphers[idx].data, userKey);
       const encryptedData = await encryptCipherData(plainText, userKey);
+      const cipher = ciphers[idx];
       const queue = new PendingChangesQueue();
       await queue.enqueue({
         cipherId,
         operation: "UPDATE",
         encryptedData,
         clientTimestamp: new Date().toISOString(),
+        userId: cipher.userId,
+        type: cipher.type,
+        favorite: cipher.favorite,
+        reprompt: cipher.reprompt,
+        createdAt: cipher.createdAt,
+        modifiedAt: cipher.modifiedAt,
       });
     } catch {
       // ignore

@@ -5,5 +5,6 @@ export default defineConfig({
     globals: true,
     environment: "node",
     include: ["tests/e2e/**/*.test.ts"],
+    setupFiles: ["tests/mocks/chrome-mock.ts"],
   },
 });

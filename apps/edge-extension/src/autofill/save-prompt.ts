@@ -3,6 +3,7 @@
 import { StorageService } from "../platform/storage.js";
 import { shouldPromptSave } from "./rejected-sites.js";
 import { getBaseDomainFromAny } from "./domain-utils.js";
+import { SAVE_PROMPT_ANIMATION_MS, SAVE_PROMPT_AUTO_DISMISS_MS, PASSKEY_REJECT_DAYS } from "../config/constants.js";
 
 interface SavePromptData {
   username: string;
@@ -78,7 +79,7 @@ export class SavePrompt {
       if (result.success) {
         btnSave.textContent = "已保存";
         btnSave.style.background = "#34a853";
-        setTimeout(() => this.remove(), 800);
+        setTimeout(() => this.remove(), SAVE_PROMPT_ANIMATION_MS);
       } else {
         btnSave.disabled = false;
         btnSave.textContent = "保存";
@@ -107,7 +108,7 @@ export class SavePrompt {
     this.container = container;
 
     // 10 秒后自动消失
-    setTimeout(() => this.remove(), 10_000);
+    setTimeout(() => this.remove(), SAVE_PROMPT_AUTO_DISMISS_MS);
   }
 
   remove(): void {
@@ -148,7 +149,7 @@ export class SavePrompt {
   private async rejectSite(domain: string): Promise<void> {
     const sites = await StorageService.getRejectedSites();
     const rejectedAt = new Date().toISOString();
-    const expireAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    const expireAt = new Date(Date.now() + PASSKEY_REJECT_DAYS * 24 * 60 * 60 * 1000).toISOString();
     sites.push({ domain, rejectedAt, expireAt });
     await StorageService.setRejectedSites(sites);
   }

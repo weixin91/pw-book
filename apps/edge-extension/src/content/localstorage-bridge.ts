@@ -32,7 +32,13 @@ function handleSetLocalStorage(items: LocalStorageItem[]): void {
 
 /** 初始化 localStorage 桥接消息监听 */
 export function initLocalStorageBridge(): void {
-  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    // 仅接受来自本扩展自身的消息（background/popup/options），拒绝其他扩展和网页脚本
+    // 通过 chrome.tabs.sendMessage 从 background 发送时 sender.id 等于 chrome.runtime.id
+    if (sender.id !== chrome.runtime.id) {
+      return false;
+    }
+
     if (typeof message !== "object" || message === null) return false;
     const msg = message as Record<string, unknown>;
 

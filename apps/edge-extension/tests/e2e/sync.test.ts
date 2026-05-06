@@ -3,45 +3,13 @@
  * 测试同步客户端核心逻辑
  */
 
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { PendingChangesQueue } from "../../src/sync/pending-changes.js";
-
-// 模拟 chrome.storage.local
-const mockStorage: Record<string, unknown> = {};
-(globalThis as unknown as Record<string, unknown>).chrome = {
-  storage: {
-    local: {
-      get: vi.fn((keys: string | string[]) => {
-        const keyArray = Array.isArray(keys) ? keys : [keys];
-        const result: Record<string, unknown> = {};
-        for (const key of keyArray) {
-          result[key] = mockStorage[key] ?? [];
-        }
-        return Promise.resolve(result);
-      }),
-      set: vi.fn((items: Record<string, unknown>) => {
-        Object.assign(mockStorage, items);
-        return Promise.resolve();
-      }),
-    },
-  },
-};
-
-// 确保 crypto.randomUUID 可用（Node <20 兼容性）
-if (!globalThis.crypto?.randomUUID) {
-  Object.defineProperty(globalThis, "crypto", {
-    value: {
-      ...(globalThis.crypto || {}),
-      randomUUID: () => `mock-uuid-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-    },
-    writable: true,
-    configurable: true,
-  });
-}
+import { clearMockStorage } from "../mocks/chrome-mock.js";
 
 describe("Sync E2E", () => {
   beforeEach(() => {
-    Object.keys(mockStorage).forEach((k) => delete mockStorage[k]);
+    clearMockStorage();
   });
 
   it("should enqueue and dequeue pending changes", async () => {

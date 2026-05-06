@@ -92,6 +92,12 @@ export function ImportPanel(): React.ReactElement {
               operation: "CREATE",
               encryptedData: cipher.data,
               clientTimestamp: new Date().toISOString(),
+              userId: cipher.userId ?? "",
+              type: cipher.type ?? 1,
+              favorite: cipher.favorite ?? false,
+              reprompt: cipher.reprompt ?? 0,
+              createdAt: cipher.createdAt ?? new Date().toISOString(),
+              modifiedAt: cipher.modifiedAt ?? new Date().toISOString(),
             },
             false // 批量入队时不触发同步，全部入队后统一触发
           );

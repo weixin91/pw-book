@@ -177,9 +177,10 @@ export function CipherForm({ editId, onBack, onSaved, onDeleted }: Props): React
           };
         }
       } else {
+        const profile = await StorageService.getProfile();
         ciphers.push({
           id: crypto.randomUUID(),
-          userId: "",
+          userId: profile?.id ?? "",
           type: 1,
           data: encryptedData,
           favorite,
@@ -196,12 +197,19 @@ export function CipherForm({ editId, onBack, onSaved, onDeleted }: Props): React
       const cipherDataParsed = parseCipherData(JSON.stringify(cipherData));
       await CipherIndexService.updateOne(targetId, cipherDataParsed);
 
+      const targetCipher = ciphers.find((c) => c.id === targetId);
       const queue = new PendingChangesQueue();
       await queue.enqueue({
         cipherId: targetId,
         operation: editId ? "UPDATE" : "CREATE",
         encryptedData,
         clientTimestamp: new Date().toISOString(),
+        userId: targetCipher?.userId ?? "",
+        type: targetCipher?.type ?? 1,
+        favorite: targetCipher?.favorite ?? false,
+        reprompt: targetCipher?.reprompt ?? 0,
+        createdAt: targetCipher?.createdAt ?? new Date().toISOString(),
+        modifiedAt: targetCipher?.modifiedAt ?? new Date().toISOString(),
       });
 
       onSaved();
@@ -215,6 +223,7 @@ export function CipherForm({ editId, onBack, onSaved, onDeleted }: Props): React
     if (!window.confirm("确定删除此凭据吗？此操作不可恢复。")) return;
 
     const ciphers = await StorageService.getCiphers();
+    const targetCipher = ciphers.find((c) => c.id === editId);
     const filtered = ciphers.filter((c) => c.id !== editId);
     await StorageService.setCiphers(filtered);
     await CipherIndexService.removeOne(editId);
@@ -225,6 +234,12 @@ export function CipherForm({ editId, onBack, onSaved, onDeleted }: Props): React
       operation: "DELETE",
       encryptedData: "",
       clientTimestamp: new Date().toISOString(),
+      userId: targetCipher?.userId ?? "",
+      type: targetCipher?.type ?? 1,
+      favorite: targetCipher?.favorite ?? false,
+      reprompt: targetCipher?.reprompt ?? 0,
+      createdAt: targetCipher?.createdAt ?? new Date().toISOString(),
+      modifiedAt: targetCipher?.modifiedAt ?? new Date().toISOString(),
     });
 
     onDeleted?.();
@@ -260,6 +275,12 @@ export function CipherForm({ editId, onBack, onSaved, onDeleted }: Props): React
         operation: "UPDATE",
         encryptedData,
         clientTimestamp: new Date().toISOString(),
+        userId: ciphers[idx].userId,
+        type: ciphers[idx].type,
+        favorite: ciphers[idx].favorite,
+        reprompt: ciphers[idx].reprompt,
+        createdAt: ciphers[idx].createdAt,
+        modifiedAt: ciphers[idx].modifiedAt,
       });
 
       setPasskeyInfo(null);

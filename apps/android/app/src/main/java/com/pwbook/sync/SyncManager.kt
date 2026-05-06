@@ -169,8 +169,19 @@ class SyncManager @Inject constructor(
             pending.find { it.id.toString() == id }?.let { pendingChangesQueue.remove(it.id) }
         }
 
-        response.conflicts.forEach { cipherId ->
-            Timber.w("Conflict detected for cipher $cipherId, will resolve on next sync")
+        // 对 rejected / conflict 项增加重试计数；超过阈值则丢弃，避免死信堆积
+        val maxRetries = 10
+        (response.rejected + response.conflicts).forEach { id ->
+            val entity = pending.find { it.id.toString() == id }
+            if (entity != null) {
+                if (entity.retryCount >= maxRetries) {
+                    pendingChangesQueue.remove(entity.id)
+                    Timber.w("Dropped pending change $id after ${entity.retryCount} retries")
+                } else {
+                    pendingChangesQueue.incrementRetry(entity.id)
+                    Timber.d("Incremented retry for $id: ${entity.retryCount + 1}/$maxRetries")
+                }
+            }
         }
 
         response.newSyncToken?.let { settingsRepository.setString("last_sync_token", it) }
@@ -185,13 +196,28 @@ class SyncManager @Inject constructor(
     }
 
     suspend fun syncAll(): Result<SyncResult> {
-        val pushResult = pushPendingChanges().getOrNull()
-        val pullResult = incrementalSync().getOrNull()
+        val pushResult = pushPendingChanges()
+        val pullResult = incrementalSync()
+
+        // 任一阶段失败都暴露给调用方（UI/Worker），避免静默吞错导致状态分裂
+        val pullError = pullResult.exceptionOrNull()
+        val pushError = pushResult.exceptionOrNull()
+        if (pullError != null) {
+            Timber.w(pullError, "syncAll: pull failed")
+            return Result.failure(pullError)
+        }
+        if (pushError != null) {
+            Timber.w(pushError, "syncAll: push failed")
+            return Result.failure(pushError)
+        }
+
+        val push = pushResult.getOrNull()
+        val pull = pullResult.getOrNull()
         return Result.success(
             SyncResult(
-                cipherCount = pullResult?.cipherCount ?: 0,
-                ruleCount = pullResult?.ruleCount ?: 0,
-                pendingCount = pushResult?.accepted ?: 0
+                cipherCount = pull?.cipherCount ?: 0,
+                ruleCount = pull?.ruleCount ?: 0,
+                pendingCount = push?.accepted ?: 0
             )
         )
     }

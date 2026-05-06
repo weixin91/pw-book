@@ -10,6 +10,7 @@ import { parseOtpauthUri, generateTotpCode } from "../crypto/totp.js";
 import { installWebAuthnBridge } from "./webauthn-handler.js";
 import { showPasskeyGetPrompt } from "./passkey-prompt.js";
 import { initLocalStorageBridge } from "./localstorage-bridge.js";
+import { POLL_INTERVAL_MS, MAX_POLL_COUNT } from "../config/constants.js";
 
 declare const __PWBOOK_INITIALIZED__: boolean | undefined;
 
@@ -327,13 +328,15 @@ function setupAutoDetection(
     }
   });
 
-  // 轻量轮询兜底：每 2 秒扫描一次，最多 30 次（1 分钟），找到表单后停止
+  // 轻量轮询兜底：每 POLL_INTERVAL_MS 扫描一次，最多 MAX_POLL_COUNT 次，找到表单后停止
   // 使用 requestIdleCallback 避免阻塞主线程（非关键扫描）
+  // 页面隐藏（切到后台标签页）时跳过本轮扫描且不计数，避免后台无意义耗电
   let pollCount = 0;
   const scheduleScan = typeof requestIdleCallback === "function" ? requestIdleCallback : (cb: () => void) => setTimeout(cb, 1);
   const pollInterval = setInterval(() => {
+    if (document.hidden) return;
     pollCount++;
-    if (pollCount > 30) {
+    if (pollCount > MAX_POLL_COUNT) {
       clearInterval(pollInterval);
       console.log("[PWBook] 轮询结束，未检测到持久登录表单");
       return;
@@ -346,7 +349,7 @@ function setupAutoDetection(
         clearInterval(pollInterval);
       }
     });
-  }, 2000);
+  }, POLL_INTERVAL_MS);
 }
 
 // 手动模式：仅通过密码框 focus 触发

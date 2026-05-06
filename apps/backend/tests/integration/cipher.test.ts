@@ -67,7 +67,7 @@ describe("Cipher API", () => {
       url: "/api/ciphers",
       headers: { authorization: `Bearer ${token}` },
       payload: {
-        id: `cipher-${Date.now()}`,
+        id: crypto.randomUUID(),
         type: 1,
         data: "encrypted-data-1",
         favorite: false,
@@ -80,7 +80,7 @@ describe("Cipher API", () => {
   });
 
   it("should reject duplicate cipher id", async () => {
-    const id = `dup-cipher-${Date.now()}`;
+    const id = crypto.randomUUID();
     await app.inject({
       method: "POST",
       url: "/api/ciphers",
@@ -102,11 +102,12 @@ describe("Cipher API", () => {
         data: "encrypted-data-2",
       },
     });
-    expect(res.statusCode).toBe(400);
+    // Prisma P2002 唯一约束 → 409
+    expect(res.statusCode).toBe(409);
   });
 
   it("should update a cipher", async () => {
-    const id = `update-cipher-${Date.now()}`;
+    const id = crypto.randomUUID();
     await app.inject({
       method: "POST",
       url: "/api/ciphers",
@@ -127,7 +128,7 @@ describe("Cipher API", () => {
   });
 
   it("should delete a cipher", async () => {
-    const id = `delete-cipher-${Date.now()}`;
+    const id = crypto.randomUUID();
     await app.inject({
       method: "POST",
       url: "/api/ciphers",
@@ -144,7 +145,7 @@ describe("Cipher API", () => {
   });
 
   it("should get a cipher by id", async () => {
-    const id = `get-cipher-${Date.now()}`;
+    const id = crypto.randomUUID();
     await app.inject({
       method: "POST",
       url: "/api/ciphers",
@@ -165,7 +166,7 @@ describe("Cipher API", () => {
   it("should return 404 for non-existent cipher", async () => {
     const res = await app.inject({
       method: "GET",
-      url: "/api/ciphers/non-existent-id",
+      url: `/api/ciphers/${crypto.randomUUID()}`,
       headers: { authorization: `Bearer ${token}` },
     });
     expect(res.statusCode).toBe(404);

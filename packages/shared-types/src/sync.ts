@@ -45,6 +45,12 @@ export interface PendingChange {
   encryptedData: string;
   clientTimestamp: string;
   retryCount: number;
+  userId: string;
+  type: number;
+  favorite: boolean;
+  reprompt: number;
+  createdAt: string;
+  modifiedAt: string;
 }
 
 export interface SyncStatus {

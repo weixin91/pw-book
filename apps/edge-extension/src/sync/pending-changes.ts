@@ -5,16 +5,23 @@ import type { PendingChange } from "@pwbook/shared-types";
 
 export class PendingChangesQueue {
   async enqueue(
-    change: Omit<PendingChange, "id" | "retryCount">,
+    change: Omit<PendingChange, "id" | "retryCount" | "userId" | "type" | "favorite" | "reprompt" | "createdAt" | "modifiedAt"> & Partial<Pick<PendingChange, "userId" | "type" | "favorite" | "reprompt" | "createdAt" | "modifiedAt">>,
     triggerSync = true
   ): Promise<void> {
     const changes = await StorageService.getPendingChanges();
     const wasEmpty = changes.length === 0;
+    const now = new Date().toISOString();
     const newChange: PendingChange = {
       ...change,
+      userId: change.userId ?? "",
+      type: change.type ?? 1,
+      favorite: change.favorite ?? false,
+      reprompt: change.reprompt ?? 0,
+      createdAt: change.createdAt ?? now,
+      modifiedAt: change.modifiedAt ?? now,
       id: crypto.randomUUID(),
       retryCount: 0,
-    };
+    } as PendingChange;
     changes.push(newChange);
     await StorageService.setPendingChanges(changes);
     // 只有首次入队时才触发同步，避免批量入队时重复发送同步请求

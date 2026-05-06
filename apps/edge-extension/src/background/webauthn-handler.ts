@@ -15,9 +15,8 @@ import {
   encodeCoseKeyEs256,
   encodeAttestationObjectNone,
   signAssertion,
-  base64UrlEncode,
-  base64UrlDecode,
 } from "../crypto/passkey-storage.js";
+import { base64UrlEncode, base64UrlDecode } from "../platform/base64.js";
 
 const PASSKEY_AAGUID = new Uint8Array(16); // 全 0：软件认证器
 
@@ -279,11 +278,18 @@ export async function handleWebAuthnCreate(
     await CipherIndexService.updateOne(targetId, updatedData);
 
     const queue = new PendingChangesQueue();
+    const updatedCipher = ciphers[idx];
     await queue.enqueue({
       cipherId: targetId,
       operation: "UPDATE",
       encryptedData: resultEncrypted,
       clientTimestamp: new Date().toISOString(),
+      userId: updatedCipher.userId,
+      type: updatedCipher.type,
+      favorite: updatedCipher.favorite,
+      reprompt: updatedCipher.reprompt,
+      createdAt: updatedCipher.createdAt,
+      modifiedAt: updatedCipher.modifiedAt,
     });
   } else {
     // 新建 LOGIN 凭据
@@ -325,6 +331,12 @@ export async function handleWebAuthnCreate(
       operation: "CREATE",
       encryptedData: resultEncrypted,
       clientTimestamp: new Date().toISOString(),
+      userId: cipher.userId,
+      type: cipher.type,
+      favorite: cipher.favorite,
+      reprompt: cipher.reprompt,
+      createdAt: cipher.createdAt,
+      modifiedAt: cipher.modifiedAt,
     });
   }
 
@@ -416,11 +428,18 @@ export async function handleWebAuthnGet(
     await StorageService.setCiphers(ciphers);
 
     const queue = new PendingChangesQueue();
+    const updatedCipher = ciphers[idx];
     await queue.enqueue({
-      cipherId: ciphers[idx].id,
+      cipherId: updatedCipher.id,
       operation: "UPDATE",
       encryptedData: encrypted,
       clientTimestamp: new Date().toISOString(),
+      userId: updatedCipher.userId,
+      type: updatedCipher.type,
+      favorite: updatedCipher.favorite,
+      reprompt: updatedCipher.reprompt,
+      createdAt: updatedCipher.createdAt,
+      modifiedAt: updatedCipher.modifiedAt,
     });
   }
 
