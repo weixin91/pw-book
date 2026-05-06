@@ -6,6 +6,8 @@ import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -160,7 +162,8 @@ fun VaultListScreen(
                     syncState = uiState.syncState,
                     pendingCount = uiState.pendingCount,
                     lastSyncTime = uiState.lastSyncTime,
-                    onSyncClick = { viewModel.sync() }
+                    onSyncClick = { viewModel.sync() },
+                    onFullSyncClick = { viewModel.fullSync() }
                 )
             }
             LazyColumn(
@@ -300,12 +303,14 @@ private fun CipherListItem(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun SyncStatusCard(
     syncState: SyncManager.SyncState,
     pendingCount: Int,
     lastSyncTime: Long,
-    onSyncClick: () -> Unit
+    onSyncClick: () -> Unit,
+    onFullSyncClick: () -> Unit
 ) {
     val isSyncing = syncState == SyncManager.SyncState.SYNCING
 
@@ -361,12 +366,15 @@ private fun SyncStatusCard(
     }
 
     Surface(
-        onClick = { if (!isSyncing) onSyncClick() },
         color = containerColor,
         contentColor = contentColor,
         shape = MaterialTheme.shapes.extraSmall,
         modifier = Modifier
             .fillMaxWidth()
+            .combinedClickable(
+                onClick = { if (!isSyncing) onSyncClick() },
+                onLongClick = { if (!isSyncing) onFullSyncClick() }
+            )
     ) {
         Row(
             modifier = Modifier

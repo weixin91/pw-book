@@ -114,6 +114,17 @@ class VaultListViewModel @Inject constructor(
         }
     }
 
+    /**
+     * 全量同步：重新拉取所有数据（用于增量同步遗漏时）
+     */
+    fun fullSync() {
+        viewModelScope.launch {
+            syncManager.fullSync()
+                .onSuccess { Timber.i("Full sync completed: ${it.cipherCount} ciphers") }
+                .onFailure { Timber.e(it, "Full sync failed") }
+        }
+    }
+
     fun lock() {
         vaultSession.lock()
     }
