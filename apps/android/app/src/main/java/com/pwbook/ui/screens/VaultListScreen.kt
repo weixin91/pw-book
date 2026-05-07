@@ -1,5 +1,6 @@
 package com.pwbook.ui.screens
 
+import android.widget.Toast
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.LinearEasing
@@ -36,6 +37,8 @@ import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -58,7 +61,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import com.pwbook.R
 import com.pwbook.domain.DecryptedCipher
@@ -192,6 +198,8 @@ fun VaultListScreen(
                             CipherListItem(
                                 cipher = cipher,
                                 isMatch = true,
+                                enableLongClick = !isAutofillMode,
+                                onCopyPassword = viewModel::copyPassword,
                                 onClick = {
                                     scope.launch {
                                         viewModel.selectCipherForAutofill(cipher.id, targetUri)
@@ -214,6 +222,8 @@ fun VaultListScreen(
                             CipherListItem(
                                 cipher = cipher,
                                 isMatch = false,
+                                enableLongClick = !isAutofillMode,
+                                onCopyPassword = viewModel::copyPassword,
                                 onClick = {
                                     scope.launch {
                                         viewModel.selectCipherForAutofill(cipher.id, targetUri)
@@ -231,6 +241,8 @@ fun VaultListScreen(
                         CipherListItem(
                             cipher = cipher,
                             isMatch = isMatch,
+                            enableLongClick = !isAutofillMode,
+                            onCopyPassword = viewModel::copyPassword,
                             onClick = {
                                 if (isAutofillMode) {
                                     scope.launch {
@@ -249,15 +261,29 @@ fun VaultListScreen(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun CipherListItem(
     cipher: DecryptedCipher,
     isMatch: Boolean = false,
+    enableLongClick: Boolean = true,
+    onCopyPassword: (String) -> Unit = {},
     onClick: () -> Unit
 ) {
+    var menuExpanded by remember { mutableStateOf(false) }
+    val clipboardManager = LocalClipboardManager.current
+    val context = LocalContext.current
+    val canCopy = cipher.username != null || cipher.password != null
+
     Card(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = if (enableLongClick && canCopy) {
+                    { menuExpanded = true }
+                } else null
+            )
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             androidx.compose.foundation.layout.Row(
@@ -299,6 +325,33 @@ private fun CipherListItem(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+
+            // 长按菜单:复制用户名/密码
+            DropdownMenu(
+                expanded = menuExpanded,
+                onDismissRequest = { menuExpanded = false }
+            ) {
+                cipher.username?.let { username ->
+                    DropdownMenuItem(
+                        text = { Text("复制用户名") },
+                        onClick = {
+                            menuExpanded = false
+                            clipboardManager.setText(AnnotatedString(username))
+                            Toast.makeText(context, "已复制用户名", Toast.LENGTH_SHORT).show()
+                        }
+                    )
+                }
+                cipher.password?.let { password ->
+                    DropdownMenuItem(
+                        text = { Text("复制密码") },
+                        onClick = {
+                            menuExpanded = false
+                            onCopyPassword(password)
+                            Toast.makeText(context, "已复制密码", Toast.LENGTH_SHORT).show()
+                        }
+                    )
+                }
+            }
         }
     }
 }

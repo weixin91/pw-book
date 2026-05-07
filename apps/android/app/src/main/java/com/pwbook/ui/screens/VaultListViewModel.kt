@@ -12,6 +12,7 @@ import com.pwbook.domain.LoginUriJson
 import com.pwbook.domain.VaultSession
 import com.pwbook.domain.index.CipherIndexStore
 import com.pwbook.domain.matcher.UriMatcher
+import com.pwbook.domain.usecase.CopyPasswordUseCase
 import com.pwbook.sync.PendingChangesQueue
 import com.pwbook.sync.SyncManager
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -37,7 +38,8 @@ class VaultListViewModel @Inject constructor(
     private val vaultEncryption: VaultEncryption,
     private val pendingChangesQueue: PendingChangesQueue,
     private val json: Json,
-    private val cipherIndexStore: CipherIndexStore
+    private val cipherIndexStore: CipherIndexStore,
+    private val copyPasswordUseCase: CopyPasswordUseCase
 ) : ViewModel() {
 
     private val _searchQuery = MutableStateFlow("")
@@ -127,6 +129,13 @@ class VaultListViewModel @Inject constructor(
 
     fun lock() {
         vaultSession.lock()
+    }
+
+    /**
+     * 复制密码到剪贴板,10 秒后自动清空(由 CopyPasswordUseCase 处理敏感标记 + 倒计时清空)
+     */
+    fun copyPassword(password: String) {
+        copyPasswordUseCase.copyPassword(password)
     }
 
     fun logout() {

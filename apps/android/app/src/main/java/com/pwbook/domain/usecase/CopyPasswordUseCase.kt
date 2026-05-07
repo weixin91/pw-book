@@ -41,12 +41,13 @@ class CopyPasswordUseCase @Inject constructor(
         }
         clipboard.setPrimaryClip(clip)
         lastCopiedPassword = password
-        Timber.i("Password copied to clipboard (sensitive marked)")
+        Timber.i("Password copied to clipboard, scheduling clear in ${CLEAR_DELAY_MS}ms")
 
         // 取消之前的定时器
         currentClearRunnable?.let { handler.removeCallbacks(it) }
 
         val runnable = Runnable {
+            Timber.i("Clear runnable fired (after ${CLEAR_DELAY_MS}ms delay)")
             clearClipboardImmediately()
         }
         currentClearRunnable = runnable
@@ -54,17 +55,23 @@ class CopyPasswordUseCase @Inject constructor(
     }
 
     private fun clearClipboardImmediately() {
-        val emptyClip = ClipData.newPlainText("", "")
-        // 清空时也标记为敏感（防止敏感标记残留）
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            emptyClip.description.extras = PersistableBundle().apply {
-                putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, false)
+        // Android 7.0+ 优先使用 clearPrimaryClip(),比 setPrimaryClip(empty) 在部分厂商 ROM 上更可靠
+        try {
+            clipboard.clearPrimaryClip()
+            Timber.i("Clipboard cleared via clearPrimaryClip()")
+        } catch (e: Exception) {
+            // 兜底:某些设备 clearPrimaryClip 可能抛异常,改用空 ClipData
+            Timber.w(e, "clearPrimaryClip failed, falling back to setPrimaryClip(empty)")
+            val emptyClip = ClipData.newPlainText("", "")
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                emptyClip.description.extras = PersistableBundle().apply {
+                    putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, false)
+                }
             }
+            clipboard.setPrimaryClip(emptyClip)
         }
-        clipboard.setPrimaryClip(emptyClip)
         lastCopiedPassword = null
         currentClearRunnable = null
-        Timber.i("Clipboard cleared after timeout")
     }
 
     companion object {

@@ -161,8 +161,9 @@ object StructureParser {
             return beforePassword.lastOrNull()
         }
 
-        // 5. 如果没有密码字段，找第一个文本输入框
-        return fields.firstOrNull { isTextField(it) }
+        // 5. 无密码字段且无明确用户名信号 — 不识别为登录场景
+        // 避免在微信聊天框、搜索框等普通文本输入处误弹出"解锁 Password Book"
+        return null
     }
 
     /**
