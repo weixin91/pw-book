@@ -13,6 +13,7 @@
 *.key
 *.p12
 *.jks
+*.keystore
 keystore.properties
 secrets.properties
 google-services.json
