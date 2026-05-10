@@ -49,7 +49,7 @@ export function generatePassword(settings: PasswordGeneratorSettings): string {
   const special = "!@#$%^&*()_+-=[]{}|;:,.<>?";
   const ambiguous = "0O1lI";
 
-  let resultChars: string[] = [];
+  const resultChars: string[] = [];
 
   if (settings.includeNumbers && settings.minNumbers > 0) {
     const numPool = settings.excludeAmbiguous ? numbers : numbersAll;
