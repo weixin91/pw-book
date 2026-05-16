@@ -10,4 +10,8 @@
         <item name="android:windowIsFloating">false</item>
         <item name="android:backgroundDimEnabled">false</item>
     </style>
+
+    <style name="Theme.Transparent.Autofill" parent="Theme.Transparent">
+        <item name="android:windowAnimationStyle">@null</item>
+    </style>
 </resources>

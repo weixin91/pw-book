@@ -19,7 +19,6 @@ import com.pwbook.data.repository.RejectedSiteRepository
 import com.pwbook.data.repository.SettingsRepository
 import com.pwbook.domain.VaultSession
 import com.pwbook.domain.index.CipherIndexStore
-import com.pwbook.domain.index.DomainAssocLite
 import com.pwbook.domain.matcher.UriMatcher
 import com.pwbook.sync.PendingChangesQueue
 import dagger.hilt.android.AndroidEntryPoint
@@ -30,7 +29,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import timber.log.Timber
-import java.util.UUID
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -65,6 +63,9 @@ class PwBookAutofillService : AutofillService() {
 
     @Inject
     lateinit var cipherIndexStore: CipherIndexStore
+
+    @Inject
+    lateinit var autofillFillResponseBuilder: AutofillFillResponseBuilder
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -107,65 +108,9 @@ class PwBookAutofillService : AutofillService() {
             return
         }
 
-        // 使用 runBlocking 确保在回调前完成
         var response: FillResponse? = null
         runBlocking {
-            try {
-                val userId = securePrefs.getString(SecurePrefs.KEY_USER_ID)
-                Timber.d("onFillRequest: userId=$userId")
-                if (userId != null) {
-                    val rulesRaw = domainAssocRepository.getRules(userId)
-                    Timber.d("onFillRequest: found ${rulesRaw.size} domain rules")
-
-                    val rulesLite = rulesRaw.map { entity ->
-                        DomainAssocLite(
-                            domains = json.decodeFromString(entity.domains),
-                            packageNames = json.decodeFromString(entity.packageNames)
-                        )
-                    }
-
-                    val candidateIds = try {
-                        cipherIndexStore.filterByDomain(
-                            userId,
-                            UriMatcher.parseUri(parsed.uriString),
-                            rulesLite
-                        )
-                    } catch (e: Exception) {
-                        Timber.e(e, "filterByDomain failed, falling back to full decrypt")
-                        emptyList()
-                    }
-                    Timber.d("onFillRequest: index returned ${candidateIds.size} candidates")
-
-                    val ciphersToCheck = if (candidateIds.isNotEmpty()) {
-                        candidateIds.mapNotNull { cipherRepository.getCipher(it) }
-                    } else {
-                        cipherRepository.getCiphers(userId).also {
-                            Timber.d("onFillRequest: falling back to ${it.size} ciphers")
-                        }
-                    }
-
-                    val decrypted = ciphersToCheck.mapNotNull { vaultSession.decryptCipher(it) }
-                        .filter { cipher ->
-                            val matchResult = cipher.uris.any { uri ->
-                                UriMatcher.isMatch(parsed.uriString, uri, rulesRaw)
-                            }
-                            Timber.d("onFillRequest: cipher ${cipher.name} uris=${cipher.uris}, match=$matchResult")
-                            matchResult
-                        }
-                        .sortedByDescending { it.modifiedAt }
-
-                    Timber.d("onFillRequest: matched ${decrypted.size} ciphers")
-
-                    response = FillResponseBuilder.build(
-                        context = this@PwBookAutofillService,
-                        parsed = parsed,
-                        ciphers = decrypted.take(5)
-                    )
-                    Timber.d("onFillRequest: built response with ${decrypted.take(5).size} cipher datasets + vault option")
-                }
-            } catch (e: Exception) {
-                Timber.e(e, "onFillRequest failed")
-            }
+            response = autofillFillResponseBuilder.build(this@PwBookAutofillService, parsed)
         }
         vaultSession.recordActivity()
         callback.onSuccess(response)
@@ -223,27 +168,13 @@ class PwBookAutofillService : AutofillService() {
     private fun buildUnlockResponse(parsed: ParsedStructure): FillResponse? {
         if (parsed.usernameId == null && parsed.passwordId == null) return null
 
-        val requestId = UUID.randomUUID().toString()
-        // 保存最后一次请求 ID，用于返回后匹配选择结果
-        getSharedPreferences("pwbook_autofill", Context.MODE_PRIVATE)
-            .edit()
-            .putString("last_autofill_request_id", requestId)
-            .apply()
-
-        val intent = packageManager.getLaunchIntentForPackage(packageName)
-            ?.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-            ?.apply {
-                putExtra("autofill_mode", "unlock")
-                putExtra("autofill_uri", parsed.uriString)
-                putExtra("autofill_request_id", requestId)
-            }
-            ?: return null
+        val intent = android.content.Intent(this, AutofillUnlockActivity::class.java)
 
         val pendingIntent = android.app.PendingIntent.getActivity(
             this,
             System.currentTimeMillis().toInt(),
             intent,
-            android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+            android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_MUTABLE
         )
 
         val remoteViews = RemoteViews(packageName, android.R.layout.simple_list_item_1).apply {
@@ -253,7 +184,7 @@ class PwBookAutofillService : AutofillService() {
         val datasetBuilder = Dataset.Builder(remoteViews)
             .setAuthentication(pendingIntent.intentSender)
 
-        // 必须至少设置一个 field，否则 build() 会抛 IllegalStateException
+        // 必须至少设置一个 field,否则 build() 会抛 IllegalStateException
         parsed.usernameId?.let { id ->
             datasetBuilder.setValue(id, AutofillValue.forText(""))
         }
