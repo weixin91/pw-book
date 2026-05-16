@@ -125,13 +125,14 @@ class PasskeyCryptoTest {
         val authData = PasskeyCrypto.buildAuthenticatorData(
             rpId = "example.com",
             signCount = 42,
-            includeAttestedCredentialData = false
+            includeAttestedCredentialData = false,
+            userVerified = true
         )
 
         assertEquals(37, authData.size.toLong()) // 32 + 1 + 4
 
         val flags = authData[32].toInt() and 0xFF
-        assertEquals("Get 时 flags 应为 0x05 (UP+UV)", 0x05, flags)
+        assertEquals("Get 且完成用户验证时 flags 应为 0x05 (UP+UV)", 0x05, flags)
 
         // signCount = 42
         val signCount = ((authData[33].toInt() and 0xFF) shl 24) or

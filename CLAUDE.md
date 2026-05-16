@@ -174,3 +174,4 @@ MVVM + Repository + Hilt DI，分层参考 Bitwarden Android：
 - **软删除**：`Cipher.deletedAt` 用作 tombstone，同步时下发删除标记；查询活跃凭据要带 `deletedAt: null` 过滤（已建覆盖索引）。
 - **冲突解决**：后端以 `modifiedAt` 做 last-write-wins；客户端 pending 队列按客户端时间戳重放。
 - **commit 信息**：参考最近提交风格，使用前缀 `feat(android):` / `fix:` 等，正文中文。
+- **git commit**: 除非用户主动要求，不自动commit。
