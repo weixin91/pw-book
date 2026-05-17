@@ -124,12 +124,14 @@ class NoteEditViewModel @Inject constructor(
             )
 
             cipherRepository.saveCipher(entity)
+            Timber.d("[NoteSave] saved cipher id=${entity.id}, type=${entity.type}, favorite=${entity.favorite}")
             pendingChangesQueue.enqueue(
                 entity.id,
                 if (state.isNew) PendingChangesQueue.Operation.CREATE else PendingChangesQueue.Operation.UPDATE,
                 encryptedData,
                 now
             )
+            Timber.d("[NoteSave] enqueued pending change for id=${entity.id}")
             syncManager.launchSyncAll()
             onSuccess()
         }

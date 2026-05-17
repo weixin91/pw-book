@@ -43,6 +43,15 @@ export function VaultList({ onAdd, onEdit, onAddNote, onEditNote, onOpenGenerato
 
   useEffect(() => {
     loadItems();
+
+    // 监听 storage 变化，同步完成后自动刷新列表
+    const storageListener = (changes: Record<string, chrome.storage.StorageChange>, area: string) => {
+      if (area === "local" && (changes["ciphers"] || changes["syncStatus"])) {
+        loadItems();
+      }
+    };
+    chrome.storage.onChanged.addListener(storageListener);
+    return () => chrome.storage.onChanged.removeListener(storageListener);
   }, []);
 
   useEffect(() => {
@@ -75,6 +84,9 @@ export function VaultList({ onAdd, onEdit, onAddNote, onEditNote, onOpenGenerato
 
   async function loadItems() {
     const ciphers = await StorageService.getCiphers();
+    // DEBUG: 打印所有 cipher 的类型，用于排查笔记被归类到登录的问题
+    console.log("[VaultList] loaded ciphers count:", ciphers.length);
+    console.log("[VaultList] cipher types:", ciphers.map((c) => ({ id: c.id, type: c.type, typeofType: typeof c.type })));
     const userKey = await StorageService.getUserKey();
     if (!userKey) return;
 

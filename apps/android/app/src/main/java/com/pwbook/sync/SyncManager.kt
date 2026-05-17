@@ -146,6 +146,7 @@ class SyncManager @Inject constructor(
 
             // 从本地库读取 cipher 的元数据，避免硬编码导致类型/收藏状态丢失
             val localCipher = cipherRepository.getCipher(cipherId)
+            Timber.d("[SyncPush] cipherId=$cipherId, localCipher=${localCipher != null}, type=${localCipher?.type}, favorite=${localCipher?.favorite}")
 
             val cipher = CipherDto(
                 id = cipherId,

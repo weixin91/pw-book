@@ -36,6 +36,7 @@ export class SyncClient {
       throw new Error(`同步失败: ${response.status}`);
     }
     const data = (await response.json()) as SyncResponse;
+    console.log(`[SyncClient] incrementalSync received ciphers=${data.ciphers?.length}, types=${data.ciphers?.map(c => c.type).join(",")}`);
     await this.applySyncData(data);
     return data;
   }
@@ -54,6 +55,7 @@ export class SyncClient {
       throw new Error(`增量同步失败: ${response.status}`);
     }
     const data = (await response.json()) as SyncResponse;
+    console.log(`[SyncClient] incrementalSync received ciphers=${data.ciphers?.length}, types=${data.ciphers?.map(c => c.type).join(",")}`);
     await this.applySyncData(data);
     return data;
   }
@@ -92,7 +94,9 @@ export class SyncClient {
       }
     }
 
-    await StorageService.setCiphers(Array.from(localMap.values()));
+    const finalCiphers = Array.from(localMap.values());
+    console.log(`[SyncClient] applySyncData final ciphers=${finalCiphers.length}, types=${finalCiphers.map(c => c.type).join(",")}`);
+    await StorageService.setCiphers(finalCiphers);
 
     // 同步后重建索引（如果保险库已解锁）
     const userKey = await StorageService.getUserKey();
