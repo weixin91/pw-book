@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client";
 import { authenticate } from "../auth/jwt.js";
 import { ApiError } from "../errors/handler.js";
 import { prisma } from "../db/prisma.js";
+import { broadcastSyncRequired } from "../websocket/server.js";
 
 const cipherSchema = z.object({
   id: z.string().uuid(),
@@ -24,6 +25,32 @@ export async function cipherRoutes(app: FastifyInstance): Promise<void> {
     });
     return reply.send(ciphers);
   });
+
+  // 恢复软删除凭据
+  app.post<{ Params: { id: string } }>(
+    "/:id/restore",
+    { preHandler: [authenticate] },
+    async (request, reply) => {
+      const userId = request.user!.sub;
+      const deviceId = request.user!.deviceId;
+      const { id } = request.params;
+
+      const result = await prisma.cipher.updateMany({
+        where: { id, userId, deletedAt: { not: null } },
+        data: { deletedAt: null, modifiedAt: new Date() },
+      });
+      if (result.count === 0) {
+        throw new ApiError("RESOURCE_NOT_FOUND", 404, "凭据不存在或未在回收站中");
+      }
+
+      if (deviceId) {
+        broadcastSyncRequired(userId, deviceId);
+      }
+
+      const cipher = await prisma.cipher.findUnique({ where: { id } });
+      return reply.send(cipher);
+    }
+  );
 
   app.post<{ Body: z.infer<typeof cipherSchema> }>(
     "/",
