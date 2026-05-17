@@ -28,6 +28,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.pwbook.R
@@ -51,13 +52,13 @@ fun NoteEditScreen(
             TopAppBar(
                 title = {
                     Text(
-                        if (uiState.isNew) "新建笔记"
-                        else "编辑笔记"
+                        if (uiState.isNew) stringResource(R.string.note_new_title)
+                        else stringResource(R.string.note_edit_title)
                     )
                 },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.cancel))
                     }
                 },
                 actions = {
@@ -69,11 +70,11 @@ fun NoteEditScreen(
                         },
                         enabled = uiState.name.isNotBlank()
                     ) {
-                        Icon(Icons.Default.Save, contentDescription = "保存")
+                        Icon(Icons.Default.Save, contentDescription = stringResource(R.string.save))
                     }
                     if (!uiState.isNew) {
                         IconButton(onClick = { showDeleteDialog = true }) {
-                            Icon(Icons.Default.Delete, contentDescription = "删除")
+                            Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.delete))
                         }
                     }
                 }
@@ -90,7 +91,7 @@ fun NoteEditScreen(
             OutlinedTextField(
                 value = uiState.name,
                 onValueChange = viewModel::updateName,
-                label = { Text("标题") },
+                label = { Text(stringResource(R.string.note_title_label)) },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 8.dp),
@@ -101,7 +102,7 @@ fun NoteEditScreen(
             OutlinedTextField(
                 value = uiState.notes,
                 onValueChange = viewModel::updateNotes,
-                label = { Text("内容") },
+                label = { Text(stringResource(R.string.note_content_label)) },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 12.dp),
@@ -114,8 +115,8 @@ fun NoteEditScreen(
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
-            title = { Text("删除笔记") },
-            text = { Text("确定要删除这条笔记吗？") },
+            title = { Text(stringResource(R.string.note_delete_title)) },
+            text = { Text(stringResource(R.string.note_delete_message)) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -123,12 +124,12 @@ fun NoteEditScreen(
                         viewModel.delete(onSuccess = onNavigateBack)
                     }
                 ) {
-                    Text("删除", color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteDialog = false }) {
-                    Text("取消")
+                    Text(stringResource(R.string.cancel))
                 }
             }
         )
