@@ -10,6 +10,10 @@ sealed class NavRoutes(val route: String) {
         fun createRoute(cipherId: String? = null) =
             "cipher_edit/${cipherId ?: "new"}"
     }
+    data object NoteEdit : NavRoutes("note_edit/{cipherId}") {
+        fun createRoute(cipherId: String? = null) =
+            "note_edit/${cipherId ?: "new"}"
+    }
     data object PasswordGenerator : NavRoutes("password_generator")
     data object DomainAssoc : NavRoutes("domain_assoc")
     data object TotpScan : NavRoutes("totp_scan")

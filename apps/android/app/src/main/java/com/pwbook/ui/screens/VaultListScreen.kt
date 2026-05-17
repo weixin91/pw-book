@@ -40,6 +40,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -66,9 +67,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.pwbook.R
 import com.pwbook.domain.DecryptedCipher
 import com.pwbook.domain.matcher.UriMatcher
+import com.pwbook.domain.model.CipherType
 import com.pwbook.sync.SyncManager
 import kotlinx.coroutines.launch
 
@@ -79,6 +82,7 @@ fun VaultListScreen(
     isAutofillMode: Boolean = false,
     targetUri: String? = null,
     onNavigateToEdit: (String?) -> Unit,
+    onNavigateToNoteEdit: (String?) -> Unit,
     onNavigateToGenerator: () -> Unit,
     onNavigateToSettings: () -> Unit,
     onNavigateToTotp: () -> Unit,
@@ -91,6 +95,8 @@ fun VaultListScreen(
 
     // 搜索框状态在 UI 层本地管理，避免 StateFlow 重组导致光标位置错乱
     var searchQuery by remember { mutableStateOf("") }
+    var filterType by remember { mutableStateOf("all") }
+    var showTypeSelector by remember { mutableStateOf(false) }
 
     LaunchedEffect(targetUri) {
         viewModel.setTargetUri(targetUri)
@@ -139,7 +145,7 @@ fun VaultListScreen(
         },
         floatingActionButton = {
             if (!isAutofillMode) {
-                FloatingActionButton(onClick = { onNavigateToEdit(null) }) {
+                FloatingActionButton(onClick = { showTypeSelector = true }) {
                     Icon(Icons.Default.Add, contentDescription = stringResource(R.string.add_cipher))
                 }
             }
@@ -164,6 +170,24 @@ fun VaultListScreen(
                 singleLine = true
             )
             if (!isAutofillMode) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf("all" to "全部", "login" to "登录", "note" to "笔记").forEach { (key, label) ->
+                        val selected = filterType == key
+                        FilterChip(
+                            selected = selected,
+                            onClick = { filterType = key },
+                            label = { Text(label) },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+            }
+            if (!isAutofillMode) {
                 SyncStatusCard(
                     syncState = uiState.syncState,
                     pendingCount = uiState.pendingCount,
@@ -179,10 +203,13 @@ fun VaultListScreen(
             ) {
                 if (isAutofillMode && searchQuery.isBlank() && targetUri != null) {
                     // 使用 UriMatcher 进行规范化域名匹配，防止钓鱼站点攻击
+                    // 笔记不参与自动填充
                     val matched = uiState.ciphers.filter { cipher ->
+                        cipher.type != CipherType.SECURE_NOTE.value &&
                         cipher.uris.any { uri -> UriMatcher.isMatch(uri, targetUri) }
                     }
                     val others = uiState.ciphers.filter { cipher ->
+                        cipher.type != CipherType.SECURE_NOTE.value &&
                         cipher.uris.none { uri -> UriMatcher.isMatch(uri, targetUri) }
                     }
                     if (matched.isNotEmpty()) {
@@ -234,7 +261,14 @@ fun VaultListScreen(
                         }
                     }
                 } else {
-                    items(uiState.ciphers, key = { it.id }) { cipher ->
+                    val displayCiphers = uiState.ciphers.filter {
+                        when (filterType) {
+                            "login" -> it.type == CipherType.LOGIN.value
+                            "note" -> it.type == CipherType.SECURE_NOTE.value
+                            else -> true
+                        }
+                    }
+                    items(displayCiphers, key = { it.id }) { cipher ->
                         val isMatch = targetUri != null && cipher.uris.any { uri ->
                             UriMatcher.isMatch(uri, targetUri)
                         }
@@ -250,12 +284,23 @@ fun VaultListScreen(
                                         onCipherSelected?.invoke(cipher.id)
                                     }
                                 } else {
-                                    onNavigateToEdit(cipher.id)
+                                    if (cipher.type == CipherType.SECURE_NOTE.value) {
+                                        onNavigateToNoteEdit(cipher.id)
+                                    } else {
+                                        onNavigateToEdit(cipher.id)
+                                    }
                                 }
                             }
                         )
                     }
                 }
+            }
+            if (showTypeSelector) {
+                TypeSelectionBottomSheet(
+                    onDismiss = { showTypeSelector = false },
+                    onSelectLogin = { onNavigateToEdit(null) },
+                    onSelectNote = { onNavigateToNoteEdit(null) }
+                )
             }
         }
     }
@@ -273,7 +318,8 @@ private fun CipherListItem(
     var menuExpanded by remember { mutableStateOf(false) }
     val clipboardManager = LocalClipboardManager.current
     val context = LocalContext.current
-    val canCopy = cipher.username != null || cipher.password != null
+    val isNote = cipher.type == CipherType.SECURE_NOTE.value
+    val canCopy = if (isNote) cipher.notes != null else (cipher.username != null || cipher.password != null)
 
     Card(
         modifier = Modifier
@@ -296,7 +342,13 @@ private fun CipherListItem(
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.weight(1f)
                 )
-                if (cipher.passkey != null) {
+                if (isNote) {
+                    Text(
+                        text = "📝",
+                        fontSize = 14.sp,
+                        modifier = Modifier.padding(start = 4.dp)
+                    )
+                } else if (cipher.passkey != null) {
                     Icon(
                         Icons.Default.Security,
                         contentDescription = "Passkey",
@@ -313,41 +365,54 @@ private fun CipherListItem(
                     )
                 }
             }
-            if (cipher.username != null) {
-                Text(
-                    text = cipher.username,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+            Text(
+                text = if (isNote) {
+                    (cipher.notes ?: "").take(60).let { if (it.isEmpty()) "（无内容）" else it }
+                } else {
+                    cipher.username ?: ""
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
             Text(
                 text = "修改于 ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date(cipher.modifiedAt))}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
-            // 长按菜单:复制用户名/密码
             DropdownMenu(
                 expanded = menuExpanded,
                 onDismissRequest = { menuExpanded = false }
             ) {
-                cipher.username?.let { username ->
-                    DropdownMenuItem(
-                        text = { Text("复制用户名") },
-                        onClick = {
-                            menuExpanded = false
-                            clipboardManager.setText(AnnotatedString(username))
-                            Toast.makeText(context, "已复制用户名", Toast.LENGTH_SHORT).show()
-                        }
-                    )
+                if (!isNote) {
+                    cipher.username?.let { username ->
+                        DropdownMenuItem(
+                            text = { Text("复制用户名") },
+                            onClick = {
+                                menuExpanded = false
+                                clipboardManager.setText(AnnotatedString(username))
+                                Toast.makeText(context, "已复制用户名", Toast.LENGTH_SHORT).show()
+                            }
+                        )
+                    }
+                    cipher.password?.let { password ->
+                        DropdownMenuItem(
+                            text = { Text("复制密码") },
+                            onClick = {
+                                menuExpanded = false
+                                onCopyPassword(password)
+                                Toast.makeText(context, "已复制密码", Toast.LENGTH_SHORT).show()
+                            }
+                        )
+                    }
                 }
-                cipher.password?.let { password ->
+                if (isNote && cipher.notes != null) {
                     DropdownMenuItem(
-                        text = { Text("复制密码") },
+                        text = { Text("复制内容") },
                         onClick = {
                             menuExpanded = false
-                            onCopyPassword(password)
-                            Toast.makeText(context, "已复制密码", Toast.LENGTH_SHORT).show()
+                            clipboardManager.setText(AnnotatedString(cipher.notes))
+                            Toast.makeText(context, "笔记内容已复制", Toast.LENGTH_SHORT).show()
                         }
                     )
                 }

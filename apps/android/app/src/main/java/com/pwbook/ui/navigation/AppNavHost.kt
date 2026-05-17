@@ -17,6 +17,7 @@ import com.pwbook.ui.login.RegisterScreen
 import com.pwbook.ui.screens.VaultListScreen
 import com.pwbook.ui.screens.VaultListViewModel
 import com.pwbook.ui.screens.edit.CipherEditScreen
+import com.pwbook.ui.screens.note.NoteEditScreen
 import com.pwbook.ui.generator.PasswordGeneratorScreen
 import com.pwbook.ui.screens.scan.TotpScanScreen
 import com.pwbook.ui.screens.totp.TotpListScreen
@@ -102,6 +103,9 @@ fun AppNavHost(
                 onNavigateToEdit = { cipherId ->
                     navController.navigate(NavRoutes.CipherEdit.createRoute(cipherId))
                 },
+                onNavigateToNoteEdit = { cipherId ->
+                    navController.navigate(NavRoutes.NoteEdit.createRoute(cipherId))
+                },
                 onNavigateToGenerator = {
                     navController.navigate(NavRoutes.PasswordGenerator.route)
                 },
@@ -182,6 +186,13 @@ fun AppNavHost(
         composable(NavRoutes.TotpList.route) {
             TotpListScreen(
                 onBack = { navController.popBackStack() }
+            )
+        }
+        composable(NavRoutes.NoteEdit.route) { backStackEntry ->
+            val cipherId = backStackEntry.arguments?.getString("cipherId")
+            NoteEditScreen(
+                cipherId = cipherId.takeIf { it != "new" },
+                onNavigateBack = { navController.popBackStack() }
             )
         }
     }
