@@ -11,7 +11,7 @@
     "jsx": "react-jsx",
     "resolveJsonModule": true,
     "lib": ["ES2022", "DOM"],
-    "types": ["chrome", "react", "react-dom"],
+    "types": ["chrome", "react", "react-dom", "@testing-library/jest-dom"],
     "paths": {
       "@pwbook/shared-types": ["../../packages/shared-types/src/index.ts"],
       "@pwbook/shared-types/*": ["../../packages/shared-types/src/*"]
