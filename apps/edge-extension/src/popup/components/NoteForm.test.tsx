@@ -64,8 +64,9 @@ describe("NoteForm", () => {
     expect(saveBtn).not.toBeDisabled();
   });
 
-  it("点击保存后调用 onSaved", async () => {
+  it("点击保存后构造正确的笔记数据并调用 onSaved", async () => {
     const onSaved = vi.fn();
+    const { StorageService } = await import("../../platform/storage");
     render(<NoteForm editId={null} onBack={vi.fn()} onSaved={onSaved} />);
 
     fireEvent.change(screen.getByPlaceholderText("输入笔记标题"), {
@@ -76,6 +77,14 @@ describe("NoteForm", () => {
     });
     fireEvent.click(screen.getByText("保存"));
 
-    await waitFor(() => expect(onSaved).toHaveBeenCalled());
+    await waitFor(() => {
+      expect(onSaved).toHaveBeenCalled();
+      expect(StorageService.setCiphers).toHaveBeenCalled();
+    });
+
+    const setCiphersCall = vi.mocked(StorageService.setCiphers).mock.calls[0][0];
+    expect(setCiphersCall).toHaveLength(1);
+    expect(setCiphersCall[0].type).toBe(4);
+    expect(setCiphersCall[0].favorite).toBe(false);
   });
 });

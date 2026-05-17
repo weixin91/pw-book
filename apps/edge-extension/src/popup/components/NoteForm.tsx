@@ -3,6 +3,7 @@ import { StorageService } from "../../platform/storage";
 import { PendingChangesQueue } from "../../sync/pending-changes";
 import { CipherIndexService } from "../../crypto/cipher-index";
 import { parseCipherData } from "../../crypto/cipher-data-parser";
+import { CipherType } from "@pwbook/shared-types";
 import type { Cipher } from "@pwbook/shared-types";
 
 interface Props {
@@ -74,7 +75,7 @@ export function NoteForm({ editId, onBack, onSaved, onDeleted }: Props): React.R
         ciphers.push({
           id: targetId,
           userId: profile?.id ?? "",
-          type: 4,
+          type: CipherType.SECURE_NOTE,
           data: encryptedData,
           favorite: false,
           reprompt: 0,
@@ -109,8 +110,9 @@ export function NoteForm({ editId, onBack, onSaved, onDeleted }: Props): React.R
 
   async function handleDelete() {
     if (!editId) return;
-    if (!confirm("确定要删除这条笔记吗？")) return;
+    if (!window.confirm("确定要删除这条笔记吗？")) return;
     const ciphers = await StorageService.getCiphers();
+    const targetCipher = ciphers.find((c) => c.id === editId);
     const filtered = ciphers.filter((c) => c.id !== editId);
     await StorageService.setCiphers(filtered);
     await CipherIndexService.removeOne(editId);
@@ -121,7 +123,7 @@ export function NoteForm({ editId, onBack, onSaved, onDeleted }: Props): React.R
       operation: "DELETE",
       encryptedData: "",
       clientTimestamp: new Date().toISOString(),
-      userId: "",
+      userId: targetCipher?.userId ?? "",
       type: 4,
       favorite: false,
       reprompt: 0,
