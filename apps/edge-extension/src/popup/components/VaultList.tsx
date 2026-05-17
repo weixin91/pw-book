@@ -6,6 +6,7 @@ import { PendingChangesQueue } from "../../sync/pending-changes";
 import { parseOtpauthUri, generateTotpCode } from "../../crypto/totp";
 import { parseUri, isUriMatch } from "../../autofill/domain-utils";
 import { TypeSelector } from "./TypeSelector";
+import { CipherType } from "@pwbook/shared-types";
 import type { Cipher, SyncStatus } from "@pwbook/shared-types";
 
 interface VaultItem {
@@ -87,7 +88,7 @@ export function VaultList({ onAdd, onEdit, onAddNote, onEditNote, onOpenGenerato
           const uris = ((data.login?.uris ?? []) as Array<{ uri?: string }>)
             .map((u) => u.uri ?? "")
             .filter((u) => u.length > 0);
-          const isNote = cipher.type === 4;
+          const isNote = cipher.type === CipherType.SECURE_NOTE;
           return {
             cipher,
             name: data.name || "未命名",
@@ -100,7 +101,7 @@ export function VaultList({ onAdd, onEdit, onAddNote, onEditNote, onOpenGenerato
           };
         } catch (err) {
           console.error("[VaultList] 解密失败:", cipher.id, err);
-          return { cipher, name: "解密失败", username: "", hasTotp: false, hasPasskey: false, uris: [], isNote: cipher.type === 4, notePreview: "" };
+          return { cipher, name: "解密失败", username: "", hasTotp: false, hasPasskey: false, uris: [], isNote: cipher.type === CipherType.SECURE_NOTE, notePreview: "" };
         }
       })
     );
@@ -122,6 +123,7 @@ export function VaultList({ onAdd, onEdit, onAddNote, onEditNote, onOpenGenerato
       return;
     }
     const matched = allItems.filter((item) => {
+      if (item.isNote) return false;
       return item.uris.some((uri) => {
         const targetId = parseUri(uri);
         if (!targetId) return false;
