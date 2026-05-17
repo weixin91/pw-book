@@ -75,6 +75,22 @@ export function TrashView({ onBack }: Props): React.ReactElement {
     }
   }
 
+  async function handleRestore(id: string) {
+    try {
+      const client = new TrashClient();
+      await client.restore(id);
+      setItems((prev) => prev.filter((it) => it.cipher.id !== id));
+      setToast("已恢复");
+      try {
+        await chrome.runtime.sendMessage({ type: "TRIGGER_SYNC_NOW" });
+      } catch {
+        // 即使发不出 sync 通知也不阻塞,本设备无该 cipher 等下次 sync 拉回
+      }
+    } catch {
+      setToast("恢复失败");
+    }
+  }
+
   function formatDeletedAt(iso: string): string {
     if (!iso) return "";
     const d = new Date(iso);
@@ -154,6 +170,7 @@ export function TrashView({ onBack }: Props): React.ReactElement {
                 </div>
               </div>
               <button
+                onClick={() => handleRestore(item.cipher.id)}
                 style={{
                   padding: "4px 8px",
                   fontSize: 12,

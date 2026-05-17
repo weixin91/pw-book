@@ -123,3 +123,78 @@ describe("TrashView - 列表渲染", () => {
     expect(onBack).toHaveBeenCalled();
   });
 });
+
+describe("TrashView - 恢复操作", () => {
+  let sendMessageMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sendMessageMock = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal("chrome", { runtime: { sendMessage: sendMessageMock } });
+  });
+
+  it("点击恢复调用 restore,从列表移除该项,触发 sync 消息,显示 toast", async () => {
+    const sample = {
+      id: "c1",
+      type: 1,
+      data: "encrypted",
+      favorite: false,
+      reprompt: 0,
+      createdAt: "2026-01-01T00:00:00Z",
+      modifiedAt: "2026-04-01T00:00:00Z",
+      deletedAt: "2026-05-01T00:00:00Z",
+    };
+    listMock.mockResolvedValue([sample]);
+    vi.mocked(decryptCipherData).mockResolvedValue(
+      JSON.stringify({ name: "GitHub", login: { username: "alice" } })
+    );
+    restoreMock.mockResolvedValue({ ...sample, deletedAt: null });
+
+    render(<TrashView onBack={vi.fn()} />);
+    await waitFor(() => screen.getByText("GitHub"));
+
+    fireEvent.click(screen.getByText("恢复"));
+
+    await waitFor(() => {
+      expect(restoreMock).toHaveBeenCalledWith("c1");
+    });
+
+    await waitFor(() => {
+      expect(sendMessageMock).toHaveBeenCalledWith({ type: "TRIGGER_SYNC_NOW" });
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText("GitHub")).not.toBeInTheDocument();
+    });
+
+    expect(screen.getByText("已恢复")).toBeInTheDocument();
+  });
+
+  it("恢复失败保留列表项并提示错误", async () => {
+    const sample = {
+      id: "c1",
+      type: 1,
+      data: "encrypted",
+      favorite: false,
+      reprompt: 0,
+      createdAt: "2026-01-01T00:00:00Z",
+      modifiedAt: "2026-04-01T00:00:00Z",
+      deletedAt: "2026-05-01T00:00:00Z",
+    };
+    listMock.mockResolvedValue([sample]);
+    vi.mocked(decryptCipherData).mockResolvedValue(
+      JSON.stringify({ name: "GitHub", login: { username: "alice" } })
+    );
+    restoreMock.mockRejectedValue(new Error("network"));
+
+    render(<TrashView onBack={vi.fn()} />);
+    await waitFor(() => screen.getByText("GitHub"));
+
+    fireEvent.click(screen.getByText("恢复"));
+
+    await waitFor(() => {
+      expect(screen.getByText("恢复失败")).toBeInTheDocument();
+    });
+    expect(screen.getByText("GitHub")).toBeInTheDocument();
+  });
+});
