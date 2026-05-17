@@ -201,3 +201,79 @@ describe("Trash API - POST /:id/restore", () => {
     expect(stillTrashed?.deletedAt).not.toBeNull();
   });
 });
+
+describe("Trash API - DELETE /:id/permanent", () => {
+  let app: Awaited<ReturnType<typeof buildApp>>;
+  let token: string;
+
+  beforeAll(async () => {
+    app = await buildApp();
+    ({ token } = await registerAndLogin(app, "permanent"));
+  });
+
+  afterAll(async () => {
+    await app.close();
+    await prisma.$disconnect();
+  });
+
+  it("成功硬删软删凭据,返回 204,后续 DB 中不存在该记录", async () => {
+    const id = await createCipher(token, app, "to-perm-delete");
+    await prisma.cipher.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
+
+    const res = await app.inject({
+      method: "DELETE",
+      url: `/api/ciphers/${id}/permanent`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(res.statusCode).toBe(204);
+
+    const stillExists = await prisma.cipher.findUnique({ where: { id } });
+    expect(stillExists).toBeNull();
+  });
+
+  it("拒绝硬删活跃凭据,返回 404,记录仍存在", async () => {
+    const id = await createCipher(token, app, "active-cannot-perm-delete");
+
+    const res = await app.inject({
+      method: "DELETE",
+      url: `/api/ciphers/${id}/permanent`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(res.statusCode).toBe(404);
+
+    const stillExists = await prisma.cipher.findUnique({ where: { id } });
+    expect(stillExists).not.toBeNull();
+    expect(stillExists?.deletedAt).toBeNull();
+  });
+
+  it("永久删除不存在的 id 返回 404", async () => {
+    const res = await app.inject({
+      method: "DELETE",
+      url: `/api/ciphers/${crypto.randomUUID()}/permanent`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it("跨租户:用户 A 不能永久删除用户 B 的凭据", async () => {
+    const other = await registerAndLogin(app, "permanent-other");
+    const otherId = await createCipher(other.token, app, "other-cipher-perm");
+    await prisma.cipher.update({
+      where: { id: otherId },
+      data: { deletedAt: new Date() },
+    });
+
+    const res = await app.inject({
+      method: "DELETE",
+      url: `/api/ciphers/${otherId}/permanent`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(res.statusCode).toBe(404);
+
+    const stillExists = await prisma.cipher.findUnique({ where: { id: otherId } });
+    expect(stillExists).not.toBeNull();
+  });
+});

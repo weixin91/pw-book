@@ -52,6 +52,30 @@ export async function cipherRoutes(app: FastifyInstance): Promise<void> {
     }
   );
 
+  // 永久删除(仅限回收站中的凭据)
+  app.delete<{ Params: { id: string } }>(
+    "/:id/permanent",
+    { preHandler: [authenticate] },
+    async (request, reply) => {
+      const userId = request.user!.sub;
+      const deviceId = request.user!.deviceId;
+      const { id } = request.params;
+
+      const result = await prisma.cipher.deleteMany({
+        where: { id, userId, deletedAt: { not: null } },
+      });
+      if (result.count === 0) {
+        throw new ApiError("RESOURCE_NOT_FOUND", 404, "凭据不存在或未在回收站中");
+      }
+
+      if (deviceId) {
+        broadcastSyncRequired(userId, deviceId);
+      }
+
+      return reply.status(204).send();
+    }
+  );
+
   app.post<{ Body: z.infer<typeof cipherSchema> }>(
     "/",
     { preHandler: [authenticate] },
