@@ -4,9 +4,10 @@ import { UnlockScreen } from "./components/UnlockScreen";
 import { CipherForm } from "./components/CipherForm";
 import { PasswordGenerator } from "./components/PasswordGenerator";
 import { CookieSyncPanel } from "./components/CookieSyncPanel";
+import { NoteForm } from "./components/NoteForm";
 import { StorageService } from "../platform/storage";
 
-type View = "unlock" | "vault" | "add" | "edit" | "generator" | "cookieSync";
+type View = "unlock" | "vault" | "add" | "edit" | "noteAdd" | "noteEdit" | "generator" | "cookieSync";
 
 export function PopupApp(): React.ReactElement {
   const [view, setView] = useState<View>("unlock");
@@ -35,6 +36,16 @@ export function PopupApp(): React.ReactElement {
     setView("edit");
   }
 
+  function handleAddNote() {
+    setEditId(null);
+    setView("noteAdd");
+  }
+
+  function handleEditNote(id: string) {
+    setEditId(id);
+    setView("noteEdit");
+  }
+
   function handleBackToVault() {
     setView("vault");
   }
@@ -54,12 +65,22 @@ export function PopupApp(): React.ReactElement {
         <VaultList
           onAdd={handleAdd}
           onEdit={handleEdit}
+          onAddNote={handleAddNote}
+          onEditNote={handleEditNote}
           onOpenGenerator={handleOpenGenerator}
           onOpenCookieSync={handleOpenCookieSync}
         />
       )}
       {(view === "add" || view === "edit") && (
         <CipherForm
+          editId={editId}
+          onBack={handleBackToVault}
+          onSaved={handleBackToVault}
+          onDeleted={handleBackToVault}
+        />
+      )}
+      {(view === "noteAdd" || view === "noteEdit") && (
+        <NoteForm
           editId={editId}
           onBack={handleBackToVault}
           onSaved={handleBackToVault}
