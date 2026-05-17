@@ -25,6 +25,7 @@ data class NoteEditUiState(
     val id: String = "",
     val name: String = "",
     val notes: String = "",
+    val favorite: Boolean = false,
     val isNew: Boolean = true,
     val isLoading: Boolean = false,
     val createdAt: Long = 0L
@@ -50,6 +51,7 @@ class NoteEditViewModel @Inject constructor(
             return
         }
         viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoading = true)
             val entity = cipherRepository.getCipher(cipherId)
             if (entity != null) {
                 val decrypted = vaultSession.decryptCipher(entity)
@@ -58,12 +60,18 @@ class NoteEditViewModel @Inject constructor(
                         id = entity.id,
                         name = decrypted.name,
                         notes = decrypted.notes ?: "",
+                        favorite = entity.favorite,
                         isNew = false,
+                        isLoading = false,
                         createdAt = entity.createdAt
                     )
                 } else {
                     Timber.e("Failed to decrypt note $cipherId")
+                    _uiState.value = _uiState.value.copy(isLoading = false)
                 }
+            } else {
+                Timber.e("Note not found: $cipherId")
+                _uiState.value = _uiState.value.copy(isLoading = false)
             }
         }
     }
@@ -84,8 +92,13 @@ class NoteEditViewModel @Inject constructor(
                 return@launch
             }
 
-            val cipherKey = userKey.copyOfRange(0, 32)
             val userId = securePrefs.getString(SecurePrefs.KEY_USER_ID) ?: ""
+            if (userId.isEmpty()) {
+                Timber.e("User ID not found, cannot save note")
+                return@launch
+            }
+
+            val cipherKey = userKey.copyOfRange(0, 32)
             val state = _uiState.value
             val now = System.currentTimeMillis()
 
@@ -104,7 +117,7 @@ class NoteEditViewModel @Inject constructor(
                 userId = userId,
                 type = CipherType.SECURE_NOTE.value,
                 data = encryptedData,
-                favorite = false,
+                favorite = state.favorite,
                 reprompt = 0,
                 createdAt = if (state.isNew) now else state.createdAt,
                 modifiedAt = now

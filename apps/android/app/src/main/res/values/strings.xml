@@ -34,4 +34,13 @@
     <string name="vault_timeout">自动锁定时间 (分钟)</string>
     <string name="totp_key">TOTP 密钥</string>
     <string name="favorite">收藏</string>
+    <string name="note_new_title">新建笔记</string>
+    <string name="note_edit_title">编辑笔记</string>
+    <string name="note_title_label">标题</string>
+    <string name="note_content_label">内容</string>
+    <string name="note_delete_title">删除笔记</string>
+    <string name="note_delete_message">确定要删除这条笔记吗？</string>
+    <string name="select_type">选择类型</string>
+    <string name="type_login">密码凭据</string>
+    <string name="type_note">安全笔记</string>
 </resources>
