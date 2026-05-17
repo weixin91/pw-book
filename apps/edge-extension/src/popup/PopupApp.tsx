@@ -5,9 +5,10 @@ import { CipherForm } from "./components/CipherForm";
 import { PasswordGenerator } from "./components/PasswordGenerator";
 import { CookieSyncPanel } from "./components/CookieSyncPanel";
 import { NoteForm } from "./components/NoteForm";
+import { TrashView } from "./components/TrashView";
 import { StorageService } from "../platform/storage";
 
-type View = "unlock" | "vault" | "add" | "edit" | "noteAdd" | "noteEdit" | "generator" | "cookieSync";
+type View = "unlock" | "vault" | "add" | "edit" | "noteAdd" | "noteEdit" | "generator" | "cookieSync" | "trash";
 
 export function PopupApp(): React.ReactElement {
   const [view, setView] = useState<View>("unlock");
@@ -58,6 +59,10 @@ export function PopupApp(): React.ReactElement {
     setView("cookieSync");
   }
 
+  function handleOpenTrash() {
+    setView("trash");
+  }
+
   return (
     <div style={{ width: 360, minHeight: 480, fontFamily: "system-ui, sans-serif" }}>
       {view === "unlock" && <UnlockScreen onUnlocked={handleUnlocked} />}
@@ -69,6 +74,7 @@ export function PopupApp(): React.ReactElement {
           onEditNote={handleEditNote}
           onOpenGenerator={handleOpenGenerator}
           onOpenCookieSync={handleOpenCookieSync}
+          onOpenTrash={handleOpenTrash}
         />
       )}
       {(view === "add" || view === "edit") && (
@@ -98,6 +104,7 @@ export function PopupApp(): React.ReactElement {
           <CookieSyncPanel />
         </div>
       )}
+      {view === "trash" && <TrashView onBack={handleBackToVault} />}
     </div>
   );
 }

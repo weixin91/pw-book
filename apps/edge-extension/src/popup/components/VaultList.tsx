@@ -27,9 +27,10 @@ interface Props {
   onEditNote: (id: string) => void;
   onOpenGenerator: () => void;
   onOpenCookieSync: () => void;
+  onOpenTrash: () => void;
 }
 
-export function VaultList({ onAdd, onEdit, onAddNote, onEditNote, onOpenGenerator, onOpenCookieSync }: Props): React.ReactElement {
+export function VaultList({ onAdd, onEdit, onAddNote, onEditNote, onOpenGenerator, onOpenCookieSync, onOpenTrash }: Props): React.ReactElement {
   const [items, setItems] = useState<VaultItem[]>([]);
   const [search, setSearch] = useState("");
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -386,6 +387,21 @@ export function VaultList({ onAdd, onEdit, onAddNote, onEditNote, onOpenGenerato
           }}
         >
           Cookie 同步
+        </button>
+        <button
+          onClick={onOpenTrash}
+          style={{
+            flex: 1,
+            padding: "8px",
+            borderRadius: 6,
+            border: "1px solid #1a73e8",
+            background: "#fff",
+            color: "#1a73e8",
+            fontSize: 13,
+            cursor: "pointer",
+          }}
+        >
+          回收站
         </button>
       </div>
       {suggestions.length > 0 && (
