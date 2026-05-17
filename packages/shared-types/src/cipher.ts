@@ -89,6 +89,7 @@ export interface Cipher {
   reprompt: RepromptType;
   createdAt: string;
   modifiedAt: string;
+  deletedAt?: string | null; // 软删除时间戳,null 或缺失表示活跃
 }
 
 export interface DomainAssociation {
