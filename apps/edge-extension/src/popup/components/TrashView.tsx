@@ -91,6 +91,19 @@ export function TrashView({ onBack }: Props): React.ReactElement {
     }
   }
 
+  async function handlePermanentDelete(id: string, name: string) {
+    const ok = window.confirm(`确定永久删除 "${name}" 吗?此操作不可恢复。`);
+    if (!ok) return;
+    try {
+      const client = new TrashClient();
+      await client.permanentDelete(id);
+      setItems((prev) => prev.filter((it) => it.cipher.id !== id));
+      setToast("已永久删除");
+    } catch {
+      setToast("永久删除失败");
+    }
+  }
+
   function formatDeletedAt(iso: string): string {
     if (!iso) return "";
     const d = new Date(iso);
@@ -184,6 +197,7 @@ export function TrashView({ onBack }: Props): React.ReactElement {
                 恢复
               </button>
               <button
+                onClick={() => handlePermanentDelete(item.cipher.id, item.name)}
                 style={{
                   padding: "4px 8px",
                   fontSize: 12,

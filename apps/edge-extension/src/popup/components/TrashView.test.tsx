@@ -198,3 +198,105 @@ describe("TrashView - 恢复操作", () => {
     expect(screen.getByText("GitHub")).toBeInTheDocument();
   });
 });
+
+describe("TrashView - 永久删除操作", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubGlobal("chrome", {
+      runtime: { sendMessage: vi.fn().mockResolvedValue(undefined) },
+    });
+  });
+
+  it("点击永久删除弹出 confirm,用户确认则调用 permanentDelete 并移除列表项", async () => {
+    const confirmSpy = vi.spyOn(globalThis, "confirm").mockReturnValue(true);
+    const sample = {
+      id: "c1",
+      type: 1,
+      data: "encrypted",
+      favorite: false,
+      reprompt: 0,
+      createdAt: "2026-01-01T00:00:00Z",
+      modifiedAt: "2026-04-01T00:00:00Z",
+      deletedAt: "2026-05-01T00:00:00Z",
+    };
+    listMock.mockResolvedValue([sample]);
+    vi.mocked(decryptCipherData).mockResolvedValue(
+      JSON.stringify({ name: "GitHub", login: { username: "alice" } })
+    );
+    permanentDeleteMock.mockResolvedValue(undefined);
+
+    render(<TrashView onBack={vi.fn()} />);
+    await waitFor(() => screen.getByText("GitHub"));
+
+    fireEvent.click(screen.getByText("永久删除"));
+
+    expect(confirmSpy).toHaveBeenCalled();
+    await waitFor(() => {
+      expect(permanentDeleteMock).toHaveBeenCalledWith("c1");
+    });
+    await waitFor(() => {
+      expect(screen.queryByText("GitHub")).not.toBeInTheDocument();
+    });
+    expect(screen.getByText("已永久删除")).toBeInTheDocument();
+
+    confirmSpy.mockRestore();
+  });
+
+  it("用户取消 confirm 不调用 permanentDelete,列表不变", async () => {
+    const confirmSpy = vi.spyOn(globalThis, "confirm").mockReturnValue(false);
+    const sample = {
+      id: "c1",
+      type: 1,
+      data: "encrypted",
+      favorite: false,
+      reprompt: 0,
+      createdAt: "2026-01-01T00:00:00Z",
+      modifiedAt: "2026-04-01T00:00:00Z",
+      deletedAt: "2026-05-01T00:00:00Z",
+    };
+    listMock.mockResolvedValue([sample]);
+    vi.mocked(decryptCipherData).mockResolvedValue(
+      JSON.stringify({ name: "GitHub", login: { username: "alice" } })
+    );
+
+    render(<TrashView onBack={vi.fn()} />);
+    await waitFor(() => screen.getByText("GitHub"));
+
+    fireEvent.click(screen.getByText("永久删除"));
+
+    expect(confirmSpy).toHaveBeenCalled();
+    expect(permanentDeleteMock).not.toHaveBeenCalled();
+    expect(screen.getByText("GitHub")).toBeInTheDocument();
+
+    confirmSpy.mockRestore();
+  });
+
+  it("永久删除失败保留列表项并提示错误", async () => {
+    vi.spyOn(globalThis, "confirm").mockReturnValue(true);
+    const sample = {
+      id: "c1",
+      type: 1,
+      data: "encrypted",
+      favorite: false,
+      reprompt: 0,
+      createdAt: "2026-01-01T00:00:00Z",
+      modifiedAt: "2026-04-01T00:00:00Z",
+      deletedAt: "2026-05-01T00:00:00Z",
+    };
+    listMock.mockResolvedValue([sample]);
+    vi.mocked(decryptCipherData).mockResolvedValue(
+      JSON.stringify({ name: "GitHub", login: { username: "alice" } })
+    );
+    permanentDeleteMock.mockRejectedValue(new Error("network"));
+
+    render(<TrashView onBack={vi.fn()} />);
+    await waitFor(() => screen.getByText("GitHub"));
+
+    fireEvent.click(screen.getByText("永久删除"));
+
+    await waitFor(() => {
+      expect(screen.getByText("永久删除失败")).toBeInTheDocument();
+    });
+    expect(screen.getByText("GitHub")).toBeInTheDocument();
+  });
+});
