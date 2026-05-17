@@ -15,6 +15,16 @@ const cipherSchema = z.object({
 });
 
 export async function cipherRoutes(app: FastifyInstance): Promise<void> {
+  // 列出当前用户软删除的凭据(回收站)
+  app.get("/trash", { preHandler: [authenticate] }, async (request, reply) => {
+    const userId = request.user!.sub;
+    const ciphers = await prisma.cipher.findMany({
+      where: { userId, deletedAt: { not: null } },
+      orderBy: { deletedAt: "desc" },
+    });
+    return reply.send(ciphers);
+  });
+
   app.post<{ Body: z.infer<typeof cipherSchema> }>(
     "/",
     { preHandler: [authenticate] },
