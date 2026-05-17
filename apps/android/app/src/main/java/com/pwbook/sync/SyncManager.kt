@@ -144,12 +144,15 @@ class SyncManager @Inject constructor(
                 .format(java.time.Instant.ofEpochMilli(entity.clientTimestamp))
             val cipherId = entity.cipherId ?: return@mapNotNull null
 
+            // 从本地库读取 cipher 的元数据，避免硬编码导致类型/收藏状态丢失
+            val localCipher = cipherRepository.getCipher(cipherId)
+
             val cipher = CipherDto(
                 id = cipherId,
-                type = 1,
+                type = localCipher?.type ?: 1,
                 data = entity.encryptedData ?: "",
-                favorite = false,
-                reprompt = 0,
+                favorite = localCipher?.favorite ?: false,
+                reprompt = localCipher?.reprompt ?: 0,
                 createdAt = timestampIso,
                 modifiedAt = timestampIso
             )
