@@ -1,6 +1,5 @@
 package com.pwbook.ui.screens.note
 
-import androidx.arch.core.executor.testing.InstantTaskExecutorRule
 import com.pwbook.crypto.VaultEncryption
 import com.pwbook.data.datasource.SecurePrefs
 import com.pwbook.data.local.entity.CipherEntity
@@ -25,14 +24,10 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
-import org.junit.Rule
 import org.junit.Test
 
 @ExperimentalCoroutinesApi
 class NoteEditViewModelTest {
-
-    @get:Rule
-    val instantExecutorRule = InstantTaskExecutorRule()
 
     private val testDispatcher = StandardTestDispatcher()
 
