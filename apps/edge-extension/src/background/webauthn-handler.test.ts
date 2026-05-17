@@ -28,6 +28,7 @@ vi.mock("../platform/storage.js", () => ({
 }));
 
 vi.mock("../crypto/crypto-service.js", () => ({
+  toBufferSource: (buf: Uint8Array) => buf as unknown as BufferSource,
   encryptCipherData: vi.fn((plain: string) => Promise.resolve("enc:" + plain)),
   decryptCipherData: vi.fn((data: string) => {
     if (typeof data === "string" && data.startsWith("enc:")) {
