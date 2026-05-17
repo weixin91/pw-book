@@ -124,7 +124,7 @@ export function NoteForm({ editId, onBack, onSaved, onDeleted }: Props): React.R
       encryptedData: "",
       clientTimestamp: new Date().toISOString(),
       userId: targetCipher?.userId ?? "",
-      type: 4,
+      type: CipherType.SECURE_NOTE,
       favorite: false,
       reprompt: 0,
       createdAt: "",
