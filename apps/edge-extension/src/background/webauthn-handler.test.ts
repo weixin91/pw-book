@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeAll, beforeEach } from "vitest";
 import { webcrypto } from "node:crypto";
+import { clearMockStorage } from "../../tests/mocks/chrome-mock.js";
 
 beforeAll(() => {
   if (!globalThis.crypto?.subtle) {
@@ -63,6 +64,7 @@ describe("webauthn-handler", () => {
   beforeEach(() => {
     mockCiphers.length = 0;
     vi.clearAllMocks();
+    clearMockStorage();
   });
 
   describe("originToRpId", () => {
