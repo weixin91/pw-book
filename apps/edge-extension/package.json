@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build && npx esbuild src/content/content-script.ts --bundle --outfile=dist/content.js --format=iife --target=chrome120 --minify && npx esbuild src/content/webauthn-page.ts --bundle --outfile=dist/webauthn-page.js --format=iife --target=chrome120 --minify",
+    "build": "tsc && vite build && npx esbuild src/content/content-script.ts --bundle --outfile=dist/content.js --format=iife --target=chrome120 --minify && npx esbuild src/content/webauthn-page.ts --bundle --outfile=dist/webauthn-page.js --format=iife --target=chrome120 --minify && node -e \"require('fs').cpSync('dist', '/mnt/d/pwbook-edge-dist', {recursive:true, force:true})\"",
     "test": "vitest run",
     "test:e2e": "vitest run --config vitest.config.e2e.ts",
     "test:watch": "vitest",

@@ -21,7 +21,6 @@ export class TrashClient {
   private async getAuthHeaders(): Promise<Record<string, string>> {
     const profile = await StorageService.getProfile();
     return {
-      "Content-Type": "application/json",
       Authorization: `Bearer ${profile?.token || ""}`,
     };
   }
