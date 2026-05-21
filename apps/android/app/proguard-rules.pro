@@ -26,3 +26,6 @@
 
 # BouncyCastle
 -dontwarn org.bouncycastle.**
+
+# Google Tink / errorprone annotations (release build only, not required at runtime)
+-dontwarn com.google.errorprone.annotations.**

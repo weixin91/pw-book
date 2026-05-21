@@ -1,5 +1,6 @@
 package com.pwbook.data.remote.websocket
 
+import com.pwbook.BuildConfig
 import com.pwbook.data.datasource.SecurePrefs
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.websocket.webSocketSession
@@ -88,7 +89,7 @@ class SyncWebSocketClient @Inject constructor(
             try {
                 // 从用户配置读取服务器地址，强制使用 wss://
                 val serverUrl = securePrefs.getString(SecurePrefs.KEY_SERVER_URL)
-                    ?: "https://10.0.2.2:3000/"
+                    ?: BuildConfig.DEFAULT_SERVER_URL
                 val wsBaseUrl = serverUrl
                     .replace("http://", "ws://")
                     .replace("https://", "wss://")

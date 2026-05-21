@@ -76,7 +76,7 @@ object NetworkModule {
             }
             defaultRequest {
                 val serverUrl = securePrefs.getString(SecurePrefs.KEY_SERVER_URL)
-                    ?: "http://10.0.2.2:3000/"
+                    ?: BuildConfig.DEFAULT_SERVER_URL
                 url(serverUrl)
                 headers.append("Content-Type", "application/json")
             }

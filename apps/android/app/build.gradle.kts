@@ -25,6 +25,15 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
+
+        val localProperties = Properties().apply {
+            val file = rootProject.file("local.properties")
+            if (file.exists()) {
+                load(file.inputStream())
+            }
+        }
+        val defaultServerUrl = localProperties.getProperty("DEFAULT_SERVER_URL", "http://10.0.2.2:3000/")
+        buildConfigField("String", "DEFAULT_SERVER_URL", "\"${defaultServerUrl}\"")
     }
 
     signingConfigs {
