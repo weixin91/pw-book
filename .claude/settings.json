@@ -8,6 +8,12 @@
       "WebFetch(domain:contributing.bitwarden.com)",
       "WebFetch(domain:bitwarden-clients.mintlify.app)",
 
+      "mcp__tavily-hikari__tavily_search",
+      "mcp__tavily-hikari__tavily_extract",
+      "mcp__tavily-hikari__tavily_research",
+      "mcp__tavily-hikari__tavily_crawl",
+      "mcp__tavily-hikari__tavily_map",
+
       "Bash(pnpm install *)",
       "Bash(pnpm add *)",
       "Bash(pnpm run *)",

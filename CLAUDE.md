@@ -167,6 +167,10 @@ MVVM + Repository + Hilt DI，分层参考 Bitwarden Android：
 
 `JWT_SECRET`（必填，≥32 字符）、`DATABASE_URL`（默认 `file:./data/pwbook.db`）、`ALLOWED_EMAILS`（注册白名单，逗号分隔；不设置则允许所有人注册——服务启动时会打日志警告）、`CORS_ALLOWED_ORIGINS`、`BACKUP_ENABLED` / `BACKUP_DIR` / `BACKUP_HOUR` / `BACKUP_RETENTION_DAYS`（备份调度）。
 
+## 外部工具偏好
+
+- **搜索**：优先使用 Tavily（`tavily_search` / `tavily_extract` / `tavily_research`），Tavily 不可用时再回退到内置 `web_search` / `web_fetch`。
+
 ## 项目特定约定
 
 - **Edge 与 Android 必须保持数据互通**：Passkey、密码、域名关联等都通过同一份后端契约双向同步，任何一端的协议改动都会影响另一端，改动前先读 `specs/001-password-manager/contracts/`。
