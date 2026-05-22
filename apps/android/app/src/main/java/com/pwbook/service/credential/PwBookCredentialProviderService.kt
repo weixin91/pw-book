@@ -41,6 +41,7 @@ class PwBookCredentialProviderService : CredentialProviderService() {
         private const val EXTRA_CREATE_REQUEST_JSON = "create_request_json"
         private const val EXTRA_CALLING_PACKAGE = "calling_package"
         private const val EXTRA_CREDENTIAL_ID = "credential_id"
+        private const val EXTRA_CIPHER_ID = "cipher_id"
     }
 
     @Inject lateinit var cipherRepository: CipherRepository
@@ -188,19 +189,6 @@ class PwBookCredentialProviderService : CredentialProviderService() {
             null
         }
 
-        val allowCredentialsStr = allowCredentials?.let {
-            val list = mutableListOf<String>()
-            for (i in 0 until it.length()) {
-                val item = it.getJSONObject(i)
-                list.add(item.getString("id"))
-            }
-            org.json.JSONArray().apply {
-                for (id in list) {
-                    put(org.json.JSONObject().put("id", id))
-                }
-            }.toString()
-        }
-
         val userId = getUserId()
         if (userId.isEmpty()) {
             Timber.w("User not logged in")
@@ -252,7 +240,7 @@ class PwBookCredentialProviderService : CredentialProviderService() {
             // allowCredentials 过滤
             if (!PasskeyMatcher.isCredentialAllowed(
                     credentialId = passkey.credentialId,
-                    allowCredentials = allowCredentialsStr
+                    allowCredentials = allowCredentials
                 )
             ) {
                 Timber.d("populatePasskeyEntries credential not allowed, skip credentialId=${passkey.credentialId}")
@@ -264,6 +252,7 @@ class PwBookCredentialProviderService : CredentialProviderService() {
                 PasskeyGetActivity::class.java
             ).apply {
                 putExtra(EXTRA_CREDENTIAL_ID, passkey.credentialId)
+                putExtra(EXTRA_CIPHER_ID, cipher.id)
             }
 
             val pendingIntent = PendingIntent.getActivity(

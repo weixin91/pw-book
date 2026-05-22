@@ -106,11 +106,12 @@ object PasskeyCrypto {
         val rpIdHash = MessageDigest.getInstance("SHA-256").digest(rpId.toByteArray(Charsets.UTF_8))
 
         var flags = 0x01 // UP = 1
-        if (includeAttestedCredentialData) {
-            flags = flags or 0x40 // AT = 1
-        } else if (userVerified) {
+        if (userVerified) {
             // 仅在实际完成用户验证后才设置 UV=1
             flags = flags or 0x04 // UV = 1
+        }
+        if (includeAttestedCredentialData) {
+            flags = flags or 0x40 // AT = 1
         }
 
         val signCountBytes = byteArrayOf(
@@ -161,10 +162,11 @@ object PasskeyCrypto {
     }
 
     /**
-     * 计算 rpIdHash = SHA-256(rpId)
+     * 计算 SHA-256(rpId) 或 SHA-256(clientDataJSON)。
+     * 通用 SHA-256 工具，不只限于 rpId。
      */
-    fun rpIdHash(rpId: String): ByteArray {
-        return MessageDigest.getInstance("SHA-256").digest(rpId.toByteArray(Charsets.UTF_8))
+    fun sha256(data: String): ByteArray {
+        return MessageDigest.getInstance("SHA-256").digest(data.toByteArray(Charsets.UTF_8))
     }
 
     /**

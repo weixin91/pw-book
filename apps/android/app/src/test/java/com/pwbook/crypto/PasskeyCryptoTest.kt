@@ -102,7 +102,8 @@ class PasskeyCryptoTest {
             signCount = 0,
             includeAttestedCredentialData = true,
             credentialId = credentialId,
-            publicKeyCose = publicKeyCose
+            publicKeyCose = publicKeyCose,
+            userVerified = true
         )
 
         // rpIdHash = 32 bytes, flags = 1 byte, signCount = 4 bytes
@@ -110,7 +111,7 @@ class PasskeyCryptoTest {
 
         // flags at offset 32
         val flags = authData[32].toInt() and 0xFF
-        assertEquals("Create 时 flags 应为 0x41 (UP+AT)", 0x41, flags)
+        assertEquals("Create 时 flags 应为 0x45 (UP+UV+AT)", 0x45, flags)
 
         // 应包含 attestedCredentialData：aaguid(16) + credIdLen(2) + credId + publicKeyCose
         val expectedSize = 32 + 1 + 4 + 16 + 2 + credentialId.size + publicKeyCose.size

@@ -141,7 +141,6 @@ class PasskeyCreateActivity : FragmentActivity() {
 
         // 构建 WebAuthn 响应
         val clientDataJSON = PasskeyCrypto.buildClientDataJSON("webauthn.create", challenge, origin)
-        val clientDataHash = PasskeyCrypto.rpIdHash(clientDataJSON)
 
         val coseKey = PasskeyCrypto.encodeCoseKeyEs256(keyPair.public as ECPublicKey)
         val authData = PasskeyCrypto.buildAuthenticatorData(
@@ -149,7 +148,8 @@ class PasskeyCreateActivity : FragmentActivity() {
             signCount = 0,
             includeAttestedCredentialData = true,
             credentialId = credentialIdBytes,
-            publicKeyCose = coseKey
+            publicKeyCose = coseKey,
+            userVerified = true
         )
         Timber.d("createPasskey authData size=${authData.size}")
 

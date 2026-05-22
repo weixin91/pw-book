@@ -70,6 +70,16 @@ object PasskeyMatcher {
         }
     }
 
+    /**
+     * 重载：直接接受 org.json.JSONArray，避免冗余序列化。
+     */
+    fun isCredentialAllowed(credentialId: String, allowCredentials: org.json.JSONArray?): Boolean {
+        if (allowCredentials == null || allowCredentials.length() == 0) return true
+        return (0 until allowCredentials.length()).any { i ->
+            allowCredentials.getJSONObject(i).optString("id") == credentialId
+        }
+    }
+
     private fun parseStringList(json: String): List<String> {
         return try {
             Json.decodeFromString<List<String>>(json)

@@ -58,6 +58,7 @@ class PasskeyGetActivity : FragmentActivity() {
 
     companion object {
         const val EXTRA_CREDENTIAL_ID = "credential_id"
+        private const val EXTRA_CIPHER_ID = "cipher_id"
         private const val BIOMETRIC_GRACE_PERIOD_MS = 60_000L
     }
 
@@ -69,6 +70,7 @@ class PasskeyGetActivity : FragmentActivity() {
             ?: run { finishWithCancel("无效请求"); return }
 
         val credentialId = intent.getStringExtra(EXTRA_CREDENTIAL_ID)
+        val cipherId = intent.getStringExtra(EXTRA_CIPHER_ID)
         val origin = getRequest?.callingAppInfo?.resolveAppOrigin()
 
         lifecycleScope.launch {
@@ -81,9 +83,9 @@ class PasskeyGetActivity : FragmentActivity() {
                 }
             }
 
-            // 2. 如果指定了 credentialId，直接使用
+            // 2. 如果指定了 credentialId，直接使用（优先用 cipherId 直接查）
             if (credentialId != null) {
-                authenticateAndReturn(credentialId, option, origin)
+                authenticateAndReturn(credentialId, option, origin, cipherId)
                 return@launch
             }
 
@@ -121,7 +123,8 @@ class PasskeyGetActivity : FragmentActivity() {
     private suspend fun authenticateAndReturn(
         credentialId: String,
         option: GetPublicKeyCredentialOption,
-        origin: String?
+        origin: String?,
+        cipherId: String? = null
     ) {
         val biometricSuccess = authenticateWithBiometric()
         if (!biometricSuccess) {
@@ -130,7 +133,10 @@ class PasskeyGetActivity : FragmentActivity() {
         }
 
         try {
-            val response = authenticateWithPasskey(credentialId, option, origin, userVerified = true)
+            val response = authenticateWithPasskey(
+                credentialId, option, origin,
+                userVerified = true, cipherId = cipherId
+            )
             val result = Intent()
             val publicKeyCredential = PublicKeyCredential(response)
             PendingIntentHandler.setGetCredentialResponse(
@@ -182,7 +188,8 @@ class PasskeyGetActivity : FragmentActivity() {
         credentialId: String,
         option: GetPublicKeyCredentialOption,
         origin: String?,
-        userVerified: Boolean = false
+        userVerified: Boolean = false,
+        cipherId: String? = null
     ): String {
         val userKey = vaultSession.getUserKey()
             ?: throw IllegalStateException("保险库未解锁")
@@ -190,9 +197,14 @@ class PasskeyGetActivity : FragmentActivity() {
         val userId = securePrefs.getString(SecurePrefs.KEY_USER_ID)
             ?: throw IllegalStateException("未登录")
 
-        // 从密码库查找 Passkey
-        val cipher = cipherRepository.findByCredentialId(userId, credentialId)
-            ?: throw IllegalStateException("Passkey 未找到")
+        // 从密码库查找 Passkey（优先用 cipherId 直接查，避免全量解密）
+        val cipher = if (cipherId != null) {
+            cipherRepository.getCipher(cipherId)
+                ?: throw IllegalStateException("Passkey 未找到")
+        } else {
+            cipherRepository.findByCredentialId(userId, credentialId)
+                ?: throw IllegalStateException("Passkey 未找到")
+        }
 
         val decrypted = vaultSession.decryptCipher(cipher)
             ?: throw IllegalStateException("无法解密凭据")
@@ -218,7 +230,7 @@ class PasskeyGetActivity : FragmentActivity() {
 
         val clientDataJSON = PasskeyCrypto.buildClientDataJSON("webauthn.get", challenge, resolvedOrigin)
         // 浏览器提供 clientDataHash 时直接使用，否则自己计算
-        val clientDataHash = option.clientDataHash ?: PasskeyCrypto.rpIdHash(clientDataJSON)
+        val clientDataHash = option.clientDataHash ?: PasskeyCrypto.sha256(clientDataJSON)
         val signature = PasskeyCrypto.signAssertion(privateKey, authData, clientDataHash)
 
         // 更新 counter 并保存

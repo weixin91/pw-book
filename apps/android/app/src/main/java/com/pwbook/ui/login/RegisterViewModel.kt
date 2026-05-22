@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.pwbook.crypto.KdfType
 import com.pwbook.crypto.KeyDerivation
 import com.pwbook.crypto.RecoveryKeyUtil
+import com.pwbook.BuildConfig
 import com.pwbook.crypto.RsaKeyGenerator
 import com.pwbook.crypto.VaultEncryption
 import com.pwbook.data.datasource.SecurePrefs
@@ -33,6 +34,18 @@ class RegisterViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(RegisterUiState())
     val uiState: StateFlow<RegisterUiState> = _uiState.asStateFlow()
+
+    init {
+        // 仅当缓存的是旧版模拟器默认地址时才覆盖，保留用户自定义地址
+        val savedUrl = settingsRepository.getServerUrl()
+        val serverUrl = if (savedUrl == "http://10.0.2.2:3000/" || savedUrl == "http://10.0.2.2:3000") {
+            settingsRepository.setServerUrl(BuildConfig.DEFAULT_SERVER_URL)
+            BuildConfig.DEFAULT_SERVER_URL
+        } else {
+            savedUrl ?: BuildConfig.DEFAULT_SERVER_URL
+        }
+        _uiState.value = _uiState.value.copy(serverUrl = serverUrl)
+    }
 
     fun onEmailChange(email: String) {
         _uiState.value = _uiState.value.copy(email = email, error = null)
