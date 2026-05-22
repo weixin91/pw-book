@@ -19,24 +19,38 @@ import java.util.Base64
 object PasskeyCrypto {
 
     /**
-     * 从 PKCS#8 Base64 导入 EC P-256 私钥。
+     * 从 PKCS#8 Base64/Base64Url 导入 EC P-256 私钥。
      * 与 Edge 端 crypto.subtle.exportKey("pkcs8", ...) 输出兼容。
+     * 自动检测并处理 Base64Url 编码（含 '-' '_' 无 padding）。
      */
     fun importPrivateKey(pkcs8Base64: String): PrivateKey {
-        val pkcs8Bytes = Base64.getDecoder().decode(pkcs8Base64)
+        val pkcs8Bytes = base64DecodeFlexible(pkcs8Base64)
         val keySpec = PKCS8EncodedKeySpec(pkcs8Bytes)
         val keyFactory = KeyFactory.getInstance("EC")
         return keyFactory.generatePrivate(keySpec)
     }
 
     /**
-     * 从 SPKI Base64 导入 EC P-256 公钥。
+     * 从 SPKI Base64/Base64Url 导入 EC P-256 公钥。
+     * 自动检测并处理 Base64Url 编码。
      */
     fun importPublicKey(spkiBase64: String): java.security.PublicKey {
-        val spkiBytes = Base64.getDecoder().decode(spkiBase64)
+        val spkiBytes = base64DecodeFlexible(spkiBase64)
         val keySpec = X509EncodedKeySpec(spkiBytes)
         val keyFactory = KeyFactory.getInstance("EC")
         return keyFactory.generatePublic(keySpec)
+    }
+
+    /**
+     * 兼容 Base64 与 Base64Url 的解码。
+     * 优先尝试标准 Base64，失败后回退到 Base64Url。
+     */
+    private fun base64DecodeFlexible(input: String): ByteArray {
+        return try {
+            Base64.getDecoder().decode(input)
+        } catch (_: IllegalArgumentException) {
+            base64UrlDecode(input)
+        }
     }
 
     /**

@@ -188,7 +188,29 @@ class PasskeyCryptoTest {
     }
 
     /**
-     * 测试 7：buildClientDataJSON 格式正确。
+     * 测试 7：importPrivateKey 支持 Base64Url 编码（Edge 端同步过来的 passkey 可能用 Base64Url）。
+     */
+    @Test
+    fun testImportPrivateKey_Base64Url() {
+        val keyPair = generateTestKeyPair()
+        val pkcs8Standard = PasskeyCrypto.base64Encode(keyPair.private.encoded)
+        // 转成 Base64Url：替换 + → -, / → _, 去掉 padding
+        val pkcs8Url = pkcs8Standard.replace("+", "-").replace("/", "_").trimEnd('=')
+
+        val imported = PasskeyCrypto.importPrivateKey(pkcs8Url)
+        assertNotNull(imported)
+
+        // 验证导入后能正常签名
+        val signature = PasskeyCrypto.signAssertion(
+            imported,
+            ByteArray(37) { 0xAB.toByte() },
+            ByteArray(32) { 0xCD.toByte() }
+        )
+        assertEquals(0x30.toByte(), signature[0])
+    }
+
+    /**
+     * 测试 8：buildClientDataJSON 格式正确。
      */
     @Test
     fun testBuildClientDataJSON() {

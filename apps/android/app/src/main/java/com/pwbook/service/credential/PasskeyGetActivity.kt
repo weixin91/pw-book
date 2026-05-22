@@ -278,6 +278,7 @@ class PasskeyGetActivity : FragmentActivity() {
             put("id", passkey.credentialId)
             put("rawId", passkey.credentialId)
             put("type", "public-key")
+            put("authenticatorAttachment", "platform")
             put("response", org.json.JSONObject().apply {
                 put("clientDataJSON", PasskeyCrypto.base64UrlEncode(clientDataJSON.toByteArray(Charsets.UTF_8)))
                 put("authenticatorData", PasskeyCrypto.base64UrlEncode(authData))
