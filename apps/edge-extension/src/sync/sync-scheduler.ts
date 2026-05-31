@@ -78,11 +78,16 @@ export class SyncScheduler {
         error: null,
       });
     } catch (err) {
+      const errorMessage = String(err);
+      const isAuthError =
+        errorMessage.includes("登录已过期") ||
+        errorMessage.includes("Token 无效") ||
+        errorMessage.includes("设备会话");
       await StorageService.setSyncStatus({
         state: "ERROR",
         lastSyncAt: await StorageService.getLastSyncToken(),
         pendingChanges: (await this.queue.getAll()).length,
-        error: String(err),
+        error: isAuthError ? "登录已过期，请重新登录" : errorMessage,
       });
     }
   }

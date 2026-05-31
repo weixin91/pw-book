@@ -2,6 +2,7 @@
 // 使用首条消息认证，避免 Token 在 URL 中暴露
 
 import { StorageService } from "../platform/storage.js";
+import { handleAuthFailure } from "./auth-http.js";
 
 export class WebSocketClient {
   private ws: WebSocket | null = null;
@@ -51,9 +52,9 @@ export class WebSocketClient {
           }
 
           if (msg.type === "AUTH_FAILED" || msg.type === "AUTH_REQUIRED") {
-            // 认证失败，重新连接
+            // token 过期，触发登出并停止重连
+            handleAuthFailure().catch(() => {});
             this.disconnect();
-            this.scheduleReconnect();
             return;
           }
 

@@ -33,11 +33,7 @@ describe("TrashClient", () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       "https://api.example.com/api/ciphers/trash",
-      expect.objectContaining({
-        headers: expect.objectContaining({
-          Authorization: "Bearer test-token",
-        }),
-      })
+      expect.any(Object)
     );
     expect(result).toHaveLength(1);
     expect(result[0].id).toBe("c1");

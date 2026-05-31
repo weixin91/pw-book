@@ -3,6 +3,7 @@
 import { StorageService } from "../platform/storage.js";
 import { CipherIndexService } from "../crypto/cipher-index.js";
 import { decryptCipherData } from "../crypto/crypto-service.js";
+import { fetchWithAuth } from "./auth-http.js";
 import type { SyncResponse, SyncPushRequest, SyncPushResponse } from "@pwbook/shared-types";
 
 export class SyncClient {
@@ -19,19 +20,9 @@ export class SyncClient {
     return this.baseUrl;
   }
 
-  private async getAuthHeaders(): Promise<Record<string, string>> {
-    const profile = await StorageService.getProfile();
-    return {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${profile?.token || ""}`,
-    };
-  }
-
   async fullSync(): Promise<SyncResponse> {
     const baseUrl = await this.getBaseUrl();
-    const response = await fetch(`${baseUrl}/api/sync`, {
-      headers: await this.getAuthHeaders(),
-    });
+    const response = await fetchWithAuth(`${baseUrl}/api/sync`);
     if (!response.ok) {
       throw new Error(`同步失败: ${response.status}`);
     }
@@ -48,9 +39,7 @@ export class SyncClient {
       ? `${baseUrl}/api/sync?since=${encodeURIComponent(lastToken)}`
       : `${baseUrl}/api/sync`;
 
-    const response = await fetch(url, {
-      headers: await this.getAuthHeaders(),
-    });
+    const response = await fetchWithAuth(url);
     if (!response.ok) {
       throw new Error(`增量同步失败: ${response.status}`);
     }
@@ -62,9 +51,9 @@ export class SyncClient {
 
   async pushChanges(request: SyncPushRequest): Promise<SyncPushResponse> {
     const baseUrl = await this.getBaseUrl();
-    const response = await fetch(`${baseUrl}/api/sync/push`, {
+    const response = await fetchWithAuth(`${baseUrl}/api/sync/push`, {
       method: "POST",
-      headers: await this.getAuthHeaders(),
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(request),
     });
     if (!response.ok) {

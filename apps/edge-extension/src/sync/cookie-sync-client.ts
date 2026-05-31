@@ -2,6 +2,7 @@
 // 封装 Cookie 同步相关的 HTTP API 调用
 
 import { StorageService } from "../platform/storage.js";
+import { fetchWithAuth } from "./auth-http.js";
 
 export interface CookieServerRecord {
   id: string;
@@ -34,20 +35,12 @@ export class CookieSyncClient {
     return this.baseUrl;
   }
 
-  private async getAuthHeaders(): Promise<Record<string, string>> {
-    const profile = await StorageService.getProfile();
-    return {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${profile?.token || ""}`,
-    };
-  }
-
   /** 上传/覆盖某域名 Cookie */
   async uploadCookie(domain: string, encryptedData: string, modifiedAt?: string): Promise<CookieServerRecord> {
     const baseUrl = await this.getBaseUrl();
-    const response = await fetch(`${baseUrl}/api/cookies`, {
+    const response = await fetchWithAuth(`${baseUrl}/api/cookies`, {
       method: "POST",
-      headers: await this.getAuthHeaders(),
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         domain,
         encryptedData,
@@ -65,9 +58,9 @@ export class CookieSyncClient {
     items: Array<{ domain: string; encryptedData: string; modifiedAt?: string }>
   ): Promise<{ accepted: string[]; rejected: string[]; newSyncToken: string }> {
     const baseUrl = await this.getBaseUrl();
-    const response = await fetch(`${baseUrl}/api/cookies/batch`, {
+    const response = await fetchWithAuth(`${baseUrl}/api/cookies/batch`, {
       method: "POST",
-      headers: await this.getAuthHeaders(),
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         items: items.map((i) => ({
           domain: i.domain,
@@ -85,9 +78,7 @@ export class CookieSyncClient {
   /** 获取某域名 Cookie */
   async fetchCookie(domain: string): Promise<CookieServerRecord | null> {
     const baseUrl = await this.getBaseUrl();
-    const response = await fetch(`${baseUrl}/api/cookies/${encodeURIComponent(domain)}`, {
-      headers: await this.getAuthHeaders(),
-    });
+    const response = await fetchWithAuth(`${baseUrl}/api/cookies/${encodeURIComponent(domain)}`);
     if (response.status === 404) return null;
     if (!response.ok) {
       throw new Error(`拉取 Cookie 失败: ${response.status}`);
@@ -98,9 +89,7 @@ export class CookieSyncClient {
   /** 获取全部 Cookie 同步列表 */
   async fetchAllCookies(): Promise<{ data: CookieServerRecord[]; syncToken: string }> {
     const baseUrl = await this.getBaseUrl();
-    const response = await fetch(`${baseUrl}/api/cookies`, {
-      headers: await this.getAuthHeaders(),
-    });
+    const response = await fetchWithAuth(`${baseUrl}/api/cookies`);
     if (!response.ok) {
       throw new Error(`拉取全部 Cookie 失败: ${response.status}`);
     }
@@ -110,9 +99,8 @@ export class CookieSyncClient {
   /** 删除某域名 Cookie */
   async deleteCookie(domain: string): Promise<void> {
     const baseUrl = await this.getBaseUrl();
-    const response = await fetch(`${baseUrl}/api/cookies/${encodeURIComponent(domain)}`, {
+    const response = await fetchWithAuth(`${baseUrl}/api/cookies/${encodeURIComponent(domain)}`, {
       method: "DELETE",
-      headers: await this.getAuthHeaders(),
     });
     if (!response.ok && response.status !== 404) {
       throw new Error(`删除 Cookie 失败: ${response.status}`);
@@ -124,9 +112,7 @@ export class CookieSyncClient {
   /** 获取所有同步规则 */
   async fetchAllConfigs(): Promise<{ data: CookieSyncConfigRecord[] }> {
     const baseUrl = await this.getBaseUrl();
-    const response = await fetch(`${baseUrl}/api/cookie-sync-config`, {
-      headers: await this.getAuthHeaders(),
-    });
+    const response = await fetchWithAuth(`${baseUrl}/api/cookie-sync-config`);
     if (!response.ok) {
       throw new Error(`拉取同步规则失败: ${response.status}`);
     }
@@ -139,9 +125,9 @@ export class CookieSyncClient {
     config: { autoPush?: boolean; autoPull?: boolean; includeLocalStorage?: boolean }
   ): Promise<CookieSyncConfigRecord> {
     const baseUrl = await this.getBaseUrl();
-    const response = await fetch(`${baseUrl}/api/cookie-sync-config/${encodeURIComponent(domain)}`, {
+    const response = await fetchWithAuth(`${baseUrl}/api/cookie-sync-config/${encodeURIComponent(domain)}`, {
       method: "PUT",
-      headers: await this.getAuthHeaders(),
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(config),
     });
     if (!response.ok) {
@@ -153,9 +139,8 @@ export class CookieSyncClient {
   /** 删除某域名同步规则 */
   async deleteConfig(domain: string): Promise<void> {
     const baseUrl = await this.getBaseUrl();
-    const response = await fetch(`${baseUrl}/api/cookie-sync-config/${encodeURIComponent(domain)}`, {
+    const response = await fetchWithAuth(`${baseUrl}/api/cookie-sync-config/${encodeURIComponent(domain)}`, {
       method: "DELETE",
-      headers: await this.getAuthHeaders(),
     });
     if (!response.ok && response.status !== 404) {
       throw new Error(`删除同步规则失败: ${response.status}`);

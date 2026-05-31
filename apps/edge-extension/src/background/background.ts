@@ -536,13 +536,21 @@ chrome.runtime.onMessage.addListener((message) => {
   const msg = message as Record<string, unknown>;
   if (msg.type === "VAULT_UNLOCKED") {
     startLockTimer().catch(() => {});
-    // 解锁后立即尝试同步
-    syncScheduler.performSync().catch(() => {});
+    // 解锁后立即尝试同步（仅当已登录时）
+    StorageService.getProfile().then((profile) => {
+      if (profile) {
+        syncScheduler.performSync().catch(() => {});
+      }
+    });
     // 解锁后重建索引（确保索引与当前数据一致）
     rebuildCipherIndex().catch(() => {});
   }
   if (msg.type === "TRIGGER_SYNC_NOW") {
     syncScheduler.performSync().catch(() => {});
+  }
+  if (msg.type === "AUTH_LOGOUT") {
+    StorageService.clearUserKey().catch(() => {});
+    syncScheduler.stop();
   }
   return false;
 });

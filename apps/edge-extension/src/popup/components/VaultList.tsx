@@ -617,7 +617,7 @@ export function VaultList({ onAdd, onEdit, onAddNote, onEditNote, onOpenGenerato
               {item.cipher.favorite ? "★" : "☆"}
             </button>
             <div
-              style={{ cursor: "pointer", flex: 1 }}
+              style={{ cursor: "pointer", flex: 1, minWidth: 0 }}
               onClick={() => {
                 if (item.isNote) onEditNote(item.cipher.id);
                 else onEdit(item.cipher.id);
@@ -832,11 +832,12 @@ export function VaultList({ onAdd, onEdit, onAddNote, onEditNote, onOpenGenerato
 
 function renderSyncFooter(status: SyncStatus | null, onSyncNow: () => void): React.ReactElement {
   let text = "未同步";
+  const isAuthExpired = status?.error?.includes("登录已过期") ?? false;
   if (status) {
     if (status.state === "SYNCING") {
       text = "同步中...";
     } else if (status.state === "ERROR") {
-      text = "同步失败";
+      text = isAuthExpired ? "登录已过期" : "同步失败";
     } else if (status.state === "OFFLINE") {
       text = "离线";
     } else if (status.lastSyncAt) {
@@ -878,6 +879,23 @@ function renderSyncFooter(status: SyncStatus | null, onSyncNow: () => void): Rea
           <span style={{ marginLeft: 8, color: "#1a73e8" }}>
             待同步: {status.pendingChanges}
           </span>
+        )}
+        {isAuthExpired && (
+          <button
+            onClick={() => chrome.runtime.openOptionsPage()}
+            style={{
+              marginLeft: 8,
+              background: "none",
+              border: "none",
+              color: "#1a73e8",
+              cursor: "pointer",
+              fontSize: 11,
+              padding: 0,
+              textDecoration: "underline",
+            }}
+          >
+            重新登录
+          </button>
         )}
       </span>
       <div
