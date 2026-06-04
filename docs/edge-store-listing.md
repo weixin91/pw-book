@@ -13,13 +13,14 @@
 
 ## 二、隐私政策部署
 
-1. 在 GitHub 仓库 Settings → Pages 中启用 GitHub Pages，Source 选择 `main` 分支，目录 `/docs`
-2. 确认 `https://weixin91.github.io/pw-book/privacy-policy` 可访问
-3. 将以下字段加入 `public/manifest.json`：
+隐私政策已托管在 GitHub Pages，地址为：
+`https://weixin91.github.io/pw-book/privacy-policy`
 
-```json
-"privacy_policy_url": "https://weixin91.github.io/pw-book/privacy-policy"
-```
+如需自行配置（参考）：
+1. 仓库 Settings → Pages（左侧菜单 "Code and automation" 分组下）
+2. Build and deployment → Source 选择 "Deploy from a branch"
+3. Branch 选 `master`，目录选 `/docs`，Save
+4. 等待几分钟后页面生效
 
 ## 三、商店描述文案
 
