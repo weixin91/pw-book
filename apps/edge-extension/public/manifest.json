@@ -5,8 +5,7 @@
   "description": "自托管端到端加密密码管理器",
   "author": "pwbook",
   "homepage_url": "https://github.com/weixin91/pw-book",
-  "privacy_policy_url": "https://weixin91.github.io/pw-book/privacy-policy",
-  "minimum_edge_version": "102.0",
+  "minimum_chrome_version": "102",
   "permissions": [
     "storage",
     "activeTab",

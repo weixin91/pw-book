@@ -5,7 +5,7 @@
 - [x] manifest.json 权限声明完整（`storage`、`activeTab`、`cookies`、`webNavigation`、`alarms`、`idle`）
 - [x] 图标齐全（16/32/48/128px）
 - [x] `options_ui` + `open_in_tab: true`
-- [x] `minimum_edge_version: "102.0"`
+- [x] `minimum_chrome_version: "102"`
 - [x] 无远程代码加载、无 eval/Function
 - [x] 版本号 1.0.0
 - [ ] 隐私政策 URL 可访问
