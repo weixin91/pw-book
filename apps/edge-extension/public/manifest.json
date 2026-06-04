@@ -1,14 +1,18 @@
 {
   "manifest_version": 3,
   "name": "Password Book",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "自托管端到端加密密码管理器",
+  "author": "pwbook",
+  "homepage_url": "https://github.com/weixin91/pw-book",
+  "minimum_edge_version": "102.0",
   "permissions": [
     "storage",
     "activeTab",
     "cookies",
     "webNavigation",
-    "alarms"
+    "alarms",
+    "idle"
   ],
   "host_permissions": [
     "<all_urls>"
@@ -47,5 +51,8 @@
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
-  "options_page": "src/options/index.html"
+  "options_ui": {
+    "page": "src/options/index.html",
+    "open_in_tab": true
+  }
 }
