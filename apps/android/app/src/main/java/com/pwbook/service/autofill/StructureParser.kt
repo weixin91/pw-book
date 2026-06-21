@@ -133,6 +133,14 @@ object StructureParser {
 
         val uriString = buildUriString(packageName, webDomain)
 
+        val negativeFields = fields.filter { FieldDetectionRules.isNegative(it) }
+        if (negativeFields.isNotEmpty()) {
+            android.util.Log.d(
+                "StructureParser",
+                "Filtered negative fields: ${negativeFields.map { it.htmlAttributes }}"
+            )
+        }
+
         // 改进的字段识别逻辑
         val usernameField = findUsernameField(fields)
         val passwordField = findPasswordField(fields)
