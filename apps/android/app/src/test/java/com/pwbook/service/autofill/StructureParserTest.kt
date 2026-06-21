@@ -102,6 +102,34 @@ class StructureParserTest {
     }
 
     @Test
+    fun `弱 HTML 属性信号优先于就近文本框回退`() {
+        // 当存在密码字段但无强用户名信号时，
+        // 应优先通过 HTML name/id 属性匹配包含 "user"/"email"/"login"/"account" 的字段，
+        // 而不是简单取密码前最近的文本框
+        val fields = listOf(
+            field(
+                htmlAttributes = mapOf("type" to "text", "id" to "field1"),
+                index = 0
+            ),
+            field(
+                htmlAttributes = mapOf("type" to "text", "id" to "login-id"),
+                index = 1
+            ),
+            field(
+                htmlAttributes = mapOf("type" to "password", "id" to "password"),
+                inputType = InputType.TYPE_TEXT_VARIATION_PASSWORD,
+                index = 2
+            )
+        )
+        val (username, password) = StructureParser.detectFields(fields)
+        assertNotNull(username)
+        assertNotNull(password)
+        // 应选中 id="login-id" 的字段（弱信号），而非 id="field1"（就近回退）
+        assertEquals("login-id", username?.htmlAttributes?.get("id"))
+        assertEquals("password", password?.htmlAttributes?.get("id"))
+    }
+
+    @Test
     fun `命中否定词的字段不参与识别`() {
         val fields = listOf(
             field(

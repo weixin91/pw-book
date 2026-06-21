@@ -56,6 +56,7 @@ internal object FieldDetectionRules {
     fun isStrongUsernameSignal(field: AutofillField): Boolean {
         val hintsLower = field.autofillHints.map { it.lowercase() }
         if (hintsLower.any {
+                it.contains("user") ||
                 it.contains("username") ||
                 it.contains("email") ||
                 it.contains("login") ||
@@ -156,10 +157,19 @@ object StructureParser {
 
         val usernameField = filtered.find { FieldDetectionRules.isStrongUsernameSignal(it) }
             ?: passwordField?.let { pwd ->
-                filtered.filter { it.index < pwd.index }
+                val candidates = filtered.filter { it.index < pwd.index }
                     .filterNot { FieldDetectionRules.isPasswordSignal(it) }
                     .filter { isTextField(it) }
-                    .lastOrNull()
+                // 弱信号：当存在密码字段但无强用户名信号时，
+                // 尝试通过 HTML name/id 属性匹配用户名相关字段
+                candidates.find { field ->
+                    val name = field.htmlAttributes["name"]?.lowercase() ?: ""
+                    val id = field.htmlAttributes["id"]?.lowercase() ?: ""
+                    name.contains("user") || name.contains("email") ||
+                    name.contains("login") || name.contains("account") ||
+                    id.contains("user") || id.contains("email") ||
+                    id.contains("login") || id.contains("account")
+                } ?: candidates.lastOrNull()
             }
 
         return usernameField to passwordField
@@ -203,12 +213,7 @@ object StructureParser {
     }
 
     private fun isPasswordField(field: AutofillField): Boolean {
-        val hintsLower = field.autofillHints.map { it.lowercase() }
-        if (hintsLower.any { it.contains("pass") || it.contains("pwd") }) return true
-        if (field.htmlAttributes["type"]?.lowercase() == "password") return true
-        if ((field.inputType and InputType.TYPE_TEXT_VARIATION_PASSWORD) != 0) return true
-        if ((field.inputType and InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD) != 0) return true
-        return false
+        return FieldDetectionRules.isPasswordSignal(field)
     }
 
     private fun isTextField(field: AutofillField): Boolean {
