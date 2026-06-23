@@ -28,6 +28,73 @@ data class AutofillField(
     val index: Int
 )
 
+internal object FieldDetectionRules {
+
+    // 命中后字段直接退出用户名/密码候选
+    val negativeKeywords: Set<String> = setOf(
+        "search", "query", "q", "keyword", "find",
+        "chat", "message", "comment", "subject", "title"
+    )
+
+    fun isNegative(field: AutofillField): Boolean {
+        val haystacks = buildList {
+            addAll(field.autofillHints)
+            addAll(field.htmlAttributes.values)
+        }.map { it.lowercase() }
+
+        return haystacks.any { haystack ->
+            negativeKeywords.any { keyword ->
+                if (keyword.length == 1) {
+                    haystack == keyword
+                } else {
+                    haystack.contains(keyword)
+                }
+            }
+        }
+    }
+
+    fun isStrongUsernameSignal(field: AutofillField): Boolean {
+        val hintsLower = field.autofillHints.map { it.lowercase() }
+        if (hintsLower.any {
+                it.contains("user") ||
+                it.contains("username") ||
+                it.contains("email") ||
+                it.contains("login") ||
+                it.contains("account")
+            }) {
+            return true
+        }
+        if (field.htmlAttributes["type"]?.lowercase() == "email") return true
+        val variation = field.inputType and InputType.TYPE_MASK_VARIATION
+        if (variation == InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS ||
+            variation == InputType.TYPE_TEXT_VARIATION_WEB_EMAIL_ADDRESS
+        ) {
+            return true
+        }
+        return false
+    }
+
+    fun isPasswordSignal(field: AutofillField): Boolean {
+        val hintsLower = field.autofillHints.map { it.lowercase() }
+        if (hintsLower.any {
+                it.contains("password") ||
+                it.contains("pwd") ||
+                it.contains("pass")
+            }) {
+            return true
+        }
+        if (field.htmlAttributes["type"]?.lowercase() == "password") return true
+        val variation = field.inputType and InputType.TYPE_MASK_VARIATION
+        if (variation == InputType.TYPE_TEXT_VARIATION_PASSWORD ||
+            variation == InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD ||
+            variation == InputType.TYPE_NUMBER_VARIATION_PASSWORD
+        ) {
+            return true
+        }
+        return false
+    }
+}
+
 object StructureParser {
 
     fun parse(structure: AssistStructure): ParsedStructure {
@@ -66,6 +133,14 @@ object StructureParser {
 
         val uriString = buildUriString(packageName, webDomain)
 
+        val negativeFields = fields.filter { FieldDetectionRules.isNegative(it) }
+        if (negativeFields.isNotEmpty()) {
+            android.util.Log.d(
+                "StructureParser",
+                "Filtered negative fields: ${negativeFields.map { it.htmlAttributes }}"
+            )
+        }
+
         // 改进的字段识别逻辑
         val usernameField = findUsernameField(fields)
         val passwordField = findPasswordField(fields)
@@ -80,6 +155,32 @@ object StructureParser {
             allFields = fields,
             uriString = uriString
         )
+    }
+
+    internal fun detectFields(
+        fields: List<AutofillField>
+    ): Pair<AutofillField?, AutofillField?> {
+        val filtered = fields.filterNot { FieldDetectionRules.isNegative(it) }
+        val passwordField = filtered.find { FieldDetectionRules.isPasswordSignal(it) }
+
+        val usernameField = filtered.find { FieldDetectionRules.isStrongUsernameSignal(it) }
+            ?: passwordField?.let { pwd ->
+                val candidates = filtered.filter { it.index < pwd.index }
+                    .filterNot { FieldDetectionRules.isPasswordSignal(it) }
+                    .filter { isTextField(it) }
+                // 弱信号：当存在密码字段但无强用户名信号时，
+                // 尝试通过 HTML name/id 属性匹配用户名相关字段
+                candidates.find { field ->
+                    val name = field.htmlAttributes["name"]?.lowercase() ?: ""
+                    val id = field.htmlAttributes["id"]?.lowercase() ?: ""
+                    name.contains("user") || name.contains("email") ||
+                    name.contains("login") || name.contains("account") ||
+                    id.contains("user") || id.contains("email") ||
+                    id.contains("login") || id.contains("account")
+                } ?: candidates.lastOrNull()
+            }
+
+        return usernameField to passwordField
     }
 
     private fun traverseNode(node: AssistStructure.ViewNode, onNode: (AssistStructure.ViewNode) -> Unit) {
@@ -111,98 +212,16 @@ object StructureParser {
                         node.htmlInfo?.tag == "input")
     }
 
-    /**
-     * 改进的用户名字段识别：
-     * 1. 明确的 autofill hints (username, email, login 等)
-     * 2. HTML input type="email" 或 type="text"
-     * 3. HTML name/id 属性包含 user/email/login/account
-     * 4. Android inputType 为 email 类型
-     * 5. 非 password 类型的文本输入框（且通常在密码字段前面）
-     */
     private fun findUsernameField(fields: List<AutofillField>): AutofillField? {
-        // 1. 先查找有明确 hints 的
-        val explicitUsername = fields.find { field ->
-            val hintsLower = field.autofillHints.map { it.lowercase() }
-            hintsLower.any { hint ->
-                hint.contains("username") ||
-                hint.contains("user") ||
-                hint.contains("email") ||
-                hint.contains("login") ||
-                hint.contains("account")
-            }
-        }
-        if (explicitUsername != null) return explicitUsername
-
-        // 2. 查找 HTML 属性中的用户名标识
-        val htmlUsername = fields.find { field ->
-            val nameAttr = field.htmlAttributes["name"]?.lowercase() ?: ""
-            val idAttr = field.htmlAttributes["id"]?.lowercase() ?: ""
-            val typeAttr = field.htmlAttributes["type"]?.lowercase() ?: ""
-
-            nameAttr.contains("user") || nameAttr.contains("email") || nameAttr.contains("login") ||
-            idAttr.contains("user") || idAttr.contains("email") || idAttr.contains("login") ||
-            typeAttr == "email" || typeAttr == "text"
-        }
-        if (htmlUsername != null) return htmlUsername
-
-        // 3. 查找 Android inputType 为 email 的
-        val emailType = fields.find { field ->
-            (field.inputType and InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS) != 0 ||
-            (field.inputType and InputType.TYPE_TEXT_VARIATION_WEB_EMAIL_ADDRESS) != 0
-        }
-        if (emailType != null) return emailType
-
-        // 4. 找到密码字段，然后找它前面的非密码文本字段作为用户名
-        val passwordField = findPasswordField(fields)
-        if (passwordField != null) {
-            val beforePassword = fields.filter { it.index < passwordField.index }
-                .filter { !isPasswordField(it) }
-                .filter { isTextField(it) }
-            return beforePassword.lastOrNull()
-        }
-
-        // 5. 无密码字段且无明确用户名信号 — 不识别为登录场景
-        // 避免在微信聊天框、搜索框等普通文本输入处误弹出"解锁 Password Book"
-        return null
+        return detectFields(fields).first
     }
 
-    /**
-     * 改进的密码字段识别
-     */
     private fun findPasswordField(fields: List<AutofillField>): AutofillField? {
-        // 1. 明确的 autofill hints
-        val explicitPassword = fields.find { field ->
-            val hintsLower = field.autofillHints.map { it.lowercase() }
-            hintsLower.any { hint ->
-                hint.contains("password") ||
-                hint.contains("pwd") ||
-                hint.contains("pass")
-            }
-        }
-        if (explicitPassword != null) return explicitPassword
-
-        // 2. HTML type="password"
-        val htmlPassword = fields.find { field ->
-            field.htmlAttributes["type"]?.lowercase() == "password"
-        }
-        if (htmlPassword != null) return htmlPassword
-
-        // 3. Android inputType 为 password
-        val androidPassword = fields.find { field ->
-            (field.inputType and InputType.TYPE_TEXT_VARIATION_PASSWORD) != 0 ||
-            (field.inputType and InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD) != 0 ||
-            (field.inputType and InputType.TYPE_NUMBER_VARIATION_PASSWORD) != 0
-        }
-        return androidPassword
+        return detectFields(fields).second
     }
 
     private fun isPasswordField(field: AutofillField): Boolean {
-        val hintsLower = field.autofillHints.map { it.lowercase() }
-        if (hintsLower.any { it.contains("pass") || it.contains("pwd") }) return true
-        if (field.htmlAttributes["type"]?.lowercase() == "password") return true
-        if ((field.inputType and InputType.TYPE_TEXT_VARIATION_PASSWORD) != 0) return true
-        if ((field.inputType and InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD) != 0) return true
-        return false
+        return FieldDetectionRules.isPasswordSignal(field)
     }
 
     private fun isTextField(field: AutofillField): Boolean {
