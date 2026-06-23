@@ -118,17 +118,35 @@ fun TotpScanScreen(
                             imageAnalysis.setAnalyzer(
                                 ContextCompat.getMainExecutor(ctx)
                             ) { imageProxy ->
-                                val buffer = imageProxy.planes[0].buffer
-                                val bytes = ByteArray(buffer.remaining())
-                                buffer.get(bytes)
+                                val yPlane = imageProxy.planes[0]
+                                val buffer = yPlane.buffer
+                                val rowStride = yPlane.rowStride
+                                val pixelStride = yPlane.pixelStride
+                                val width = imageProxy.width
+                                val height = imageProxy.height
+
+                                // 正确提取 Y 平面数据，处理 rowStride 填充
+                                val bytes = if (pixelStride == 1 && rowStride == width) {
+                                    ByteArray(buffer.remaining()).also { buffer.get(it) }
+                                } else {
+                                    val data = ByteArray(width * height)
+                                    val row = ByteArray(rowStride)
+                                    for (y in 0 until height) {
+                                        buffer.position(y * rowStride)
+                                        val len = minOf(rowStride, buffer.remaining())
+                                        buffer.get(row, 0, len)
+                                        System.arraycopy(row, 0, data, y * width, minOf(width, len))
+                                    }
+                                    data
+                                }
 
                                 val source = PlanarYUVLuminanceSource(
                                     bytes,
-                                    imageProxy.width,
-                                    imageProxy.height,
+                                    width,
+                                    height,
                                     0, 0,
-                                    imageProxy.width,
-                                    imageProxy.height,
+                                    width,
+                                    height,
                                     false
                                 )
                                 val bitmap = BinaryBitmap(HybridBinarizer(source))
@@ -141,6 +159,13 @@ fun TotpScanScreen(
                                         val parsed = parseOtpauthUri(text)
                                         if (parsed != null) {
                                             onTotpScanned(text)
+                                        } else {
+                                            Timber.w("非 TOTP 二维码: ${text.take(80)}")
+                                            android.widget.Toast.makeText(
+                                                ctx,
+                                                "不是有效的 TOTP 二维码",
+                                                android.widget.Toast.LENGTH_SHORT
+                                            ).show()
                                         }
                                     }
                                 } catch (_: Exception) {
@@ -200,15 +225,29 @@ private data class OtpauthParseResult(
 )
 
 private fun parseOtpauthUri(uri: String): OtpauthParseResult? {
-    if (!uri.startsWith("otpauth://totp/")) return null
-    val path = uri.substringAfter("otpauth://totp/").substringBefore("?")
+    val lower = uri.lowercase()
+    // 支持 otpauth://totp/ 和 otpauth://hotp/ 两种 scheme
+    val isTotp = lower.startsWith("otpauth://totp/")
+    val isHotp = lower.startsWith("otpauth://hotp/")
+    if (!isTotp && !isHotp) return null
+    val path = uri.substringAfter("otpauth://").substringAfter("/").substringBefore("?")
     val account = path.decodeUrl()
     val query = uri.substringAfter("?", "")
-    val params = query.split("&").associate {
-        val (k, v) = it.split("=", limit = 2)
-        k to v.decodeUrl()
+    if (query.isEmpty()) return null
+    val params = mutableMapOf<String, String>()
+    for (pair in query.split("&")) {
+        val eqIdx = pair.indexOf("=")
+        if (eqIdx < 0) continue
+        val key = pair.substring(0, eqIdx).lowercase()
+        val value = pair.substring(eqIdx + 1).decodeUrl()
+        params[key] = value
     }
     val secret = params["secret"] ?: return null
+    // 校验 Base32 格式（RFC 4648），防止无效密钥入库
+    if (!secret.matches(Regex("^[A-Za-z2-7]+=*$"))) {
+        Timber.w("非法的 Base32 secret: ${secret.take(20)}")
+        return null
+    }
     val issuer = params["issuer"]
     return OtpauthParseResult(secret, account, issuer)
 }

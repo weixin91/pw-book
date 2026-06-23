@@ -42,9 +42,13 @@ class CipherEditViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(CipherEditUiState())
     val uiState: StateFlow<CipherEditUiState> = _uiState
 
+    private var totpExplicitlySet = false
+
     fun loadCipher(cipherId: String?) {
         if (cipherId == null) {
-            _uiState.value = CipherEditUiState(isNew = true)
+            // 新建凭据时保留已扫描的 TOTP 数据，避免被 LaunchedEffect 重入覆盖
+            val existingTotp = _uiState.value.totp
+            _uiState.value = CipherEditUiState(isNew = true, totp = existingTotp)
             return
         }
         viewModelScope.launch {
@@ -52,6 +56,8 @@ class CipherEditViewModel @Inject constructor(
             if (entity != null) {
                 val decrypted = vaultSession.decryptCipher(entity)
                 if (decrypted != null) {
+                    // 异步加载时保留已扫描/手动设置但尚未保存的 TOTP
+                    val totp = if (totpExplicitlySet) _uiState.value.totp else (decrypted.totp ?: "")
                     _uiState.value = CipherEditUiState(
                         id = entity.id,
                         name = decrypted.name,
@@ -59,7 +65,7 @@ class CipherEditViewModel @Inject constructor(
                         password = decrypted.password ?: "",
                         uris = decrypted.uris.ifEmpty { listOf("") },
                         notes = decrypted.notes ?: "",
-                        totp = decrypted.totp ?: "",
+                        totp = totp,
                         favorite = entity.favorite,
                         isNew = false,
                         createdAt = entity.createdAt,
@@ -86,7 +92,10 @@ class CipherEditViewModel @Inject constructor(
     fun updateUsername(username: String) { _uiState.value = _uiState.value.copy(username = username) }
     fun updatePassword(password: String) { _uiState.value = _uiState.value.copy(password = password) }
     fun updateNotes(notes: String) { _uiState.value = _uiState.value.copy(notes = notes) }
-    fun updateTotp(totp: String) { _uiState.value = _uiState.value.copy(totp = totp) }
+    fun updateTotp(totp: String) {
+        totpExplicitlySet = totp.isNotEmpty()
+        _uiState.value = _uiState.value.copy(totp = totp)
+    }
     fun updateFavorite(favorite: Boolean) { _uiState.value = _uiState.value.copy(favorite = favorite) }
     fun togglePasswordVisibility() { _uiState.value = _uiState.value.copy(showPassword = !_uiState.value.showPassword) }
     fun toggleTotpVisibility() { _uiState.value = _uiState.value.copy(showTotp = !_uiState.value.showTotp) }
